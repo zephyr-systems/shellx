@@ -401,6 +401,13 @@ has_required_shim :: proc(required_shims: []string, name: string) -> bool {
 	return false
 }
 
+has_array_bridge_shim :: proc(required_shims: []string) -> bool {
+	return has_required_shim(required_shims, "arrays_lists") ||
+		has_required_shim(required_shims, "indexed_arrays") ||
+		has_required_shim(required_shims, "assoc_arrays") ||
+		has_required_shim(required_shims, "fish_list_indexing")
+}
+
 is_string_match_call :: proc(call: ^ir.Call) -> bool {
 	if call == nil {
 		return false
@@ -615,7 +622,7 @@ apply_shim_callsite_rewrites :: proc(
 		out, changed_any = replace_with_flag(out, "add-zsh-hook preexec ", "__shellx_register_preexec ", changed_any, allocator)
 	}
 
-	if has_required_shim(required_shims, "arrays_lists") {
+	if has_array_bridge_shim(required_shims) {
 		if to == .Fish {
 			out, changed_any = replace_with_flag(out, "declare -a ", "__shellx_array_set ", changed_any, allocator)
 		}

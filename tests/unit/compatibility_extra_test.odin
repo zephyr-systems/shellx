@@ -133,10 +133,32 @@ test_arrays_lists_detection_not_triggered_by_generic_parens :: proc(t: ^testing.
 
 	has_arrays_warning := false
 	for w in res.warnings {
-		if w.feature == "arrays_lists" {
+		if w.feature == "arrays_lists" || w.feature == "indexed_arrays" || w.feature == "assoc_arrays" || w.feature == "fish_list_indexing" {
 			has_arrays_warning = true
 			break
 		}
 	}
 	testing.expect(t, !has_arrays_warning, "Generic parentheses/command substitution should not trigger arrays_lists warning")
+}
+
+@(test)
+test_arrays_feature_split_indexed_arrays_warning :: proc(t: ^testing.T) {
+	if !should_run_local_test("test_arrays_feature_split_indexed_arrays_warning") { return }
+
+	arena := ir.create_arena(1024 * 16)
+	defer ir.destroy_arena(&arena)
+	program := ir.create_program(&arena, .Bash)
+
+	source := "arr=(one two)\necho ${arr[0]}\n"
+	res := compat.check_compatibility(.Bash, .Fish, program, source)
+	defer compat.destroy_compatibility_result(&res)
+
+	has_indexed := false
+	for w in res.warnings {
+		if w.feature == "indexed_arrays" {
+			has_indexed = true
+			break
+		}
+	}
+	testing.expect(t, has_indexed, "Indexed array usage should emit indexed_arrays compatibility warning")
 }

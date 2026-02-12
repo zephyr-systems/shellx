@@ -79,6 +79,9 @@ add_warning :: proc(
 // Returns a result containing all warnings
 UsedFeatures :: struct {
 	condition_semantics: bool,
+	indexed_arrays:      bool,
+	assoc_arrays:        bool,
+	fish_list_indexing:  bool,
 	arrays_lists:        bool,
 	hooks_events:        bool,
 	parameter_expansion: bool,
@@ -123,6 +126,61 @@ has_array_list_indicators :: proc(text: string) -> bool {
 	) && (contains_any(text, []string{"=(", "[@]", "[*]", "$argv["}) || strings.contains(text, "["))
 }
 
+has_indexed_array_indicators :: proc(text: string) -> bool {
+	if text == "" {
+		return false
+	}
+	return contains_any(text, []string{
+		"=(",
+		"[@]",
+		"[*]",
+		"declare -a",
+		"typeset -a",
+		"local -a",
+		"readonly -a",
+	})
+}
+
+has_assoc_array_indicators :: proc(text: string) -> bool {
+	if text == "" {
+		return false
+	}
+	return contains_any(text, []string{
+		"declare -A",
+		"typeset -A",
+		"local -A",
+		"readonly -A",
+		"][",
+	})
+}
+
+has_fish_list_indexing_indicators :: proc(text: string) -> bool {
+	if text == "" {
+		return false
+	}
+	if strings.contains(text, "$argv[") {
+		return true
+	}
+	for i := 0; i+1 < len(text); i += 1 {
+		if text[i] != '$' {
+			continue
+		}
+		j := i + 1
+		for j < len(text) {
+			c := text[j]
+			if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' {
+				j += 1
+				continue
+			}
+			break
+		}
+		if j < len(text) && text[j] == '[' {
+			return true
+		}
+	}
+	return false
+}
+
 mark_features_from_text :: proc(text: string, features: ^UsedFeatures) {
 	if text == "" {
 		return
@@ -136,9 +194,10 @@ mark_features_from_text :: proc(text: string, features: ^UsedFeatures) {
 	if strings.contains(text, "<(") || strings.contains(text, ">(") {
 		features.process_substitution = true
 	}
-	if has_array_list_indicators(text) {
-		features.arrays_lists = true
-	}
+	features.indexed_arrays = features.indexed_arrays || has_indexed_array_indicators(text)
+	features.assoc_arrays = features.assoc_arrays || has_assoc_array_indicators(text)
+	features.fish_list_indexing = features.fish_list_indexing || has_fish_list_indexing_indicators(text)
+	features.arrays_lists = features.indexed_arrays || features.assoc_arrays || features.fish_list_indexing || has_array_list_indicators(text)
 }
 
 scan_expr_features :: proc(expr: ir.Expression, features: ^UsedFeatures) {
@@ -148,6 +207,7 @@ scan_expr_features :: proc(expr: ir.Expression, features: ^UsedFeatures) {
 
 	#partial switch e in expr {
 	case ^ir.ArrayLiteral:
+		features.indexed_arrays = true
 		features.arrays_lists = true
 		for elem in e.elements {
 			scan_expr_features(elem, features)
@@ -263,6 +323,15 @@ scan_source_features :: proc(source_code: string) -> UsedFeatures {
 		features.condition_semantics = true
 	}
 	if has_array_list_indicators(source_code) {
+		features.indexed_arrays = true
+		features.arrays_lists = true
+	}
+	if has_assoc_array_indicators(source_code) {
+		features.assoc_arrays = true
+		features.arrays_lists = true
+	}
+	if has_fish_list_indexing_indicators(source_code) {
+		features.fish_list_indexing = true
 		features.arrays_lists = true
 	}
 	if contains_any(source_code, []string{"precmd", "preexec", "add-zsh-hook", "fish_prompt", "fish_preexec", "fish_postexec"}) {
@@ -295,19 +364,40 @@ check_compatibility :: proc(
 	features := scan_program_features(program)
 	source_features := scan_source_features(source_code)
 	features.condition_semantics = features.condition_semantics || source_features.condition_semantics
+	features.indexed_arrays = features.indexed_arrays || source_features.indexed_arrays
+	features.assoc_arrays = features.assoc_arrays || source_features.assoc_arrays
+	features.fish_list_indexing = features.fish_list_indexing || source_features.fish_list_indexing
 	features.arrays_lists = features.arrays_lists || source_features.arrays_lists
 	features.hooks_events = features.hooks_events || source_features.hooks_events
 	features.parameter_expansion = features.parameter_expansion || source_features.parameter_expansion
 	features.process_substitution = features.process_substitution || source_features.process_substitution
 
 	if to == .Fish {
-		if features.arrays_lists {
+		if features.indexed_arrays {
 			add_warning(
 				&result,
-				"arrays_lists",
+				"indexed_arrays",
 				.Error,
-				"Array/list semantics differ and may not translate directly to Fish",
-				"Insert list bridge shim and normalize with 'set' list operations",
+				"Indexed array semantics may not translate directly to Fish lists",
+				"Insert array/list bridge shim and normalize indexing semantics",
+			)
+		}
+		if features.assoc_arrays {
+			add_warning(
+				&result,
+				"assoc_arrays",
+				.Error,
+				"Associative arrays are not natively compatible with Fish",
+				"Use map emulation helpers or flatten key/value representation",
+			)
+		}
+		if features.fish_list_indexing && from != .Fish {
+			add_warning(
+				&result,
+				"fish_list_indexing",
+				.Warning,
+				"List indexing semantics may differ after translation to Fish",
+				"Use list bridge shim and normalize index access patterns",
 			)
 		}
 		if features.condition_semantics {
@@ -349,13 +439,13 @@ check_compatibility :: proc(
 	}
 
 	if to == .POSIX {
-		if features.arrays_lists {
+		if features.indexed_arrays || features.assoc_arrays {
 			add_warning(
 				&result,
-				"arrays_lists",
+				"indexed_arrays",
 				.Error,
-				"Array/list features are not POSIX portable",
-				"Flatten arrays/lists or use shim helpers that emulate list behavior",
+				"Array features are not POSIX portable",
+				"Flatten arrays or use shim helpers that emulate list behavior",
 			)
 		}
 		if features.hooks_events {
@@ -379,10 +469,10 @@ check_compatibility :: proc(
 	}
 
 	if from == .Fish && (to == .Bash || to == .Zsh) {
-		if features.arrays_lists {
+		if features.fish_list_indexing || features.arrays_lists {
 			add_warning(
 				&result,
-				"arrays_lists",
+				"fish_list_indexing",
 				.Warning,
 				"Fish list behavior may not map one-to-one to Bash/Zsh arrays",
 				"Use list/array bridge shim for indexing and joining behavior",

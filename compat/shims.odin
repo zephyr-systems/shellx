@@ -155,7 +155,7 @@ generate_process_substitution_shim :: proc(
 // needs_shim checks if a feature needs a shim for the target dialect
 needs_shim :: proc(feature: string, from: ir.ShellDialect, to: ir.ShellDialect) -> bool {
 	switch feature {
-	case "arrays", "arrays_lists":
+	case "arrays", "arrays_lists", "indexed_arrays", "assoc_arrays", "fish_list_indexing":
 		if to == .Fish || to == .POSIX || from == .Fish {
 			return true
 		}
@@ -169,6 +169,22 @@ needs_shim :: proc(feature: string, from: ir.ShellDialect, to: ir.ShellDialect) 
 		return from != to
 	}
 	return false
+}
+
+shim_feature_group :: proc(feature: string) -> string {
+	switch feature {
+	case "arrays", "arrays_lists", "indexed_arrays", "assoc_arrays", "fish_list_indexing":
+		return "arrays_lists"
+	case "parameter_expansion":
+		return "parameter_expansion"
+	case "process_substitution":
+		return "process_substitution"
+	case "condition_semantics":
+		return "condition_semantics"
+	case "hooks_events":
+		return "hooks_events"
+	}
+	return feature
 }
 
 // get_shim_description returns a human-readable description of what the shim does
@@ -412,8 +428,9 @@ __shellx_psub_out() {
 }
 
 generate_shim_code :: proc(feature: string, from: ir.ShellDialect, to: ir.ShellDialect) -> string {
-	switch feature {
-	case "arrays", "arrays_lists":
+	group := shim_feature_group(feature)
+	switch group {
+	case "arrays_lists":
 		return generate_array_list_bridge_shim(to)
 	case "condition_semantics":
 		return generate_condition_semantics_shim(to)
@@ -459,17 +476,18 @@ build_shim_prelude :: proc(
 
 	strings.write_string(&builder, "# shellx compatibility shims\n")
 	for feature in required_shims {
-		if seen[feature] {
+		group := shim_feature_group(feature)
+		if seen[group] {
 			continue
 		}
-		seen[feature] = true
+		seen[group] = true
 
 		code := generate_shim_code(feature, from, to)
 		if code == "" {
 			continue
 		}
 		strings.write_string(&builder, "\n# shim: ")
-		strings.write_string(&builder, feature)
+		strings.write_string(&builder, group)
 		strings.write_byte(&builder, '\n')
 		strings.write_string(&builder, code)
 		strings.write_byte(&builder, '\n')
