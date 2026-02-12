@@ -162,3 +162,47 @@ test_arrays_feature_split_indexed_arrays_warning :: proc(t: ^testing.T) {
 	}
 	testing.expect(t, has_indexed, "Indexed array usage should emit indexed_arrays compatibility warning")
 }
+
+@(test)
+test_hook_feature_split_zsh_hooks_warning :: proc(t: ^testing.T) {
+	if !should_run_local_test("test_hook_feature_split_zsh_hooks_warning") { return }
+
+	arena := ir.create_arena(1024 * 16)
+	defer ir.destroy_arena(&arena)
+	program := ir.create_program(&arena, .Zsh)
+
+	source := "add-zsh-hook precmd my_precmd\n"
+	res := compat.check_compatibility(.Zsh, .Fish, program, source)
+	defer compat.destroy_compatibility_result(&res)
+
+	has_zsh_hooks := false
+	for w in res.warnings {
+		if w.feature == "zsh_hooks" {
+			has_zsh_hooks = true
+			break
+		}
+	}
+	testing.expect(t, has_zsh_hooks, "add-zsh-hook usage should emit zsh_hooks warning")
+}
+
+@(test)
+test_hook_feature_no_false_positive_from_name_only :: proc(t: ^testing.T) {
+	if !should_run_local_test("test_hook_feature_no_false_positive_from_name_only") { return }
+
+	arena := ir.create_arena(1024 * 16)
+	defer ir.destroy_arena(&arena)
+	program := ir.create_program(&arena, .Bash)
+
+	source := "echo webhook_url\n"
+	res := compat.check_compatibility(.Bash, .Fish, program, source)
+	defer compat.destroy_compatibility_result(&res)
+
+	has_hook_warning := false
+	for w in res.warnings {
+		if w.feature == "hooks_events" || w.feature == "zsh_hooks" || w.feature == "fish_events" || w.feature == "prompt_hooks" {
+			has_hook_warning = true
+			break
+		}
+	}
+	testing.expect(t, !has_hook_warning, "Plain text containing 'hook' should not emit hook/event warnings")
+}

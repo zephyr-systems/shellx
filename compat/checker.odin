@@ -83,17 +83,49 @@ UsedFeatures :: struct {
 	assoc_arrays:        bool,
 	fish_list_indexing:  bool,
 	arrays_lists:        bool,
+	zsh_hooks:           bool,
+	fish_events:         bool,
+	prompt_hooks:        bool,
 	hooks_events:        bool,
 	parameter_expansion: bool,
 	process_substitution: bool,
 }
 
-detect_hook_name :: proc(name: string) -> bool {
+is_prompt_hook_name :: proc(name: string) -> bool {
 	switch name {
-	case "precmd", "preexec", "fish_prompt", "fish_right_prompt", "fish_preexec", "fish_postexec":
+	case "precmd", "preexec", "fish_prompt", "fish_right_prompt":
 		return true
 	}
-	return strings.contains(name, "hook")
+	return false
+}
+
+is_fish_event_name :: proc(name: string) -> bool {
+	switch name {
+	case "fish_preexec", "fish_postexec", "fish_prompt", "fish_right_prompt":
+		return true
+	}
+	return false
+}
+
+mark_hook_features_from_text :: proc(text: string, features: ^UsedFeatures) {
+	if text == "" {
+		return
+	}
+	if strings.contains(text, "add-zsh-hook ") {
+		features.zsh_hooks = true
+	}
+	if strings.contains(text, "--on-event fish_preexec") || strings.contains(text, "--on-event fish_postexec") || strings.contains(text, "function fish_preexec") || strings.contains(text, "function fish_postexec") {
+		features.fish_events = true
+	}
+	if strings.contains(text, "function precmd") ||
+		strings.contains(text, "function preexec") ||
+		strings.contains(text, "precmd()") ||
+		strings.contains(text, "preexec()") ||
+		strings.contains(text, "function fish_prompt") ||
+		strings.contains(text, "function fish_right_prompt") {
+		features.prompt_hooks = true
+	}
+	features.hooks_events = features.zsh_hooks || features.fish_events || features.prompt_hooks
 }
 
 contains_any :: proc(text: string, patterns: []string) -> bool {
@@ -198,6 +230,7 @@ mark_features_from_text :: proc(text: string, features: ^UsedFeatures) {
 	features.assoc_arrays = features.assoc_arrays || has_assoc_array_indicators(text)
 	features.fish_list_indexing = features.fish_list_indexing || has_fish_list_indexing_indicators(text)
 	features.arrays_lists = features.indexed_arrays || features.assoc_arrays || features.fish_list_indexing || has_array_list_indicators(text)
+	mark_hook_features_from_text(text, features)
 }
 
 scan_expr_features :: proc(expr: ir.Expression, features: ^UsedFeatures) {
@@ -219,6 +252,15 @@ scan_expr_features :: proc(expr: ir.Expression, features: ^UsedFeatures) {
 				features.condition_semantics = true
 			}
 			if name == "add-zsh-hook" {
+				features.zsh_hooks = true
+				features.hooks_events = true
+			}
+			if name == "emit" {
+				features.fish_events = true
+				features.hooks_events = true
+			}
+			if is_prompt_hook_name(name) {
+				features.prompt_hooks = true
 				features.hooks_events = true
 			}
 		}
@@ -239,6 +281,18 @@ scan_call_features :: proc(call: ir.Call, features: ^UsedFeatures) {
 			features.condition_semantics = true
 		}
 		if name == "add-zsh-hook" {
+			features.zsh_hooks = true
+			features.hooks_events = true
+		}
+		if name == "emit" {
+			features.fish_events = true
+			features.hooks_events = true
+		}
+		if is_prompt_hook_name(name) || is_fish_event_name(name) {
+			features.prompt_hooks = true
+			if is_fish_event_name(name) {
+				features.fish_events = true
+			}
 			features.hooks_events = true
 		}
 	}
@@ -298,7 +352,12 @@ scan_program_features :: proc(program: ^ir.Program) -> UsedFeatures {
 	}
 
 	for fn in program.functions {
-		if detect_hook_name(fn.name) {
+		if is_prompt_hook_name(fn.name) {
+			features.prompt_hooks = true
+			features.hooks_events = true
+		}
+		if is_fish_event_name(fn.name) {
+			features.fish_events = true
 			features.hooks_events = true
 		}
 		for stmt in fn.body {
@@ -334,9 +393,7 @@ scan_source_features :: proc(source_code: string) -> UsedFeatures {
 		features.fish_list_indexing = true
 		features.arrays_lists = true
 	}
-	if contains_any(source_code, []string{"precmd", "preexec", "add-zsh-hook", "fish_prompt", "fish_preexec", "fish_postexec"}) {
-		features.hooks_events = true
-	}
+	mark_hook_features_from_text(source_code, &features)
 	if strings.contains(source_code, "${") {
 		features.parameter_expansion = true
 	}
@@ -368,6 +425,9 @@ check_compatibility :: proc(
 	features.assoc_arrays = features.assoc_arrays || source_features.assoc_arrays
 	features.fish_list_indexing = features.fish_list_indexing || source_features.fish_list_indexing
 	features.arrays_lists = features.arrays_lists || source_features.arrays_lists
+	features.zsh_hooks = features.zsh_hooks || source_features.zsh_hooks
+	features.fish_events = features.fish_events || source_features.fish_events
+	features.prompt_hooks = features.prompt_hooks || source_features.prompt_hooks
 	features.hooks_events = features.hooks_events || source_features.hooks_events
 	features.parameter_expansion = features.parameter_expansion || source_features.parameter_expansion
 	features.process_substitution = features.process_substitution || source_features.process_substitution
@@ -427,13 +487,31 @@ check_compatibility :: proc(
 				"Use temporary files and process-substitution shim wrappers",
 			)
 		}
-		if features.hooks_events {
+		if features.zsh_hooks {
 			add_warning(
 				&result,
-				"hooks_events",
+				"zsh_hooks",
 				.Warning,
-				"Hook/event APIs differ in Fish",
-				"Use hook bridge shims for precmd/preexec/fish events",
+				"Zsh hook registration APIs differ in Fish",
+				"Use hook bridge shims for add-zsh-hook/precmd/preexec mapping",
+			)
+		}
+		if features.fish_events {
+			add_warning(
+				&result,
+				"fish_events",
+				.Warning,
+				"Fish event handlers may not map directly",
+				"Use fish event bridge shims and explicit registration wrappers",
+			)
+		}
+		if features.prompt_hooks {
+			add_warning(
+				&result,
+				"prompt_hooks",
+				.Warning,
+				"Prompt hook function semantics differ in Fish",
+				"Use hook bridge shims for prompt/preexec flow",
 			)
 		}
 	}
@@ -448,10 +526,10 @@ check_compatibility :: proc(
 				"Flatten arrays or use shim helpers that emulate list behavior",
 			)
 		}
-		if features.hooks_events {
+		if features.zsh_hooks || features.fish_events || features.prompt_hooks {
 			add_warning(
 				&result,
-				"hooks_events",
+				"prompt_hooks",
 				.Warning,
 				"Shell hook/event behavior is not standardized in POSIX sh",
 				"Use portable function wrappers and explicit call sites",
@@ -487,10 +565,10 @@ check_compatibility :: proc(
 				"Use condition bridge shim wrappers to normalize behavior",
 			)
 		}
-		if features.hooks_events {
+		if features.fish_events || features.prompt_hooks {
 			add_warning(
 				&result,
-				"hooks_events",
+				"fish_events",
 				.Warning,
 				"Fish event functions do not directly map to Bash/Zsh hooks",
 				"Use hook/event bridge shim and explicit registration wrappers",
@@ -499,10 +577,10 @@ check_compatibility :: proc(
 	}
 
 	if from == .Zsh && (to == .Bash || to == .POSIX) {
-		if features.hooks_events {
+		if features.zsh_hooks || features.prompt_hooks {
 			add_warning(
 				&result,
-				"hooks_events",
+				"zsh_hooks",
 				.Warning,
 				"Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly",
 				"Use hook bridge shims and explicit registration wrappers",

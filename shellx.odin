@@ -408,6 +408,13 @@ has_array_bridge_shim :: proc(required_shims: []string) -> bool {
 		has_required_shim(required_shims, "fish_list_indexing")
 }
 
+has_hook_bridge_shim :: proc(required_shims: []string) -> bool {
+	return has_required_shim(required_shims, "hooks_events") ||
+		has_required_shim(required_shims, "zsh_hooks") ||
+		has_required_shim(required_shims, "fish_events") ||
+		has_required_shim(required_shims, "prompt_hooks")
+}
+
 is_string_match_call :: proc(call: ^ir.Call) -> bool {
 	if call == nil {
 		return false
@@ -519,7 +526,7 @@ rewrite_call_for_shims :: proc(
 		return
 	}
 
-	if has_required_shim(required_shims, "hooks_events") && call.function.name == "add-zsh-hook" {
+	if has_hook_bridge_shim(required_shims) && call.function.name == "add-zsh-hook" {
 		call.function.name = "__shellx_register_hook"
 	}
 
@@ -617,7 +624,7 @@ apply_shim_callsite_rewrites :: proc(
 	out := strings.clone(text, allocator)
 	changed_any := false
 
-	if has_required_shim(required_shims, "hooks_events") {
+	if has_hook_bridge_shim(required_shims) {
 		out, changed_any = replace_with_flag(out, "add-zsh-hook precmd ", "__shellx_register_precmd ", changed_any, allocator)
 		out, changed_any = replace_with_flag(out, "add-zsh-hook preexec ", "__shellx_register_preexec ", changed_any, allocator)
 	}

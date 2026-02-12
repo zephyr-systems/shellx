@@ -165,7 +165,7 @@ needs_shim :: proc(feature: string, from: ir.ShellDialect, to: ir.ShellDialect) 
 		return to == .Fish || to == .POSIX
 	case "condition_semantics":
 		return to == .Fish || from == .Fish || to == .POSIX
-	case "hooks_events":
+	case "hooks_events", "zsh_hooks", "fish_events", "prompt_hooks":
 		return from != to
 	}
 	return false
@@ -182,6 +182,8 @@ shim_feature_group :: proc(feature: string) -> string {
 	case "condition_semantics":
 		return "condition_semantics"
 	case "hooks_events":
+		return "hooks_events"
+	case "zsh_hooks", "fish_events", "prompt_hooks":
 		return "hooks_events"
 	}
 	return feature

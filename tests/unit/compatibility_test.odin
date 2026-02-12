@@ -270,12 +270,22 @@ test_needs_shim_detection :: proc(t: ^testing.T) {
 		compat.needs_shim("process_substitution", .Bash, .Fish),
 		"Bash process substitution needs shim for Fish",
 	)
+	testing.expect(
+		t,
+		compat.needs_shim("zsh_hooks", .Zsh, .Fish),
+		"Zsh hook features should need shim for Fish",
+	)
 
 	// Bash → Zsh doesn't need shims
 	testing.expect(
 		t,
 		!compat.needs_shim("arrays", .Bash, .Zsh),
 		"Bash to Zsh doesn't need shim for arrays",
+	)
+	testing.expect(
+		t,
+		!compat.needs_shim("zsh_hooks", .Zsh, .Zsh),
+		"Same dialect should not require hook shim",
 	)
 	testing.expect(
 		t,
