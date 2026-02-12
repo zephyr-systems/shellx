@@ -103,3 +103,18 @@ test_hook_shim_runtime_wiring :: proc(t: ^testing.T) {
 	testing.expect(t, strings.contains(prelude_fish, "--on-event fish_prompt"), "Fish hook shim should attach precmd event handler")
 	testing.expect(t, strings.contains(prelude_fish, "--on-event fish_preexec"), "Fish hook shim should attach preexec event handler")
 }
+
+@(test)
+test_process_and_parameter_shim_prelude :: proc(t: ^testing.T) {
+	if !should_run_local_test("test_process_and_parameter_shim_prelude") { return }
+
+	prelude_fish := compat.build_shim_prelude([]string{"parameter_expansion", "process_substitution"}, .Bash, .Fish)
+	defer delete(prelude_fish)
+	testing.expect(t, strings.contains(prelude_fish, "__shellx_param_default"), "Fish parameter shim should exist")
+	testing.expect(t, strings.contains(prelude_fish, "__shellx_param_length"), "Fish parameter length shim should exist")
+	testing.expect(t, strings.contains(prelude_fish, "__shellx_psub_in"), "Fish process substitution shim should exist")
+
+	prelude_posix := compat.build_shim_prelude([]string{"process_substitution"}, .Bash, .POSIX)
+	defer delete(prelude_posix)
+	testing.expect(t, strings.contains(prelude_posix, "__shellx_psub_out"), "POSIX process substitution shim should exist")
+}

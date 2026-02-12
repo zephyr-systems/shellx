@@ -367,10 +367,42 @@ __shellx_enable_hooks
 
 generate_process_substitution_bridge_shim :: proc(to: ir.ShellDialect) -> string {
 	switch to {
-	case .Fish, .POSIX:
+	case .Fish:
+		return strings.trim_space(`
+function __shellx_psub_tmp
+    mktemp
+end
+
+function __shellx_psub_in --argument cmd
+    set -l tmp (__shellx_psub_tmp)
+    sh -c "$cmd" > "$tmp"
+    echo $tmp
+end
+
+function __shellx_psub_out --argument cmd
+    set -l tmp (__shellx_psub_tmp)
+    mkfifo $tmp
+    sh -c "$cmd < \"$tmp\"; rm -f \"$tmp\"" &
+    echo $tmp
+end
+`)
+	case .POSIX:
 		return strings.trim_space(`
 __shellx_psub_tmp() {
   mktemp
+}
+
+__shellx_psub_in() {
+  _tmp="$(__shellx_psub_tmp)"
+  sh -c "$1" > "$_tmp"
+  printf "%s\n" "$_tmp"
+}
+
+__shellx_psub_out() {
+  _tmp="$(__shellx_psub_tmp)"
+  mkfifo "$_tmp"
+  sh -c "$1 < \"$_tmp\"; rm -f \"$_tmp\"" &
+  printf "%s\n" "$_tmp"
 }
 `)
 	case .Bash, .Zsh:
@@ -393,7 +425,15 @@ generate_shim_code :: proc(feature: string, from: ir.ShellDialect, to: ir.ShellD
 		if to == .Fish {
 			return strings.trim_space(`
 function __shellx_param_default --argument var_name default_value
-    set -q $var_name; and eval echo \$$var_name; or echo $default_value
+    set -q $var_name
+    and eval echo \$$var_name
+    or echo $default_value
+end
+
+function __shellx_param_length --argument var_name
+    set -q $var_name
+    and eval string length -- \$$var_name
+    or echo 0
 end
 `)
 		}

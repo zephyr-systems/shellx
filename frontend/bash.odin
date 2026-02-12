@@ -188,6 +188,10 @@ convert_bash_command_to_statement :: proc(
 			// Arguments can be strings or words
 			arg_text := intern_node_text(arena, child, source)
 			append(&arguments, text_to_expression(arena, arg_text))
+		} else if child_type == "expansion" || child_type == "simple_expansion" || child_type == "parameter_expansion" || child_type == "process_substitution" || child_type == "command_substitution" || child_type == "concatenation" {
+			// Preserve expansion/substitution arguments for downstream rewrites.
+			arg_text := intern_node_text(arena, child, source)
+			append(&arguments, text_to_expression(arena, arg_text))
 		}
 	}
 
@@ -224,7 +228,7 @@ convert_bash_assignment_to_statement :: proc(
 
 		if child_type == "variable_name" {
 			variable_name = intern_node_text(arena, child, source) // Pass allocator
-		} else if child_type == "word" || child_type == "number" {
+		} else if child_type == "word" || child_type == "number" || child_type == "expansion" || child_type == "simple_expansion" || child_type == "parameter_expansion" || child_type == "concatenation" {
 			value = text_to_expression(
 				arena,
 				intern_node_text(arena, child, source),

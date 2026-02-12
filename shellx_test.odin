@@ -348,6 +348,37 @@ test_translate_insert_shims_option_api :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_translate_insert_shims_parameter_expansion_to_fish_api :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_insert_shims_parameter_expansion_to_fish_api") { return }
+
+	options := DEFAULT_TRANSLATION_OPTIONS
+	options.insert_shims = true
+
+	result := translate("echo ${name:-world} ${#name}", .Bash, .Fish, options)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, result.success, "Parameter expansion translation to fish should succeed")
+	testing.expect(t, strings.contains(result.output, "__shellx_param_default"), "Parameter default shim should be injected")
+	testing.expect(t, strings.contains(result.output, "__shellx_param_length"), "Parameter length shim should be injected")
+	testing.expect(t, strings.contains(result.output, "(__shellx_param_default name"), "Default expansion should be rewritten")
+	testing.expect(t, strings.contains(result.output, "(__shellx_param_length name)"), "Length expansion should be rewritten")
+}
+
+@(test)
+test_translate_insert_shims_process_substitution_to_fish_api :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_insert_shims_process_substitution_to_fish_api") { return }
+
+	options := DEFAULT_TRANSLATION_OPTIONS
+	options.insert_shims = true
+
+	result := translate("cat <(echo hi)", .Bash, .Fish, options)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, result.success, "Process substitution translation to fish should succeed")
+	testing.expect(t, strings.contains(result.output, "__shellx_psub_in"), "Process substitution shim should be injected/used")
+}
+
+@(test)
 test_translate_insert_shims_fish_string_match_api :: proc(t: ^testing.T) {
 	if !should_run_test("test_translate_insert_shims_fish_string_match_api") { return }
 

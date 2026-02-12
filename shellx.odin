@@ -624,6 +624,28 @@ apply_shim_callsite_rewrites :: proc(
 		}
 	}
 
+	if has_required_shim(required_shims, "parameter_expansion") {
+		rewritten, changed := rewrite_parameter_expansion_callsites(out, to, allocator)
+		if changed {
+			delete(out)
+			out = rewritten
+			changed_any = true
+		} else {
+			delete(rewritten)
+		}
+	}
+
+	if has_required_shim(required_shims, "process_substitution") {
+		rewritten, changed := rewrite_process_substitution_callsites(out, to, allocator)
+		if changed {
+			delete(out)
+			out = rewritten
+			changed_any = true
+		} else {
+			delete(rewritten)
+		}
+	}
+
 	return out, changed_any
 }
 
@@ -643,6 +665,168 @@ replace_with_flag :: proc(
 		delete(replaced)
 	}
 	return text, changed_any
+}
+
+find_substring :: proc(s: string, needle: string) -> int {
+	if len(needle) == 0 || len(s) < len(needle) {
+		return -1
+	}
+	last := len(s) - len(needle)
+	for i in 0 ..< last+1 {
+		matched := true
+		for j in 0 ..< len(needle) {
+			if s[i+j] != needle[j] {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return i
+		}
+	}
+	return -1
+}
+
+escape_double_quoted :: proc(s: string, allocator := context.allocator) -> string {
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+
+	for i in 0 ..< len(s) {
+		c := s[i]
+		if c == '\\' || c == '"' || c == '$' || c == '`' {
+			strings.write_byte(&builder, '\\')
+		}
+		strings.write_byte(&builder, c)
+	}
+
+	return strings.clone(strings.to_string(builder), allocator)
+}
+
+rewrite_parameter_expansion_callsites :: proc(
+	text: string,
+	to: ShellDialect,
+	allocator := context.allocator,
+) -> (string, bool) {
+	if to != .Fish {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	i := 0
+	for i < len(text) {
+		inner_start := -1
+		if i+1 < len(text) && text[i] == '$' && text[i+1] == '{' {
+			inner_start = i + 2
+		} else if text[i] == '{' {
+			inner_start = i + 1
+		}
+
+		if inner_start >= 0 {
+			j := inner_start
+			for j < len(text) && text[j] != '}' {
+				j += 1
+			}
+			if j < len(text) && text[j] == '}' {
+				inner := strings.trim_space(text[inner_start:j])
+				repl := ""
+
+				if len(inner) > 1 && inner[0] == '#' {
+					var_name := strings.trim_space(inner[1:])
+					if var_name != "" {
+						repl = fmt.tprintf("(__shellx_param_length %s)", var_name)
+					}
+				} else {
+					idx := find_substring(inner, ":-")
+					if idx < 0 {
+						idx = find_substring(inner, ":=")
+					}
+					if idx > 0 {
+						var_name := strings.trim_space(inner[:idx])
+						default_value := strings.trim_space(inner[idx+2:])
+						if var_name != "" {
+							escaped_default := escape_double_quoted(default_value, allocator)
+							repl = fmt.tprintf("(__shellx_param_default %s \"%s\")", var_name, escaped_default)
+							delete(escaped_default)
+						}
+					}
+				}
+
+				if repl != "" {
+					strings.write_string(&builder, repl)
+					changed = true
+					i = j + 1
+					continue
+				}
+			}
+		}
+
+		strings.write_byte(&builder, text[i])
+		i += 1
+	}
+
+	return strings.clone(strings.to_string(builder), allocator), changed
+}
+
+rewrite_process_substitution_callsites :: proc(
+	text: string,
+	to: ShellDialect,
+	allocator := context.allocator,
+) -> (string, bool) {
+	if to != .Fish && to != .POSIX {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	i := 0
+	for i < len(text) {
+		if i+1 < len(text) && (text[i] == '<' || text[i] == '>') && text[i+1] == '(' {
+			direction := text[i]
+			depth := 1
+			j := i + 2
+			for j < len(text) {
+				if text[j] == '(' {
+					depth += 1
+				} else if text[j] == ')' {
+					depth -= 1
+					if depth == 0 {
+						break
+					}
+				}
+				j += 1
+			}
+
+			if j < len(text) && depth == 0 {
+				cmd := strings.trim_space(text[i+2 : j])
+				escaped_cmd := escape_double_quoted(cmd, allocator)
+				fn := "__shellx_psub_in"
+				if direction == '>' {
+					fn = "__shellx_psub_out"
+				}
+
+				if to == .Fish {
+					strings.write_string(&builder, fmt.tprintf("(%s \"%s\")", fn, escaped_cmd))
+				} else {
+					strings.write_string(&builder, fmt.tprintf("$(%s \"%s\")", fn, escaped_cmd))
+				}
+
+				delete(escaped_cmd)
+				changed = true
+				i = j + 1
+				continue
+			}
+		}
+
+		strings.write_byte(&builder, text[i])
+		i += 1
+	}
+
+	return strings.clone(strings.to_string(builder), allocator), changed
 }
 
 propagate_program_file :: proc(program: ^ir.Program, file: string) {
