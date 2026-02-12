@@ -284,7 +284,7 @@ test_translate_strict_mode_api :: proc(t: ^testing.T) {
 	options := DEFAULT_TRANSLATION_OPTIONS
 	options.strict_mode = true
 
-	result := translate("echo hello", .Bash, .Fish, options)
+	result := translate("arr=(one two three)", .Bash, .Fish, options)
 	defer destroy_translation_result(&result)
 
 	testing.expect(t, !result.success, "Strict mode should fail on compatibility errors")
@@ -335,7 +335,7 @@ test_translate_insert_shims_option_api :: proc(t: ^testing.T) {
 	options := DEFAULT_TRANSLATION_OPTIONS
 	options.insert_shims = true
 
-	result := translate("echo hello", .Bash, .Fish, options)
+	result := translate("if [[ $x == y ]]; then echo ok; fi", .Bash, .Fish, options)
 	defer destroy_translation_result(&result)
 
 	testing.expect(t, result.success, "Translation should succeed with insert_shims enabled")
@@ -344,6 +344,7 @@ test_translate_insert_shims_option_api :: proc(t: ^testing.T) {
 		len(result.required_shims) > 0,
 		"Compatibility shims should be collected for Bash to Fish",
 	)
+	testing.expect(t, strings.contains(result.output, "__shellx_test"), "Condition shim should be injected into output")
 }
 
 @(test)

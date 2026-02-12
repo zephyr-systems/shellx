@@ -1,7 +1,7 @@
 # ShellX
 
 ![CI](https://img.shields.io/badge/CI-local%20tests-blue)
-![License](https://img.shields.io/badge/license-unspecified-lightgrey)
+![License](https://img.shields.io/badge/license-MIT-blue)
 
 ShellX is an Odin library for translating shell scripts between dialects:
 

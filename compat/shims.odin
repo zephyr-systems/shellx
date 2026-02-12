@@ -154,19 +154,21 @@ generate_process_substitution_shim :: proc(
 
 // needs_shim checks if a feature needs a shim for the target dialect
 needs_shim :: proc(feature: string, from: ir.ShellDialect, to: ir.ShellDialect) -> bool {
-	// Only Bash/Zsh -> Fish needs shims currently
-	if !(from == .Bash || from == .Zsh) || to != .Fish {
-		return false
-	}
-
 	switch feature {
-	case "arrays", "parameter_expansion":
-		return true
+	case "arrays", "arrays_lists":
+		if to == .Fish || to == .POSIX || from == .Fish {
+			return true
+		}
+	case "parameter_expansion":
+		return to == .Fish
 	case "process_substitution":
-		return true
-	case:
-		return false
+		return to == .Fish || to == .POSIX
+	case "condition_semantics":
+		return to == .Fish || from == .Fish || to == .POSIX
+	case "hooks_events":
+		return from != to
 	}
+	return false
 }
 
 // get_shim_description returns a human-readable description of what the shim does
@@ -181,4 +183,157 @@ get_shim_description :: proc(shim_type: ShimType) -> string {
 	case:
 		return "Unknown shim type"
 	}
+}
+
+generate_condition_semantics_shim :: proc(to: ir.ShellDialect) -> string {
+	switch to {
+	case .Fish:
+		return strings.trim_space(`
+function __shellx_test
+    test $argv
+end
+
+function __shellx_match
+    string match $argv
+end
+`)
+	case .Bash, .Zsh, .POSIX:
+		return strings.trim_space(`
+__shellx_test() {
+  test "$@"
+}
+`)
+	}
+	return ""
+}
+
+generate_array_list_bridge_shim :: proc(to: ir.ShellDialect) -> string {
+	switch to {
+	case .Fish:
+		return strings.trim_space(`
+function __shellx_array_set
+    set -g $argv[1] $argv[2..-1]
+end
+`)
+	case .Bash, .Zsh:
+		return strings.trim_space(`
+__shellx_list_to_array() {
+  local __name="$1"; shift
+  eval "$__name=(\"$@\")"
+}
+`)
+	case .POSIX:
+		return strings.trim_space(`
+__shellx_list_join() {
+  printf "%s" "$1"
+  shift
+  for _it in "$@"; do
+    printf " %s" "$_it"
+  done
+}
+`)
+	}
+	return ""
+}
+
+generate_hook_event_shim :: proc(to: ir.ShellDialect) -> string {
+	switch to {
+	case .Fish:
+		return strings.trim_space(`
+function __shellx_register_precmd --argument fn
+    functions -q $fn; and set -g __shellx_precmd $fn
+end
+
+function __shellx_register_preexec --argument fn
+    functions -q $fn; and set -g __shellx_preexec $fn
+end
+`)
+	case .Bash, .Zsh, .POSIX:
+		return strings.trim_space(`
+__shellx_register_precmd() {
+  : "${1:?callback required}"
+  SHELLX_PRECMD_HOOK="$1"
+}
+
+__shellx_register_preexec() {
+  : "${1:?callback required}"
+  SHELLX_PREEXEC_HOOK="$1"
+}
+`)
+	}
+	return ""
+}
+
+generate_process_substitution_bridge_shim :: proc(to: ir.ShellDialect) -> string {
+	switch to {
+	case .Fish, .POSIX:
+		return strings.trim_space(`
+__shellx_psub_tmp() {
+  mktemp
+}
+`)
+	case .Bash, .Zsh:
+		return ""
+	}
+	return ""
+}
+
+generate_shim_code :: proc(feature: string, from: ir.ShellDialect, to: ir.ShellDialect) -> string {
+	switch feature {
+	case "arrays", "arrays_lists":
+		return generate_array_list_bridge_shim(to)
+	case "condition_semantics":
+		return generate_condition_semantics_shim(to)
+	case "hooks_events":
+		return generate_hook_event_shim(to)
+	case "process_substitution":
+		return generate_process_substitution_bridge_shim(to)
+	case "parameter_expansion":
+		if to == .Fish {
+			return strings.trim_space(`
+function __shellx_param_default --argument var_name default_value
+    set -q $var_name; and eval echo \$$var_name; or echo $default_value
+end
+`)
+		}
+	}
+	return ""
+}
+
+build_shim_prelude :: proc(
+	required_shims: []string,
+	from: ir.ShellDialect,
+	to: ir.ShellDialect,
+	allocator := context.allocator,
+) -> string {
+	if len(required_shims) == 0 {
+		return ""
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+
+	seen := make(map[string]bool, context.temp_allocator)
+	defer delete(seen)
+
+	strings.write_string(&builder, "# shellx compatibility shims\n")
+	for feature in required_shims {
+		if seen[feature] {
+			continue
+		}
+		seen[feature] = true
+
+		code := generate_shim_code(feature, from, to)
+		if code == "" {
+			continue
+		}
+		strings.write_string(&builder, "\n# shim: ")
+		strings.write_string(&builder, feature)
+		strings.write_byte(&builder, '\n')
+		strings.write_string(&builder, code)
+		strings.write_byte(&builder, '\n')
+	}
+	strings.write_byte(&builder, '\n')
+
+	return strings.clone(strings.to_string(builder), allocator)
 }

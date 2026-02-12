@@ -20,7 +20,7 @@ test_options_strict_mode_integration :: proc(t: ^testing.T) {
 	opts := shellx.DEFAULT_TRANSLATION_OPTIONS
 	opts.strict_mode = true
 
-	result := shellx.translate("echo hello", .Bash, .Fish, opts)
+	result := shellx.translate("arr=(one two three)", .Bash, .Fish, opts)
 	defer shellx.destroy_translation_result(&result)
 	testing.expect(t, !result.success, "Strict mode should fail on Bash->Fish compatibility errors")
 }
@@ -32,9 +32,10 @@ test_options_insert_shims_integration :: proc(t: ^testing.T) {
 	opts := shellx.DEFAULT_TRANSLATION_OPTIONS
 	opts.insert_shims = true
 
-	result := shellx.translate("echo hello", .Bash, .Fish, opts)
+	result := shellx.translate("if [[ $x == y ]]; then echo ok; fi", .Bash, .Fish, opts)
 	defer shellx.destroy_translation_result(&result)
 	testing.expect(t, len(result.required_shims) > 0, "Insert shims should collect required shims")
+	testing.expect(t, strings.contains(result.output, "__shellx_test"), "Shim prelude should be injected")
 }
 
 @(test)

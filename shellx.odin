@@ -176,7 +176,7 @@ translate :: proc(
 		return result
 	}
 
-	compat_result := compat.check_compatibility(from, to, program)
+	compat_result := compat.check_compatibility(from, to, program, source_code)
 	defer compat.destroy_compatibility_result(&compat_result)
 
 	for warning in compat_result.warnings {
@@ -221,6 +221,14 @@ translate :: proc(
 	}
 
 	result.output = emitted
+	if options.insert_shims && len(result.required_shims) > 0 {
+		shim_prelude := compat.build_shim_prelude(result.required_shims[:], from, to, context.allocator)
+		if shim_prelude != "" {
+			result.output = strings.concatenate([]string{shim_prelude, emitted}, context.allocator)
+			delete(shim_prelude)
+			delete(emitted)
+		}
+	}
 
 	return result
 }

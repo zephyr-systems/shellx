@@ -218,7 +218,9 @@ main :: proc() {
 				summary.theme_cases += 1
 			}
 
-			tr := shellx.translate(source_code, c.from, to)
+			opts := shellx.DEFAULT_TRANSLATION_OPTIONS
+			opts.insert_shims = true
+			tr := shellx.translate(source_code, c.from, to, opts)
 			out := CaseOutcome{
 				case_ = c,
 				to = to,
