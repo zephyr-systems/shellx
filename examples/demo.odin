@@ -4,7 +4,7 @@
 
 package main
 
-import "../shellx"
+import ".."
 import "core:fmt"
 
 main :: proc() {

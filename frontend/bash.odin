@@ -203,19 +203,35 @@ convert_bash_command_to_statement :: proc(
 	fmt.println("convert_bash_command_to_statement: Starting.")
 	location := node_location(node, source)
 	cmd_name := ""
-	arguments := make([dynamic]string, 0, 4, mem.arena_allocator(&arena.arena)) // Use mem.arena_allocator(&arena.arena)
+	arguments := make([dynamic]string, 0, 4, mem.arena_allocator(&arena.arena))
 
 	for i in 0 ..< child_count(node) {
 		child := child(node, i)
 		child_type := node_type(child)
 
-		if child_type == "word" {
-			text := node_text(mem.arena_allocator(&arena.arena), child, source) // Pass allocator
-			if cmd_name == "" {
-				cmd_name = text
-			} else {
-				append(&arguments, text)
+		// Command name is inside a "command_name" node
+		if child_type == "command_name" {
+			// Get the word inside command_name
+			for j in 0 ..< child_count(child) {
+				name_child_node := ts.ts_node_child(child, u32(j))
+				if node_type(name_child_node) == "word" {
+					cmd_name = node_text(
+						mem.arena_allocator(&arena.arena),
+						name_child_node,
+						source,
+					)
+					fmt.printf(
+						"convert_bash_command_to_statement: Found command name '%s'\n",
+						cmd_name,
+					)
+					break
+				}
 			}
+		} else if child_type == "string" || child_type == "word" {
+			// Arguments can be strings or words
+			arg_text := node_text(mem.arena_allocator(&arena.arena), child, source)
+			append(&arguments, arg_text)
+			fmt.printf("convert_bash_command_to_statement: Found argument '%s'\n", arg_text)
 		}
 	}
 
@@ -225,6 +241,11 @@ convert_bash_command_to_statement :: proc(
 		location  = location,
 	}
 
+	fmt.printf(
+		"convert_bash_command_to_statement: Command='%s', Args=%d\n",
+		cmd_name,
+		len(arguments),
+	)
 	fmt.println("convert_bash_command_to_statement: Finished.")
 	return ir.Statement{type = .Call, call = call, location = location}
 }
