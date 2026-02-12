@@ -45,7 +45,10 @@ convert_zsh_node :: proc(
 		convert_zsh_assignment(arena, program, node, source)
 		return
 	case "ERROR":
-		append_zsh_error_statements(arena, &program.statements, node, source)
+		append_zsh_raw_statements(arena, &program.statements, node, source)
+		return
+	case "negated_command", "binary_expression", "unary_expression", "subshell", "list":
+		append_zsh_raw_statements(arena, &program.statements, node, source)
 		return
 	}
 
@@ -158,7 +161,10 @@ convert_zsh_statement :: proc(
 		append(body, stmt)
 	case "ERROR":
 		// Preserve parse-recovery fragments as raw command lines.
-		append_zsh_error_statements(arena, body, node, source)
+		append_zsh_raw_statements(arena, body, node, source)
+	case "negated_command", "binary_expression", "unary_expression", "subshell", "list":
+		// Preserve higher-level shell forms that we do not structurally model yet.
+		append_zsh_raw_statements(arena, body, node, source)
 	case:
 		// Recursively traverse unhandled nodes so nested statements are not dropped.
 		for i in 0 ..< child_count(node) {
@@ -178,7 +184,7 @@ is_zsh_argument_node :: proc(child_type: string) -> bool {
 	return false
 }
 
-append_zsh_error_statements :: proc(
+append_zsh_raw_statements :: proc(
 	arena: ^ir.Arena_IR,
 	body: ^[dynamic]ir.Statement,
 	node: ts.Node,
