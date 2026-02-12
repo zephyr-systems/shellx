@@ -2,6 +2,7 @@ package compat
 
 import "../ir"
 import "core:fmt"
+import "core:strings"
 
 // Severity represents the severity level of a compatibility warning
 Severity :: enum {
@@ -182,27 +183,32 @@ format_warning :: proc(warning: CompatibilityWarning, allocator := context.alloc
 }
 
 // format_result formats all warnings in a result
-format_result :: proc(result: ^CompatibilityResult, allocator := context.allocator) -> string {
+format_result :: proc(
+	result: ^CompatibilityResult,
+	allocator := context.temp_allocator,
+) -> string {
 	if len(result.warnings) == 0 {
 		return "No compatibility issues found."
 	}
 
-	builder := make([dynamic]byte, allocator)
+	// Use temp allocator for building string
+	builder := strings.builder_make(0, 1024, context.temp_allocator)
 
 	// Summary
-	fmt.sbprintf(&builder, "Compatibility Check Results:\n")
+	strings.write_string(&builder, "Compatibility Check Results:\n")
 	fmt.sbprintf(&builder, "  Total warnings: %d\n", len(result.warnings))
 	fmt.sbprintf(&builder, "  Errors: %v\n", result.has_errors)
 	fmt.sbprintf(&builder, "  Warnings: %v\n\n", result.has_warnings)
 
 	// Individual warnings
 	for warning in result.warnings {
-		formatted := format_warning(warning, allocator)
-		fmt.sbprintf(&builder, "%s\n\n", formatted)
-		delete(formatted)
+		formatted := format_warning(warning, context.temp_allocator)
+		strings.write_string(&builder, formatted)
+		strings.write_string(&builder, "\n\n")
 	}
 
-	return string(builder[:])
+	// Copy final string to provided allocator
+	return strings.clone(strings.to_string(builder), allocator)
 }
 
 // has_errors returns true if the result contains any errors

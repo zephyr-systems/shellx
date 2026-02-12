@@ -213,6 +213,69 @@ get_fish_capabilities :: proc() -> ShellCapabilities {
 	}
 }
 
+// get_posix_capabilities returns POSIX shell capabilities
+// POSIX is a subset of Bash - many Bash features are not in POSIX
+get_posix_capabilities :: proc() -> ShellCapabilities {
+	return ShellCapabilities {
+		dialect = .POSIX,
+		arrays = FeatureSupport {
+			name = "arrays",
+			supported = false,
+			description = "Arrays not in POSIX. Use positional params or string manipulation",
+		},
+		associative_arrays = FeatureSupport {
+			name = "associative_arrays",
+			supported = false,
+			description = "Associative arrays not in POSIX",
+		},
+		process_substitution = FeatureSupport {
+			name = "process_substitution",
+			supported = false,
+			description = "Process substitution not in POSIX",
+		},
+		command_substitution = FeatureSupport {
+			name = "command_substitution",
+			supported = true,
+			description = "Command substitution: `command` (backticks only, not $())",
+		},
+		brace_expansion = FeatureSupport {
+			name = "brace_expansion",
+			supported = false,
+			description = "Brace expansion not in POSIX",
+		},
+		parameter_expansion = FeatureSupport {
+			name = "parameter_expansion",
+			supported = true,
+			description = "Basic parameter expansion: ${var}, ${var:-default}",
+		},
+		globbing = FeatureSupport {
+			name = "globbing",
+			supported = true,
+			description = "Basic glob patterns: *, ?",
+		},
+		here_documents = FeatureSupport {
+			name = "here_documents",
+			supported = true,
+			description = "Here documents: << EOF",
+		},
+		local_variables = FeatureSupport {
+			name = "local_variables",
+			supported = false,
+			description = "Local keyword not in POSIX. Use subshells instead",
+		},
+		functions = FeatureSupport {
+			name = "functions",
+			supported = true,
+			description = "Functions: name() { ... }",
+		},
+		pipelines = FeatureSupport {
+			name = "pipelines",
+			supported = true,
+			description = "Command pipelines: cmd1 | cmd2",
+		},
+	}
+}
+
 // get_capabilities returns capabilities for the specified dialect
 get_capabilities :: proc(dialect: ir.ShellDialect) -> ShellCapabilities {
 	switch dialect {
@@ -222,6 +285,8 @@ get_capabilities :: proc(dialect: ir.ShellDialect) -> ShellCapabilities {
 		return get_zsh_capabilities()
 	case .Fish:
 		return get_fish_capabilities()
+	case .POSIX:
+		return get_posix_capabilities()
 	case:
 		return get_bash_capabilities() // Default to Bash
 	}
