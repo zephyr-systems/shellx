@@ -17,6 +17,15 @@ make_validation_error :: proc(
 	}
 }
 
+is_function_name_for_uniqueness :: proc(name: string) -> bool {
+	trimmed := strings.trim_space(name)
+	if trimmed == "" {
+		return false
+	}
+	// Skip parser-recovery artifacts that look like option flags (e.g. "-d").
+	return trimmed[0] != '-'
+}
+
 validate_expression :: proc(expr: Expression, location: SourceLocation) -> ValidatorError {
 	if expr == nil {
 		_ = location
@@ -234,7 +243,7 @@ validate_program :: proc(program: ^Program) -> ValidatorError {
 	defer delete(seen_functions)
 
 	for fn in program.functions {
-		if fn.name != "" {
+		if is_function_name_for_uniqueness(fn.name) {
 			if prev, ok := seen_functions[fn.name]; ok {
 				return make_validation_error(
 					.DuplicateFunction,

@@ -273,16 +273,61 @@ generate_hook_event_shim :: proc(to: ir.ShellDialect) -> string {
 	switch to {
 	case .Fish:
 		return strings.trim_space(`
+set -g __shellx_precmd_hooks
+set -g __shellx_preexec_hooks
+
 function __shellx_register_hook --argument hook_name fn
+    functions -q $fn; or return 1
     if test "$hook_name" = "precmd"
-        functions -q $fn; and set -g __shellx_precmd $fn
+        contains -- $fn $__shellx_precmd_hooks; or set -g __shellx_precmd_hooks $__shellx_precmd_hooks $fn
     else if test "$hook_name" = "preexec"
-        functions -q $fn; and set -g __shellx_preexec $fn
+        contains -- $fn $__shellx_preexec_hooks; or set -g __shellx_preexec_hooks $__shellx_preexec_hooks $fn
+    end
+end
+
+function __shellx_register_precmd --argument fn
+    __shellx_register_hook precmd $fn
+end
+
+function __shellx_register_preexec --argument fn
+    __shellx_register_hook preexec $fn
+end
+
+function __shellx_run_precmd --on-event fish_prompt
+    for _fn in $__shellx_precmd_hooks
+        functions -q $_fn; and $_fn
+    end
+end
+
+function __shellx_run_preexec --on-event fish_preexec
+    for _fn in $__shellx_preexec_hooks
+        functions -q $_fn; and $_fn $argv
     end
 end
 `)
 	case .Bash, .Zsh, .POSIX:
 		return strings.trim_space(`
+SHELLX_PRECMD_HOOK="${SHELLX_PRECMD_HOOK-}"
+SHELLX_PREEXEC_HOOK="${SHELLX_PREEXEC_HOOK-}"
+
+__shellx_run_precmd() {
+  [ -n "${SHELLX_PRECMD_HOOK-}" ] || return 0
+  command -v "$SHELLX_PRECMD_HOOK" >/dev/null 2>&1 || return 0
+  "$SHELLX_PRECMD_HOOK"
+}
+
+__shellx_run_preexec() {
+  [ -n "${SHELLX_PREEXEC_HOOK-}" ] || return 0
+  [ -n "${__shellx_in_preexec-}" ] && return 0
+  __shellx_in_preexec=1
+  command -v "$SHELLX_PREEXEC_HOOK" >/dev/null 2>&1 || {
+    __shellx_in_preexec=
+    return 0
+  }
+  "$SHELLX_PREEXEC_HOOK" "$@"
+  __shellx_in_preexec=
+}
+
 __shellx_register_hook() {
   : "${1:?hook required}"
   : "${2:?callback required}"
@@ -291,6 +336,30 @@ __shellx_register_hook() {
     preexec) SHELLX_PREEXEC_HOOK="$2" ;;
   esac
 }
+
+__shellx_register_precmd() {
+  __shellx_register_hook precmd "$1"
+}
+
+__shellx_register_preexec() {
+  __shellx_register_hook preexec "$1"
+}
+
+__shellx_enable_hooks() {
+  if [ -n "${BASH_VERSION-}" ]; then
+    case ";${PROMPT_COMMAND-};" in
+      *";__shellx_run_precmd;"*) ;;
+      *) PROMPT_COMMAND="__shellx_run_precmd${PROMPT_COMMAND:+;${PROMPT_COMMAND}}" ;;
+    esac
+    trap '__shellx_run_preexec "${BASH_COMMAND}"' DEBUG
+  elif [ -n "${ZSH_VERSION-}" ]; then
+    autoload -Uz add-zsh-hook >/dev/null 2>&1 || true
+    add-zsh-hook precmd __shellx_run_precmd >/dev/null 2>&1 || true
+    add-zsh-hook preexec __shellx_run_preexec >/dev/null 2>&1 || true
+  fi
+}
+
+__shellx_enable_hooks
 `)
 	}
 	return ""

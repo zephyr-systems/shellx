@@ -87,3 +87,19 @@ test_build_shim_prelude :: proc(t: ^testing.T) {
 	testing.expect(t, strings.contains(prelude, "__shellx_register_hook"), "Hook shim should be present")
 	testing.expect(t, strings.contains(prelude, "__shellx_array_set"), "Array/list shim should be present")
 }
+
+@(test)
+test_hook_shim_runtime_wiring :: proc(t: ^testing.T) {
+	if !should_run_local_test("test_hook_shim_runtime_wiring") { return }
+
+	prelude_bash := compat.build_shim_prelude([]string{"hooks_events"}, .Zsh, .Bash)
+	defer delete(prelude_bash)
+	testing.expect(t, strings.contains(prelude_bash, "__shellx_run_precmd"), "Bash/Zsh hook shim should include precmd runner")
+	testing.expect(t, strings.contains(prelude_bash, "__shellx_register_preexec"), "Bash/Zsh hook shim should include preexec wrapper")
+	testing.expect(t, strings.contains(prelude_bash, "__shellx_enable_hooks"), "Bash/Zsh hook shim should enable runtime dispatch")
+
+	prelude_fish := compat.build_shim_prelude([]string{"hooks_events"}, .Zsh, .Fish)
+	defer delete(prelude_fish)
+	testing.expect(t, strings.contains(prelude_fish, "--on-event fish_prompt"), "Fish hook shim should attach precmd event handler")
+	testing.expect(t, strings.contains(prelude_fish, "--on-event fish_preexec"), "Fish hook shim should attach preexec event handler")
+}
