@@ -118,3 +118,25 @@ test_process_and_parameter_shim_prelude :: proc(t: ^testing.T) {
 	defer delete(prelude_posix)
 	testing.expect(t, strings.contains(prelude_posix, "__shellx_psub_out"), "POSIX process substitution shim should exist")
 }
+
+@(test)
+test_arrays_lists_detection_not_triggered_by_generic_parens :: proc(t: ^testing.T) {
+	if !should_run_local_test("test_arrays_lists_detection_not_triggered_by_generic_parens") { return }
+
+	arena := ir.create_arena(1024 * 16)
+	defer ir.destroy_arena(&arena)
+	program := ir.create_program(&arena, .Bash)
+
+	source := "foo() { echo $(pwd); }\n"
+	res := compat.check_compatibility(.Bash, .Fish, program, source)
+	defer compat.destroy_compatibility_result(&res)
+
+	has_arrays_warning := false
+	for w in res.warnings {
+		if w.feature == "arrays_lists" {
+			has_arrays_warning = true
+			break
+		}
+	}
+	testing.expect(t, !has_arrays_warning, "Generic parentheses/command substitution should not trigger arrays_lists warning")
+}

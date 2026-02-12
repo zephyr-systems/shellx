@@ -102,6 +102,27 @@ contains_any :: proc(text: string, patterns: []string) -> bool {
 	return false
 }
 
+has_array_list_indicators :: proc(text: string) -> bool {
+	if text == "" {
+		return false
+	}
+
+	return contains_any(
+		text,
+		[]string{
+			"=(",
+			"[@]",
+			"[*]",
+			"declare -a",
+			"typeset -a",
+			"local -a",
+			"readonly -a",
+			"$argv[",
+			"${",
+		},
+	) && (contains_any(text, []string{"=(", "[@]", "[*]", "$argv["}) || strings.contains(text, "["))
+}
+
 mark_features_from_text :: proc(text: string, features: ^UsedFeatures) {
 	if text == "" {
 		return
@@ -115,10 +136,7 @@ mark_features_from_text :: proc(text: string, features: ^UsedFeatures) {
 	if strings.contains(text, "<(") || strings.contains(text, ">(") {
 		features.process_substitution = true
 	}
-	if strings.contains(text, "[@]") || strings.contains(text, "[*]") {
-		features.arrays_lists = true
-	}
-	if strings.contains(text, "=(") || strings.contains(text, ")") && strings.contains(text, "(") {
+	if has_array_list_indicators(text) {
 		features.arrays_lists = true
 	}
 }
@@ -244,7 +262,7 @@ scan_source_features :: proc(source_code: string) -> UsedFeatures {
 	if contains_any(source_code, []string{"[[", "]]", "string match", " test "}) {
 		features.condition_semantics = true
 	}
-	if contains_any(source_code, []string{"=(", "[@]", "[*]", "set -a", "set -l", "set -g"}) {
+	if has_array_list_indicators(source_code) {
 		features.arrays_lists = true
 	}
 	if contains_any(source_code, []string{"precmd", "preexec", "add-zsh-hook", "fish_prompt", "fish_preexec", "fish_postexec"}) {
