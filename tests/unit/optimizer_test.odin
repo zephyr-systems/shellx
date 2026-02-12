@@ -159,6 +159,14 @@ test_optimizer_pipeline_simplification_sort_uniq :: proc(t: ^testing.T) {
 	defer optimizer.destroy_optimize_result(&res)
 
 	testing.expect(t, res.changed, "sort|uniq should simplify")
+	if optimizer.metrics_enabled() {
+		testing.expect(t, res.metrics.forks_eliminated >= 1, "sort|uniq should save at least one fork")
+		testing.expect(
+			t,
+			res.metrics.patterns_applied["sort_uniq_to_sort_u"] == 1,
+			"Metrics should track sort|uniq optimization",
+		)
+	}
 	testing.expect(t, program.functions[0].body[0].type == .Call, "Pipeline should become call")
 	if program.functions[0].body[0].type == .Call {
 		call := program.functions[0].body[0].call
@@ -186,6 +194,14 @@ test_optimizer_pipeline_simplification_grep_wc_count :: proc(t: ^testing.T) {
 	defer optimizer.destroy_optimize_result(&res)
 
 	testing.expect(t, res.changed, "grep|wc -l should simplify")
+	if optimizer.metrics_enabled() {
+		testing.expect(t, res.metrics.forks_eliminated >= 1, "grep|wc should save at least one fork")
+		testing.expect(
+			t,
+			res.metrics.patterns_applied["grep_wc_count_to_grep_c"] == 1,
+			"Metrics should track grep|wc optimization",
+		)
+	}
 	testing.expect(t, program.functions[0].body[0].type == .Call, "Pipeline should become call")
 	if program.functions[0].body[0].type == .Call {
 		call := program.functions[0].body[0].call
@@ -213,7 +229,36 @@ test_optimizer_pipeline_simplification_tee_devnull :: proc(t: ^testing.T) {
 	defer optimizer.destroy_optimize_result(&res)
 
 	testing.expect(t, res.changed, "cmd|tee /dev/null should simplify")
+	if optimizer.metrics_enabled() {
+		testing.expect(
+			t,
+			res.metrics.patterns_applied["tee_devnull_elision"] == 1,
+			"Metrics should track tee /dev/null optimization",
+		)
+	}
 	testing.expect(t, program.functions[0].body[0].type == .Call, "Pipeline should become call")
+}
+
+@(test)
+test_optimizer_metrics_aggregated_in_optimize :: proc(t: ^testing.T) {
+	if !should_run_local_test("test_optimizer_metrics_aggregated_in_optimize") { return }
+
+	arena := ir.create_arena(1024 * 64)
+	defer ir.destroy_arena(&arena)
+	program := ir.create_program(&arena, .Bash)
+	fn := ir.create_function(&arena, "main", ir.SourceLocation{})
+	append(&fn.body, make_pipeline_stmt(&arena, "sort", []string{}, "uniq", []string{}))
+	append(&fn.body, make_pipeline_stmt(&arena, "echo", []string{"ok"}, "tee", []string{"/dev/null"}))
+	ir.add_function(program, fn)
+
+	res := optimizer.optimize(program, .Standard)
+	defer optimizer.destroy_optimize_result(&res)
+
+	testing.expect(t, res.changed, "Standard optimize should apply pipeline simplifications")
+	if optimizer.metrics_enabled() {
+		testing.expect(t, res.metrics.forks_eliminated >= 2, "Aggregate metrics should include fork savings")
+		testing.expect(t, len(res.metrics.patterns_applied) >= 1, "Aggregate metrics should include applied patterns")
+	}
 }
 
 @(test)

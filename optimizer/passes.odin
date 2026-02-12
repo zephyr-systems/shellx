@@ -4,6 +4,8 @@ import "../ir"
 import "core:fmt"
 import "core:mem"
 
+OPTIMIZER_COLLECT_METRICS :: #config(OPTIMIZER_COLLECT_METRICS, false)
+
 // OptimizationLevel represents the level of optimization to apply
 OptimizationLevel :: enum {
 	None, // No optimization
@@ -13,29 +15,84 @@ OptimizationLevel :: enum {
 }
 
 // OptimizeResult contains the result of an optimization pass
+OptimizationMetrics :: struct {
+	forks_eliminated:  int,
+	subshells_removed: int,
+	builtins_used:     int,
+	patterns_applied:  map[string]int,
+	estimated_speedup: f32,
+}
+
+// OptimizeResult contains the result of an optimization pass
 OptimizeResult :: struct {
 	changed:     bool, // Whether any changes were made
 	iterations:  int, // Number of iterations performed
 	diagnostics: [dynamic]string, // Diagnostic messages
+	metrics:     OptimizationMetrics,
 }
 
 // create_optimize_result creates a new optimization result
 create_optimize_result :: proc(allocator := context.allocator) -> OptimizeResult {
+	patterns: map[string]int
+	if OPTIMIZER_COLLECT_METRICS {
+		patterns = make(map[string]int, allocator)
+	}
+
 	return OptimizeResult {
 		changed = false,
 		iterations = 0,
 		diagnostics = make([dynamic]string, allocator),
+		metrics = OptimizationMetrics{
+			patterns_applied = patterns,
+		},
 	}
 }
 
 // destroy_optimize_result cleans up the result
 destroy_optimize_result :: proc(result: ^OptimizeResult) {
 	delete(result.diagnostics)
+	if result.metrics.patterns_applied != nil {
+		delete(result.metrics.patterns_applied)
+	}
 }
 
 // add_diagnostic adds a diagnostic message
 add_diagnostic :: proc(result: ^OptimizeResult, message: string) {
 	append(&result.diagnostics, message)
+}
+
+record_pattern :: proc(
+	result: ^OptimizeResult,
+	pattern: string,
+	forks_saved := 0,
+	subshells_saved := 0,
+	builtins_delta := 0,
+) {
+	if !OPTIMIZER_COLLECT_METRICS {
+		return
+	}
+	result.metrics.patterns_applied[pattern] += 1
+	result.metrics.forks_eliminated += forks_saved
+	result.metrics.subshells_removed += subshells_saved
+	result.metrics.builtins_used += builtins_delta
+}
+
+merge_optimize_result :: proc(dst: ^OptimizeResult, src: OptimizeResult) {
+	if src.changed {
+		dst.changed = true
+	}
+	dst.iterations += src.iterations
+	for msg in src.diagnostics {
+		add_diagnostic(dst, msg)
+	}
+	dst.metrics.forks_eliminated += src.metrics.forks_eliminated
+	dst.metrics.subshells_removed += src.metrics.subshells_removed
+	dst.metrics.builtins_used += src.metrics.builtins_used
+	if OPTIMIZER_COLLECT_METRICS && src.metrics.patterns_applied != nil && dst.metrics.patterns_applied != nil {
+		for pattern, count in src.metrics.patterns_applied {
+			dst.metrics.patterns_applied[pattern] += count
+		}
+	}
 }
 
 // optimize is the main optimization dispatcher
@@ -55,11 +112,7 @@ optimize :: proc(
 	case .Basic:
 		add_diagnostic(&result, "Running basic optimizations")
 		dce_result := dead_code_elimination(program, allocator)
-		result.changed = dce_result.changed
-		result.iterations = dce_result.iterations
-		for msg in dce_result.diagnostics {
-			add_diagnostic(&result, msg)
-		}
+		merge_optimize_result(&result, dce_result)
 		destroy_optimize_result(&dce_result)
 
 	case .Standard:
@@ -67,46 +120,22 @@ optimize :: proc(
 
 		// Run common subexpression elimination
 		cse_result := common_subexpression_elimination(program, allocator)
-		if cse_result.changed {
-			result.changed = true
-		}
-		result.iterations += cse_result.iterations
-		for msg in cse_result.diagnostics {
-			add_diagnostic(&result, msg)
-		}
+		merge_optimize_result(&result, cse_result)
 		destroy_optimize_result(&cse_result)
 
 		// Run constant folding
 		cf_result := constant_folding(program, allocator)
-		if cf_result.changed {
-			result.changed = true
-		}
-		result.iterations += cf_result.iterations
-		for msg in cf_result.diagnostics {
-			add_diagnostic(&result, msg)
-		}
+		merge_optimize_result(&result, cf_result)
 		destroy_optimize_result(&cf_result)
 
 		// Run dead code elimination
 		dce_result := dead_code_elimination(program, allocator)
-		if dce_result.changed {
-			result.changed = true
-		}
-		result.iterations += dce_result.iterations
-		for msg in dce_result.diagnostics {
-			add_diagnostic(&result, msg)
-		}
+		merge_optimize_result(&result, dce_result)
 		destroy_optimize_result(&dce_result)
 
 		// Run pipeline simplification
 		ps_result := pipeline_simplification(program, allocator)
-		if ps_result.changed {
-			result.changed = true
-		}
-		result.iterations += ps_result.iterations
-		for msg in ps_result.diagnostics {
-			add_diagnostic(&result, msg)
-		}
+		merge_optimize_result(&result, ps_result)
 		destroy_optimize_result(&ps_result)
 
 	case .Aggressive:
@@ -114,39 +143,39 @@ optimize :: proc(
 
 		// Run all standard optimizations
 		std_result := optimize(program, .Standard, allocator)
-		if std_result.changed {
-			result.changed = true
-		}
-		result.iterations += std_result.iterations
-		for msg in std_result.diagnostics {
-			add_diagnostic(&result, msg)
-		}
+		merge_optimize_result(&result, std_result)
 		destroy_optimize_result(&std_result)
 
 		// Run function inlining
 		fi_result := inline_small_functions(program, allocator)
-		if fi_result.changed {
-			result.changed = true
-		}
-		result.iterations += fi_result.iterations
-		for msg in fi_result.diagnostics {
-			add_diagnostic(&result, msg)
-		}
+		merge_optimize_result(&result, fi_result)
 		destroy_optimize_result(&fi_result)
 
 		// Run loop unrolling
 		lu_result := loop_unrolling(program, allocator)
-		if lu_result.changed {
-			result.changed = true
-		}
-		result.iterations += lu_result.iterations
-		for msg in lu_result.diagnostics {
-			add_diagnostic(&result, msg)
-		}
+		merge_optimize_result(&result, lu_result)
 		destroy_optimize_result(&lu_result)
 	}
 
+	if OPTIMIZER_COLLECT_METRICS && (result.metrics.forks_eliminated > 0 || result.metrics.subshells_removed > 0 || len(result.metrics.patterns_applied) > 0) {
+		result.metrics.estimated_speedup = f32(result.metrics.forks_eliminated)*0.04 + f32(result.metrics.subshells_removed)*0.03
+		add_diagnostic(
+			&result,
+			fmt.aprintf(
+				"Optimizer metrics: forks=%d subshells=%d speedup_est=%.2f%%",
+				result.metrics.forks_eliminated,
+				result.metrics.subshells_removed,
+				result.metrics.estimated_speedup*100.0,
+				allocator,
+			),
+		)
+	}
+
 	return result
+}
+
+metrics_enabled :: proc() -> bool {
+	return OPTIMIZER_COLLECT_METRICS
 }
 
 // dead_code_elimination removes unreachable code
@@ -447,6 +476,7 @@ pipeline_simplification :: proc(
 							allocator,
 						)
 						add_diagnostic(&result, msg)
+						record_pattern(&result, "echo_pipe_cat", 1)
 						continue
 					}
 
@@ -465,6 +495,7 @@ pipeline_simplification :: proc(
 							allocator,
 						)
 						add_diagnostic(&result, msg)
+						record_pattern(&result, "tee_devnull_elision", 1)
 						continue
 					}
 
@@ -482,6 +513,7 @@ pipeline_simplification :: proc(
 							allocator,
 						)
 						add_diagnostic(&result, msg)
+						record_pattern(&result, "sort_uniq_to_sort_u", 1, 0, 1)
 						continue
 					}
 
@@ -499,6 +531,7 @@ pipeline_simplification :: proc(
 							allocator,
 						)
 						add_diagnostic(&result, msg)
+						record_pattern(&result, "grep_wc_count_to_grep_c", 1, 0, 1)
 					}
 				}
 			}
