@@ -12,6 +12,13 @@ FrontendError :: struct {
 	location: ir.SourceLocation,
 }
 
+ParseDiagnostic :: struct {
+	message:    string,
+	location:   ir.SourceLocation,
+	suggestion: string,
+	snippet:    string,
+}
+
 Error :: enum {
 	None,
 	ParseError,
@@ -71,6 +78,61 @@ parse :: proc(f: ^Frontend, source: string) -> (^ts.Tree, FrontendError) {
 	}
 
 	return tree, FrontendError{}
+}
+
+collect_parse_diagnostics :: proc(
+	tree: ^ts.Tree,
+	source: string,
+	source_name := "<input>",
+	allocator := context.allocator,
+) -> [dynamic]ParseDiagnostic {
+	diagnostics := make([dynamic]ParseDiagnostic, allocator)
+	if tree == nil {
+		return diagnostics
+	}
+
+	root := root_node(tree)
+
+	walk :: proc(
+		node: ts.Node,
+		source: string,
+		source_name: string,
+		diagnostics: ^[dynamic]ParseDiagnostic,
+		allocator: mem.Allocator,
+	) {
+		if node_type(node) == "ERROR" {
+			loc := node_location(node, source)
+			loc.file = source_name
+			append(
+				diagnostics,
+				ParseDiagnostic{
+					message = "Syntax error",
+					location = loc,
+					suggestion = "Check shell syntax near this location",
+				},
+			)
+		}
+		for i in 0 ..< child_count(node) {
+			walk(child(node, i), source, source_name, diagnostics, allocator)
+		}
+	}
+
+	walk(root, source, source_name, &diagnostics, allocator)
+
+	if len(diagnostics) == 0 && has_error(root) {
+		loc := node_location(root, source)
+		loc.file = source_name
+		append(
+			&diagnostics,
+			ParseDiagnostic{
+				message = "Parse tree contains syntax errors",
+				location = loc,
+				suggestion = "Fix malformed statements and retry translation",
+			},
+		)
+	}
+
+	return diagnostics
 }
 
 destroy_tree :: proc(tree: ^ts.Tree) {

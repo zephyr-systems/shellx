@@ -2,6 +2,7 @@ package shellx
 
 import "core:fmt"
 import "core:mem"
+import "core:strings"
 import "core:testing"
 import "ir"
 import "optimizer"
@@ -150,4 +151,62 @@ test_common_subexpression_elimination :: proc(t: ^testing.T) {
 	if a_ok && b_ok {
 		testing.expect(t, a_var.name == b_var.name, "Both assignments should reuse same temp variable")
 	}
+}
+
+@(test)
+test_error_context_generation :: proc(t: ^testing.T) {
+	if !should_run_test("test_error_context_generation") { return }
+	result := translate("echo hello", .Zsh, .Bash)
+	defer destroy_translation_result(&result)
+	testing.expect(t, !result.success, "Unsupported dialect conversion should fail")
+	testing.expect(t, result.error == .ConversionUnsupportedDialect, "Error code should be specific")
+	testing.expect(t, len(result.errors) > 0, "Error contexts should be populated")
+	if len(result.errors) > 0 {
+		testing.expect(
+			t,
+			result.errors[0].suggestion != "",
+			"Error context should contain a suggestion",
+		)
+	}
+}
+
+@(test)
+test_report_error_formatting :: proc(t: ^testing.T) {
+	if !should_run_test("test_report_error_formatting") { return }
+	ctx := ErrorContext{
+		error = .ParseSyntaxError,
+		message = "Unexpected token",
+		location = ir.SourceLocation{
+			file = "script.sh",
+			line = 2,
+			column = 4,
+			length = 1,
+		},
+		suggestion = "Remove or escape the token",
+	}
+	report := report_error(ctx, "echo one\necho @two\n")
+	testing.expect(t, strings.contains(report, "script.sh:2:5"), "Report should include location")
+	testing.expect(t, strings.contains(report, "echo @two"), "Report should include snippet")
+	testing.expect(t, strings.contains(report, "Suggestion:"), "Report should include suggestion")
+}
+
+@(test)
+test_multiple_parse_errors_collected :: proc(t: ^testing.T) {
+	if !should_run_test("test_multiple_parse_errors_collected") { return }
+	code := "if [ ; then\nfor in ; do\necho hi\n"
+	result := translate(code, .Bash, .Bash)
+	defer destroy_translation_result(&result)
+	testing.expect(t, len(result.errors) > 0, "Malformed input should produce parse diagnostics")
+
+	parse_error_count := 0
+	for err_ctx in result.errors {
+		if err_ctx.error == .ParseSyntaxError {
+			parse_error_count += 1
+		}
+	}
+	testing.expect(
+		t,
+		parse_error_count >= 1,
+		"At least one parse syntax error should be collected",
+	)
 }

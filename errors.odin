@@ -1,0 +1,141 @@
+package shellx
+
+import "core:fmt"
+import "core:strings"
+import "ir"
+
+ErrorContext :: struct {
+	error:      Error,
+	message:    string,
+	location:   ir.SourceLocation,
+	suggestion: string,
+	snippet:    string,
+}
+
+error_to_string :: proc(err: Error) -> string {
+	switch err {
+	case .None:
+		return "none"
+	case .ParseError:
+		return "parse error"
+	case .ParseSyntaxError:
+		return "parse syntax error"
+	case .ConversionError:
+		return "conversion error"
+	case .ConversionUnsupportedDialect:
+		return "unsupported dialect"
+	case .ValidationError:
+		return "validation error"
+	case .ValidationUndefinedVariable:
+		return "validation undefined variable"
+	case .ValidationDuplicateFunction:
+		return "validation duplicate function"
+	case .ValidationInvalidControlFlow:
+		return "validation invalid control flow"
+	case .EmissionError:
+		return "emission error"
+	case .InternalError:
+		return "internal error"
+	}
+	return "unknown error"
+}
+
+line_from_source :: proc(source: string, line_number: int) -> string {
+	if line_number <= 0 || source == "" {
+		return ""
+	}
+
+	current_line := 1
+	start := 0
+	for i := 0; i < len(source); i += 1 {
+		if current_line == line_number {
+			start = i
+			break
+		}
+		if source[i] == '\n' {
+			current_line += 1
+		}
+	}
+
+	if current_line != line_number {
+		return ""
+	}
+
+	end := len(source)
+	for i := start; i < len(source); i += 1 {
+		if source[i] == '\n' {
+			end = i
+			break
+		}
+	}
+	return source[start:end]
+}
+
+report_error :: proc(ctx: ErrorContext, source_code := "") -> string {
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+
+	strings.write_string(&builder, fmt.tprintf("[%s] %s", error_to_string(ctx.error), ctx.message))
+
+	if ctx.location.line > 0 {
+		file := ctx.location.file
+		if file == "" {
+			file = "<input>"
+		}
+		strings.write_string(
+			&builder,
+			fmt.tprintf(" at %s:%d:%d", file, ctx.location.line, ctx.location.column+1),
+		)
+	}
+
+	code_line := ctx.snippet
+	if code_line == "" && source_code != "" && ctx.location.line > 0 {
+		code_line = line_from_source(source_code, ctx.location.line)
+	}
+	if code_line != "" {
+		strings.write_string(&builder, "\n")
+		strings.write_string(&builder, code_line)
+		if ctx.location.column >= 0 {
+			strings.write_string(&builder, "\n")
+			for _ in 0 ..< ctx.location.column {
+				strings.write_byte(&builder, ' ')
+			}
+			strings.write_byte(&builder, '^')
+		}
+	}
+
+	if ctx.suggestion != "" {
+		strings.write_string(&builder, fmt.tprintf("\nSuggestion: %s", ctx.suggestion))
+	}
+
+	return strings.to_string(builder)
+}
+
+add_error_context :: proc(
+	result: ^TranslationResult,
+	err: Error,
+	message: string,
+	location: ir.SourceLocation,
+	suggestion := "",
+	snippet := "",
+) {
+	if result.error == .None {
+		result.error = err
+	}
+	append(
+		&result.errors,
+		ErrorContext{
+			error = err,
+			message = message,
+			location = location,
+			suggestion = suggestion,
+			snippet = snippet,
+		},
+	)
+}
+
+destroy_translation_result :: proc(result: ^TranslationResult) {
+	delete(result.warnings)
+	delete(result.required_shims)
+	delete(result.errors)
+}
