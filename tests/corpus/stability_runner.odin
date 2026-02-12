@@ -233,7 +233,7 @@ main :: proc() {
 		if !ok {
 			continue
 		}
-		source_code := string(data)
+		source_code := strings.clone(string(data), context.allocator)
 		source_len := len(data)
 		delete(data)
 
@@ -360,6 +360,7 @@ main :: proc() {
 			shellx.destroy_translation_result(&tr)
 			append(&outcomes, out)
 		}
+		delete(source_code)
 	}
 
 	// Stable ordering by pair label.

@@ -105,7 +105,11 @@ collect_parse_diagnostics :: proc(
 	) {
 		if node_type(node) == "ERROR" {
 			parent := ts.ts_node_parent(node)
-			if node_type(parent) != "ERROR" {
+			parent_is_error := false
+			if !is_null_node(parent) {
+				parent_is_error = node_type(parent) == "ERROR"
+			}
+			if !parent_is_error {
 				loc := node_location(node, source)
 				loc.file = source_name
 				key := (u64(u32(loc.line)) << 32) | u64(u32(loc.column))
@@ -176,6 +180,9 @@ node_location :: proc(node: ts.Node, source: string) -> ir.SourceLocation {
 }
 
 node_type :: proc(node: ts.Node) -> string {
+	if is_null_node(node) {
+		return ""
+	}
 	cstr := ts.ts_node_type(node)
 	if cstr == nil {
 		return ""
@@ -209,6 +216,10 @@ has_error :: proc(node: ts.Node) -> bool {
 
 root_node :: proc(tree: ^ts.Tree) -> ts.Node {
 	return ts.ts_tree_root_node(tree)
+}
+
+is_null_node :: proc(node: ts.Node) -> bool {
+	return node.id == nil
 }
 
 node_text :: proc(allocator: mem.Allocator, node: ts.Node, source: string) -> string {

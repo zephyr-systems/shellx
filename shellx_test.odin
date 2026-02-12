@@ -292,6 +292,34 @@ test_translate_strict_mode_api :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_translate_zsh_parameter_expansion_rewrite_simple :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_zsh_parameter_expansion_rewrite_simple") { return }
+
+	src := "echo ${(@)arr} ${(@k)map} ${name:l} ${name:u}"
+	result := translate(src, .Zsh, .Bash)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, result.success, "Zsh->Bash translation should succeed")
+	testing.expect(t, strings.contains(result.output, "${arr[@]}"), "Should rewrite ${(@)arr} to bash array expansion")
+	testing.expect(t, strings.contains(result.output, "${!map[@]}"), "Should rewrite ${(@k)map} to bash key expansion")
+	testing.expect(t, strings.contains(result.output, "${name,,}"), "Should rewrite :l to bash lowercase modifier")
+	testing.expect(t, strings.contains(result.output, "${name^^}"), "Should rewrite :u to bash uppercase modifier")
+	testing.expect(t, !strings.contains(result.output, "(@)"), "Should not leave zsh (@) modifiers in output")
+}
+
+@(test)
+test_translate_zsh_parameter_expansion_rewrite_nested :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_zsh_parameter_expansion_rewrite_nested") { return }
+
+	src := "echo ${(@)A:-${(@)B}}"
+	result := translate(src, .Zsh, .Bash)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, result.success, "Nested zsh expansion translation should succeed")
+	testing.expect(t, strings.contains(result.output, "${A[@]:-${B[@]}}"), "Should rewrite nested zsh array modifiers in default expansion")
+}
+
+@(test)
 test_translate_file_and_batch_api :: proc(t: ^testing.T) {
 	if !should_run_test("test_translate_file_and_batch_api") { return }
 

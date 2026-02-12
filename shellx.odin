@@ -232,6 +232,14 @@ translate :: proc(
 	}
 
 	result.output = emitted
+	rewritten_target, target_changed := rewrite_target_callsites(emitted, from, to, context.allocator)
+	if target_changed {
+		delete(emitted)
+		emitted = rewritten_target
+	} else {
+		delete(rewritten_target)
+	}
+
 	if options.insert_shims && len(result.required_shims) > 0 {
 		rewritten, changed := apply_shim_callsite_rewrites(emitted, result.required_shims[:], from, to, context.allocator)
 		if changed {
@@ -246,7 +254,11 @@ translate :: proc(
 			result.output = strings.concatenate([]string{shim_prelude, emitted}, context.allocator)
 			delete(shim_prelude)
 			delete(emitted)
+		} else {
+			result.output = emitted
 		}
+	} else {
+		result.output = emitted
 	}
 
 	return result
@@ -831,6 +843,239 @@ rewrite_process_substitution_callsites :: proc(
 
 				delete(escaped_cmd)
 				changed = true
+				i = j + 1
+				continue
+			}
+		}
+
+		strings.write_byte(&builder, text[i])
+		i += 1
+	}
+
+	return strings.clone(strings.to_string(builder), allocator), changed
+}
+
+rewrite_target_callsites :: proc(
+	text: string,
+	from: ShellDialect,
+	to: ShellDialect,
+	allocator := context.allocator,
+) -> (string, bool) {
+	if from == .Zsh && to == .Bash {
+		return rewrite_zsh_parameter_expansion_for_bash(text, allocator)
+	}
+	return strings.clone(text, allocator), false
+}
+
+is_param_name_char :: proc(c: byte) -> bool {
+	if c >= 'a' && c <= 'z' {
+		return true
+	}
+	if c >= 'A' && c <= 'Z' {
+		return true
+	}
+	if c >= '0' && c <= '9' {
+		return true
+	}
+	if c == '_' || c == '@' || c == '*' || c == '#' || c == '?' {
+		return true
+	}
+	return false
+}
+
+is_simple_param_name :: proc(s: string) -> bool {
+	if s == "" {
+		return false
+	}
+	for i in 0 ..< len(s) {
+		if !is_param_name_char(s[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+rewrite_zsh_modifier_parameter_tokens :: proc(inner: string, allocator := context.allocator) -> (string, bool) {
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	i := 0
+	for i < len(inner) {
+		token_len := 0
+		mode := ""
+		if i+4 <= len(inner) && inner[i:i+4] == "(@k)" {
+			token_len = 4
+			mode = "keys"
+		} else if i+3 <= len(inner) && inner[i:i+3] == "(@)" {
+			token_len = 3
+			mode = "array"
+		} else if i+3 <= len(inner) && inner[i:i+3] == "(k)" {
+			token_len = 3
+			mode = "keys"
+		}
+
+		if token_len > 0 {
+			j := i + token_len
+			for j < len(inner) && is_param_name_char(inner[j]) {
+				j += 1
+			}
+			if j > i+token_len {
+				name := inner[i+token_len : j]
+				switch mode {
+				case "keys":
+					strings.write_string(&builder, fmt.tprintf("!%s[@]", name))
+				case "array":
+					strings.write_string(&builder, fmt.tprintf("%s[@]", name))
+				}
+				changed = true
+				i = j
+				continue
+			}
+		}
+
+		strings.write_byte(&builder, inner[i])
+		i += 1
+	}
+
+	if !changed {
+		return strings.clone(inner, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_zsh_case_modifiers_for_bash :: proc(inner: string, allocator := context.allocator) -> (string, bool) {
+	if len(inner) < 3 {
+		return strings.clone(inner, allocator), false
+	}
+	suffix := inner[len(inner)-2:]
+	base := inner[:len(inner)-2]
+	if base == "" || !is_simple_param_name(base) {
+		return strings.clone(inner, allocator), false
+	}
+	switch suffix {
+	case ":l":
+		return strings.clone(fmt.tprintf("%s,,", base), allocator), true
+	case ":u":
+		return strings.clone(fmt.tprintf("%s^^", base), allocator), true
+	}
+	return strings.clone(inner, allocator), false
+}
+
+rewrite_zsh_inline_case_modifiers_for_bash :: proc(inner: string, allocator := context.allocator) -> (string, bool) {
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	i := 0
+	for i < len(inner) {
+		if is_param_name_char(inner[i]) {
+			start := i
+			j := i
+			for j < len(inner) && is_param_name_char(inner[j]) {
+				j += 1
+			}
+			if j+1 < len(inner) && inner[j] == ':' && (inner[j+1] == 'l' || inner[j+1] == 'u') {
+				if start == 0 || !is_param_name_char(inner[start-1]) {
+					name := inner[start:j]
+					if inner[j+1] == 'l' {
+						strings.write_string(&builder, fmt.tprintf("%s,,", name))
+					} else {
+						strings.write_string(&builder, fmt.tprintf("%s^^", name))
+					}
+					changed = true
+					i = j + 2
+					continue
+				}
+			}
+		}
+
+		strings.write_byte(&builder, inner[i])
+		i += 1
+	}
+
+	if !changed {
+		return strings.clone(inner, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_zsh_parameter_expansion_for_bash :: proc(
+	text: string,
+	allocator := context.allocator,
+) -> (string, bool) {
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	i := 0
+	for i < len(text) {
+		if i+1 < len(text) && text[i] == '$' && text[i+1] == '{' {
+			depth := 1
+			j := i + 2
+			for j < len(text) {
+				if text[j] == '{' {
+					depth += 1
+				} else if text[j] == '}' {
+					depth -= 1
+					if depth == 0 {
+						break
+					}
+				}
+				j += 1
+			}
+
+			if j < len(text) && depth == 0 {
+				inner := text[i+2 : j]
+				rewrite_stage1, stage1_changed := rewrite_zsh_modifier_parameter_tokens(inner, allocator)
+				rewrite_stage2, stage2_changed := rewrite_zsh_inline_case_modifiers_for_bash(rewrite_stage1, allocator)
+				rewrite_stage3, stage3_changed := rewrite_zsh_case_modifiers_for_bash(rewrite_stage2, allocator)
+				if stage1_changed || stage2_changed || stage3_changed {
+					changed = true
+				}
+				strings.write_string(&builder, "${")
+				strings.write_string(&builder, rewrite_stage3)
+				strings.write_byte(&builder, '}')
+				delete(rewrite_stage1)
+				delete(rewrite_stage2)
+				delete(rewrite_stage3)
+				i = j + 1
+				continue
+			}
+		}
+		if text[i] == '{' {
+			depth := 1
+			j := i + 1
+			for j < len(text) {
+				if text[j] == '{' {
+					depth += 1
+				} else if text[j] == '}' {
+					depth -= 1
+					if depth == 0 {
+						break
+					}
+				}
+				j += 1
+			}
+
+			if j < len(text) && depth == 0 {
+				inner := text[i+1 : j]
+				rewrite_stage1, stage1_changed := rewrite_zsh_modifier_parameter_tokens(inner, allocator)
+				rewrite_stage2, stage2_changed := rewrite_zsh_inline_case_modifiers_for_bash(rewrite_stage1, allocator)
+				rewrite_stage3, stage3_changed := rewrite_zsh_case_modifiers_for_bash(rewrite_stage2, allocator)
+				if stage1_changed || stage2_changed || stage3_changed {
+					changed = true
+					strings.write_string(&builder, "${")
+					strings.write_string(&builder, rewrite_stage3)
+					strings.write_byte(&builder, '}')
+				} else {
+					strings.write_byte(&builder, '{')
+					strings.write_string(&builder, inner)
+					strings.write_byte(&builder, '}')
+				}
+				delete(rewrite_stage1)
+				delete(rewrite_stage2)
+				delete(rewrite_stage3)
 				i = j + 1
 				continue
 			}
