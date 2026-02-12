@@ -441,3 +441,62 @@ convert_zsh_return_to_statement :: proc(
 
 	return ir.Statement{type = .Return, return_ = ret, location = location}
 }
+
+// Zsh Array Support (Task 10.6)
+// Handles Zsh array syntax: arr=(one two), ${arr[1]}, ${arr[@]}
+
+convert_zsh_array_assignment :: proc(
+	arena: ^ir.Arena_IR,
+	program: ^ir.Program,
+	node: ts.Node,
+	source: string,
+) {
+	stmt := convert_zsh_array_to_statement(arena, node, source)
+	ir.add_statement(program, stmt)
+}
+
+convert_zsh_array_to_statement :: proc(
+	arena: ^ir.Arena_IR,
+	node: ts.Node,
+	source: string,
+) -> ir.Statement {
+	location := node_location(node, source)
+	array_name := ""
+	values := make([dynamic]string, 0, 4, mem.arena_allocator(&arena.arena))
+
+	for i in 0 ..< child_count(node) {
+		child := child(node, i)
+		child_type := node_type(child)
+
+		if child_type == "variable_name" {
+			array_name = node_text(mem.arena_allocator(&arena.arena), child, source)
+		} else if child_type == "array" || child_type == "compound_statement" {
+			// Extract array elements
+			for j in 0 ..< child_count(child) {
+				elem_node := ts.ts_node_child(child, u32(j))
+				if node_type(elem_node) == "word" || node_type(elem_node) == "string" {
+					elem_text := node_text(mem.arena_allocator(&arena.arena), elem_node, source)
+					append(&values, elem_text)
+				}
+			}
+		}
+	}
+
+	// Store as comma-separated values for now
+	result: strings.Builder
+	strings.builder_init(&result)
+	for idx in 0 ..< len(values) {
+		if idx > 0 {
+			strings.write_string(&result, ", ")
+		}
+		strings.write_string(&result, values[idx])
+	}
+
+	assign := ir.Assign {
+		variable = array_name,
+		value    = strings.to_string(result),
+		location = location,
+	}
+
+	return ir.Statement{type = .Assign, assign = assign, location = location}
+}
