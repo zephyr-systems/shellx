@@ -8,6 +8,7 @@ SHELLX_TEST_VERBOSE="${SHELLX_TEST_VERBOSE:-0}"
 SHELLX_TEST_NAME="${SHELLX_TEST_NAME:-}"
 SHELLX_TEST_INCLUDE_EDGE_CASES="${SHELLX_TEST_INCLUDE_EDGE_CASES:-1}"
 SHELLX_EDGE_CASES_TEST_FILE="${SHELLX_EDGE_CASES_TEST_FILE:-tests/unit/edge_cases_test.odin}"
+SHELLX_TEST_EXTENDED="${SHELLX_TEST_EXTENDED:-0}"
 
 base_flags=()
 if [[ "$SHELLX_TEST_VERBOSE" == "1" ]]; then
@@ -36,4 +37,27 @@ if [[ "$SHELLX_TEST_INCLUDE_EDGE_CASES" == "1" ]]; then
 	edge_cmd+=("${define_flag[@]}")
 	echo "Running: ${edge_cmd[*]}"
 	"${edge_cmd[@]}"
+fi
+
+if [[ "$SHELLX_TEST_EXTENDED" == "1" ]]; then
+	extended_files=(
+		"tests/unit/ir_test.odin"
+		"tests/unit/backend_test.odin"
+		"tests/unit/optimizer_test.odin"
+		"tests/unit/detection_test.odin"
+		"tests/unit/frontend_test.odin"
+		"tests/unit/compatibility_extra_test.odin"
+		"tests/integration/roundtrip_test.odin"
+		"tests/integration/error_handling_test.odin"
+		"tests/integration/options_test.odin"
+	)
+
+	for test_file in "${extended_files[@]}"; do
+		extended_cmd=("$ODIN_BIN" "test" "$test_file" "-file")
+		if [[ -n "$SHELLX_TEST_NAME" ]]; then
+			extended_cmd+=("-define:LOCAL_SHELLX_TEST_NAME=\"${escaped_test_name}\"")
+		fi
+		echo "Running: ${extended_cmd[*]}"
+		"${extended_cmd[@]}"
+	done
 fi

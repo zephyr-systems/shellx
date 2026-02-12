@@ -1,0 +1,119 @@
+package unit_tests
+
+import "core:mem"
+import "core:strings"
+import "core:testing"
+import "../../ir"
+import "../../optimizer"
+
+LOCAL_SHELLX_TEST_NAME :: #config(LOCAL_SHELLX_TEST_NAME, "")
+
+should_run_local_test :: proc(name: string) -> bool {
+	if LOCAL_SHELLX_TEST_NAME == "" {
+		return true
+	}
+	return strings.contains(name, LOCAL_SHELLX_TEST_NAME)
+}
+
+make_assign_int :: proc(arena: ^ir.Arena_IR, name, value: string) -> ir.Statement {
+	return ir.stmt_assign(arena, name, ir.expr_int(arena, value))
+}
+
+make_binary_add :: proc(arena: ^ir.Arena_IR, left, right: string) -> ir.Expression {
+	a := ir.expr_int(arena, left)
+	b := ir.expr_int(arena, right)
+	op := new(ir.BinaryOp, mem.arena_allocator(&arena.arena))
+	op.op = .Add
+	op.left = a
+	op.right = b
+	return op
+}
+
+@(test)
+test_optimizer_constant_folding :: proc(t: ^testing.T) {
+	if !should_run_local_test("test_optimizer_constant_folding") { return }
+
+	arena := ir.create_arena(1024 * 32)
+	defer ir.destroy_arena(&arena)
+
+	program := ir.create_program(&arena, .Bash)
+	fn := ir.create_function(&arena, "main", ir.SourceLocation{})
+	append(&fn.body, ir.stmt_assign(&arena, "x", make_binary_add(&arena, "2", "3")))
+	ir.add_function(program, fn)
+
+	res := optimizer.constant_folding(program)
+	defer optimizer.destroy_optimize_result(&res)
+
+	testing.expect(t, res.changed, "Constant folding should change program")
+	lit, ok := program.functions[0].body[0].assign.value.(^ir.Literal)
+	testing.expect(t, ok, "Folded value should become literal")
+	if ok {
+		testing.expect(t, lit.value == "5", "2 + 3 should fold to 5")
+	}
+}
+
+@(test)
+test_optimizer_dead_code_elimination :: proc(t: ^testing.T) {
+	if !should_run_local_test("test_optimizer_dead_code_elimination") { return }
+
+	arena := ir.create_arena(1024 * 32)
+	defer ir.destroy_arena(&arena)
+
+	program := ir.create_program(&arena, .Bash)
+	fn := ir.create_function(&arena, "main", ir.SourceLocation{})
+	append(&fn.body, ir.stmt_return(ir.expr_int(&arena, "0")))
+	append(&fn.body, make_assign_int(&arena, "x", "9"))
+	ir.add_function(program, fn)
+
+	res := optimizer.dead_code_elimination(program)
+	defer optimizer.destroy_optimize_result(&res)
+
+	testing.expect(t, res.changed, "DCE should remove unreachable statement")
+	testing.expect(t, len(program.functions[0].body) == 1, "Function body should be reduced to 1 stmt")
+}
+
+@(test)
+test_optimizer_pipeline_simplification :: proc(t: ^testing.T) {
+	if !should_run_local_test("test_optimizer_pipeline_simplification") { return }
+
+	arena := ir.create_arena(1024 * 64)
+	defer ir.destroy_arena(&arena)
+
+	program := ir.create_program(&arena, .Bash)
+	fn := ir.create_function(&arena, "main", ir.SourceLocation{})
+
+	echo_call := ir.Call{function = ir.new_variable(&arena, "echo"), arguments = make([dynamic]ir.Expression, mem.arena_allocator(&arena.arena))}
+	append(&echo_call.arguments, ir.expr_string(&arena, "hello"))
+	cat_call := ir.Call{function = ir.new_variable(&arena, "cat"), arguments = make([dynamic]ir.Expression, mem.arena_allocator(&arena.arena))}
+	pipeline := ir.Pipeline{commands = make([dynamic]ir.Call, mem.arena_allocator(&arena.arena))}
+	append(&pipeline.commands, echo_call)
+	append(&pipeline.commands, cat_call)
+	append(&fn.body, ir.Statement{type = .Pipeline, pipeline = pipeline})
+	ir.add_function(program, fn)
+
+	res := optimizer.pipeline_simplification(program)
+	defer optimizer.destroy_optimize_result(&res)
+
+	testing.expect(t, res.changed, "Pipeline simplification should simplify echo|cat")
+	testing.expect(t, program.functions[0].body[0].type == .Call, "Pipeline should become call")
+}
+
+@(test)
+test_optimizer_levels_dispatch :: proc(t: ^testing.T) {
+	if !should_run_local_test("test_optimizer_levels_dispatch") { return }
+
+	arena := ir.create_arena(1024 * 64)
+	defer ir.destroy_arena(&arena)
+	program := ir.create_program(&arena, .Bash)
+	main_fn := ir.create_function(&arena, "main", ir.SourceLocation{})
+	append(&main_fn.body, make_assign_int(&arena, "x", "1"))
+	ir.add_function(program, main_fn)
+
+	levels := [4]optimizer.OptimizationLevel{.None, .Basic, .Standard, .Aggressive}
+	for level in levels {
+		res := optimizer.optimize(program, level)
+		optimizer.destroy_optimize_result(&res)
+	}
+
+	testing.expect(t, true, "All optimization levels should execute")
+}
