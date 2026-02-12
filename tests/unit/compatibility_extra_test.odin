@@ -84,6 +84,6 @@ test_build_shim_prelude :: proc(t: ^testing.T) {
 	defer delete(prelude)
 
 	testing.expect(t, strings.contains(prelude, "__shellx_test"), "Condition shim should be present")
-	testing.expect(t, strings.contains(prelude, "__shellx_register_precmd"), "Hook shim should be present")
+	testing.expect(t, strings.contains(prelude, "__shellx_register_hook"), "Hook shim should be present")
 	testing.expect(t, strings.contains(prelude, "__shellx_array_set"), "Array/list shim should be present")
 }

@@ -49,7 +49,7 @@ test_options_insert_shims_hook_rewrite_integration :: proc(t: ^testing.T) {
 	result := shellx.translate("add-zsh-hook precmd my_precmd", .Zsh, .Bash, opts)
 	defer shellx.destroy_translation_result(&result)
 	testing.expect(t, result.success, "Translation should succeed with hook rewrite")
-	testing.expect(t, strings.contains(result.output, "__shellx_register_precmd"), "Hook callsite should be rewritten to shim wrapper")
+	testing.expect(t, strings.contains(result.output, "__shellx_register_hook"), "Hook callsite should be rewritten to shim wrapper")
 }
 
 @(test)

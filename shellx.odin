@@ -223,6 +223,8 @@ translate :: proc(
 
 	result.output = emitted
 	if options.insert_shims && len(result.required_shims) > 0 {
+		apply_ir_shim_rewrites(program, result.required_shims[:], from, to)
+
 		rewritten, changed := apply_shim_callsite_rewrites(emitted, result.required_shims[:], from, to, context.allocator)
 		if changed {
 			delete(emitted)
@@ -389,6 +391,134 @@ has_required_shim :: proc(required_shims: []string, name: string) -> bool {
 		}
 	}
 	return false
+}
+
+normalize_fish_condition_text :: proc(text: string) -> string {
+	trimmed := strings.trim_space(text)
+	if strings.has_prefix(trimmed, "[[") {
+		trimmed = strings.trim_space(trimmed[2:])
+	}
+	if strings.has_suffix(trimmed, "]]") {
+		trimmed = strings.trim_space(trimmed[:len(trimmed)-2])
+	}
+	return trimmed
+}
+
+rewrite_expr_for_shims :: proc(
+	expr: ir.Expression,
+	required_shims: []string,
+	from: ShellDialect,
+	to: ShellDialect,
+) {
+	if expr == nil {
+		return
+	}
+	#partial switch e in expr {
+	case ^ir.RawExpression:
+		if has_required_shim(required_shims, "condition_semantics") && to == .Fish {
+			e.text = normalize_fish_condition_text(e.text)
+		}
+	case ^ir.UnaryOp:
+		rewrite_expr_for_shims(e.operand, required_shims, from, to)
+	case ^ir.BinaryOp:
+		rewrite_expr_for_shims(e.left, required_shims, from, to)
+		rewrite_expr_for_shims(e.right, required_shims, from, to)
+	case ^ir.CallExpr:
+		for arg in e.arguments {
+			rewrite_expr_for_shims(arg, required_shims, from, to)
+		}
+	case ^ir.ArrayLiteral:
+		for elem in e.elements {
+			rewrite_expr_for_shims(elem, required_shims, from, to)
+		}
+	}
+}
+
+rewrite_call_for_shims :: proc(
+	call: ^ir.Call,
+	required_shims: []string,
+	from: ShellDialect,
+	to: ShellDialect,
+) {
+	if call == nil || call.function == nil {
+		return
+	}
+
+	if has_required_shim(required_shims, "hooks_events") && call.function.name == "add-zsh-hook" {
+		call.function.name = "__shellx_register_hook"
+	}
+
+	if has_required_shim(required_shims, "condition_semantics") && to == .Fish && call.function.name == "[[" {
+		call.function.name = "__shellx_test"
+	}
+
+	for arg in call.arguments {
+		rewrite_expr_for_shims(arg, required_shims, from, to)
+	}
+}
+
+rewrite_stmt_for_shims :: proc(
+	stmt: ^ir.Statement,
+	required_shims: []string,
+	from: ShellDialect,
+	to: ShellDialect,
+) {
+	switch stmt.type {
+	case .Assign:
+		rewrite_expr_for_shims(stmt.assign.value, required_shims, from, to)
+	case .Call:
+		rewrite_call_for_shims(&stmt.call, required_shims, from, to)
+	case .Logical:
+		for &seg in stmt.logical.segments {
+			rewrite_call_for_shims(&seg.call, required_shims, from, to)
+		}
+	case .Case:
+		rewrite_expr_for_shims(stmt.case_.value, required_shims, from, to)
+		for &arm in stmt.case_.arms {
+			for &nested in arm.body {
+				rewrite_stmt_for_shims(&nested, required_shims, from, to)
+			}
+		}
+	case .Return:
+		rewrite_expr_for_shims(stmt.return_.value, required_shims, from, to)
+	case .Branch:
+		rewrite_expr_for_shims(stmt.branch.condition, required_shims, from, to)
+		for &nested in stmt.branch.then_body {
+			rewrite_stmt_for_shims(&nested, required_shims, from, to)
+		}
+		for &nested in stmt.branch.else_body {
+			rewrite_stmt_for_shims(&nested, required_shims, from, to)
+		}
+	case .Loop:
+		rewrite_expr_for_shims(stmt.loop.items, required_shims, from, to)
+		rewrite_expr_for_shims(stmt.loop.condition, required_shims, from, to)
+		for &nested in stmt.loop.body {
+			rewrite_stmt_for_shims(&nested, required_shims, from, to)
+		}
+	case .Pipeline:
+		for &cmd in stmt.pipeline.commands {
+			rewrite_call_for_shims(&cmd, required_shims, from, to)
+		}
+	}
+}
+
+apply_ir_shim_rewrites :: proc(
+	program: ^ir.Program,
+	required_shims: []string,
+	from: ShellDialect,
+	to: ShellDialect,
+) {
+	if program == nil || len(required_shims) == 0 {
+		return
+	}
+	for &fn in program.functions {
+		for &stmt in fn.body {
+			rewrite_stmt_for_shims(&stmt, required_shims, from, to)
+		}
+	}
+	for &stmt in program.statements {
+		rewrite_stmt_for_shims(&stmt, required_shims, from, to)
+	}
 }
 
 apply_shim_callsite_rewrites :: proc(

@@ -240,24 +240,23 @@ generate_hook_event_shim :: proc(to: ir.ShellDialect) -> string {
 	switch to {
 	case .Fish:
 		return strings.trim_space(`
-function __shellx_register_precmd --argument fn
-    functions -q $fn; and set -g __shellx_precmd $fn
-end
-
-function __shellx_register_preexec --argument fn
-    functions -q $fn; and set -g __shellx_preexec $fn
+function __shellx_register_hook --argument hook_name fn
+    if test "$hook_name" = "precmd"
+        functions -q $fn; and set -g __shellx_precmd $fn
+    else if test "$hook_name" = "preexec"
+        functions -q $fn; and set -g __shellx_preexec $fn
+    end
 end
 `)
 	case .Bash, .Zsh, .POSIX:
 		return strings.trim_space(`
-__shellx_register_precmd() {
-  : "${1:?callback required}"
-  SHELLX_PRECMD_HOOK="$1"
-}
-
-__shellx_register_preexec() {
-  : "${1:?callback required}"
-  SHELLX_PREEXEC_HOOK="$1"
+__shellx_register_hook() {
+  : "${1:?hook required}"
+  : "${2:?callback required}"
+  case "$1" in
+    precmd) SHELLX_PRECMD_HOOK="$2" ;;
+    preexec) SHELLX_PREEXEC_HOOK="$2" ;;
+  esac
 }
 `)
 	}
