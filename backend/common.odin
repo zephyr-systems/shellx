@@ -3,19 +3,167 @@ package backend
 import "../ir"
 import "core:strings"
 
-Backend :: struct {
-	dialect:      ir.ShellDialect,
-	builder:      strings.Builder,
-	indent_level: int,
+// IndentStyle represents the indentation style
+IndentStyle :: enum {
+	Tabs,
+	Spaces,
 }
 
-create_backend :: proc(dialect: ir.ShellDialect) -> Backend {
+// FormatOptions contains formatting configuration
+FormatOptions :: struct {
+	indent_style: IndentStyle,
+	indent_width: int, // Number of spaces (if using spaces) or tab width
+	use_spaces:   bool, // true for spaces, false for tabs
+}
+
+// Default format options
+DEFAULT_FORMAT_OPTIONS :: FormatOptions {
+	indent_style = .Tabs,
+	indent_width = 4,
+	use_spaces   = false,
+}
+
+Backend :: struct {
+	dialect:        ir.ShellDialect,
+	builder:        strings.Builder,
+	indent_level:   int,
+	format_options: FormatOptions,
+}
+
+create_backend :: proc(dialect: ir.ShellDialect, options := DEFAULT_FORMAT_OPTIONS) -> Backend {
 	builder := strings.builder_make()
-	return Backend{dialect = dialect, builder = builder, indent_level = 0}
+	return Backend {
+		dialect = dialect,
+		builder = builder,
+		indent_level = 0,
+		format_options = options,
+	}
 }
 
 destroy_backend :: proc(b: ^Backend) {
 	strings.builder_destroy(&b.builder)
+}
+
+// write_indent writes the current indentation based on format options
+write_indent :: proc(b: ^Backend) {
+	for _ in 0 ..< b.indent_level {
+		if b.format_options.use_spaces {
+			for _ in 0 ..< b.format_options.indent_width {
+				strings.write_byte(&b.builder, ' ')
+			}
+		} else {
+			strings.write_byte(&b.builder, '\t')
+		}
+	}
+}
+
+// write_newline writes a newline character
+write_newline :: proc(b: ^Backend) {
+	strings.write_byte(&b.builder, '\n')
+}
+
+// escape_string escapes special characters in a string for shell output
+// Handles: quotes, backslashes, dollar signs, backticks
+escape_string :: proc(s: string) -> string {
+	if s == "" {
+		return ""
+	}
+
+	// Check if we need to escape
+	needs_escape := false
+	for c in s {
+		if c == '"' || c == '\\' || c == '$' || c == '`' {
+			needs_escape = true
+			break
+		}
+	}
+
+	if !needs_escape {
+		return s
+	}
+
+	// Build escaped string
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+
+	for c in s {
+		switch c {
+		case '"', '\\', '$', '`':
+			strings.write_byte(&builder, '\\')
+			strings.write_byte(&builder, u8(c))
+		case:
+			strings.write_byte(&builder, u8(c))
+		}
+	}
+
+	return strings.to_string(builder)
+}
+
+// quote_string quotes a string if it contains spaces or special characters
+quote_string :: proc(s: string) -> string {
+	if s == "" {
+		return "\"\""
+	}
+
+	// Check if we need quotes
+	needs_quotes := false
+	for c in s {
+		if c == ' ' || c == '\t' || c == '\n' || c == '*' || c == '?' || c == '[' {
+			needs_quotes = true
+			break
+		}
+	}
+
+	if !needs_quotes {
+		return s
+	}
+
+	// Escape and quote
+	escaped := escape_string(s)
+	return strings.concatenate([]string{"\"", escaped, "\""})
+}
+
+// format_arguments formats command arguments with proper quoting
+format_arguments :: proc(args: []string) -> string {
+	if len(args) == 0 {
+		return ""
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+
+	for idx in 0 ..< len(args) {
+		if idx > 0 {
+			strings.write_byte(&builder, ' ')
+		}
+		quoted := quote_string(args[idx])
+		strings.write_string(&builder, quoted)
+	}
+
+	return strings.to_string(builder)
+}
+
+// indent increases the indentation level
+indent :: proc(b: ^Backend) {
+	b.indent_level += 1
+}
+
+// dedent decreases the indentation level
+dedent :: proc(b: ^Backend) {
+	if b.indent_level > 0 {
+		b.indent_level -= 1
+	}
+}
+
+// set_indent_style changes the indentation style
+set_indent_style :: proc(b: ^Backend, style: IndentStyle) {
+	b.format_options.indent_style = style
+	b.format_options.use_spaces = (style == .Spaces)
+}
+
+// set_indent_width changes the indentation width (for spaces)
+set_indent_width :: proc(b: ^Backend, width: int) {
+	b.format_options.indent_width = width
 }
 
 emit :: proc(b: ^Backend, program: ^ir.Program, allocator := context.allocator) -> string {
@@ -156,11 +304,5 @@ emit_pipeline :: proc(b: ^Backend, pipeline: ir.Pipeline) {
 			strings.write_string(&b.builder, " | ")
 		}
 		emit_call(b, pipeline.commands[idx])
-	}
-}
-
-write_indent :: proc(b: ^Backend) {
-	for _ in 0 ..< b.indent_level {
-		strings.write_byte(&b.builder, '\t')
 	}
 }
