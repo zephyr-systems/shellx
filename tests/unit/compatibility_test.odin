@@ -1,8 +1,8 @@
 package unit_tests
 
-import "compat"
+import "../../compat"
+import "../../ir"
 import "core:testing"
-import "ir"
 
 // 22.1: Test capability detection for each dialect
 
