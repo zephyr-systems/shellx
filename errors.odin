@@ -6,6 +6,7 @@ import "ir"
 
 ErrorContext :: struct {
 	error:      Error,
+	rule_id:    string,
 	message:    string,
 	location:   ir.SourceLocation,
 	suggestion: string,
@@ -120,6 +121,7 @@ add_error_context :: proc(
 	location: ir.SourceLocation,
 	suggestion := "",
 	snippet := "",
+	rule_id := "",
 ) {
 	if result.error == .None {
 		result.error = err
@@ -128,6 +130,7 @@ add_error_context :: proc(
 		&result.errors,
 		ErrorContext{
 			error = err,
+			rule_id = rule_id,
 			message = message,
 			location = location,
 			suggestion = suggestion,

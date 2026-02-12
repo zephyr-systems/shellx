@@ -177,6 +177,8 @@ translate :: proc(
 			validation_err.message,
 			loc,
 			"Fix validation errors and retry",
+			"",
+			validation_err.rule,
 		)
 		return result
 	}

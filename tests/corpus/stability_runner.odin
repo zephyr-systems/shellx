@@ -65,6 +65,38 @@ CaseOutcome :: struct {
 	shim_count: int,
 	error_code: shellx.Error,
 	first_error: string,
+	first_rule:  string,
+	rule_ids:    [dynamic]string,
+}
+
+RuleFailureGroup :: struct {
+	pair_label: string,
+	rule_id:    string,
+	count:      int,
+	examples:   [dynamic]string,
+}
+
+contains_string :: proc(items: []string, value: string) -> bool {
+	for item in items {
+		if item == value {
+			return true
+		}
+	}
+	return false
+}
+
+rule_group_ptr :: proc(groups: ^[dynamic]RuleFailureGroup, pair_label: string, rule_id: string) -> ^RuleFailureGroup {
+	for &group in groups^ {
+		if group.pair_label == pair_label && group.rule_id == rule_id {
+			return &group
+		}
+	}
+	append(groups, RuleFailureGroup{
+		pair_label = pair_label,
+		rule_id = rule_id,
+		examples = make([dynamic]string, 0, 4),
+	})
+	return &groups^[len(groups^)-1]
 }
 
 dialect_name :: proc(d: shellx.ShellDialect) -> string {
@@ -179,10 +211,31 @@ main :: proc() {
 	targets := []shellx.ShellDialect{.Bash, .Zsh, .Fish, .POSIX}
 
 	outcomes := make([dynamic]CaseOutcome, 0, 256)
-	defer delete(outcomes)
+	defer {
+		for &outcome in outcomes {
+			delete(outcome.first_error)
+			delete(outcome.first_rule)
+			for rule_id in outcome.rule_ids {
+				delete(rule_id)
+			}
+			delete(outcome.rule_ids)
+		}
+		delete(outcomes)
+	}
 
 	summaries := make([dynamic]PairSummary, 0, 16)
 	defer delete(summaries)
+
+	rule_groups := make([dynamic]RuleFailureGroup, 0, 32)
+	defer {
+		for &group in rule_groups {
+			for example in group.examples {
+				delete(example)
+			}
+			delete(group.examples)
+		}
+		delete(rule_groups)
+	}
 
 	total_runs := 0
 	for c in cases {
@@ -231,9 +284,32 @@ main :: proc() {
 				error_count = len(tr.errors),
 				shim_count = len(tr.required_shims),
 				error_code = tr.error,
+				rule_ids = make([dynamic]string, 0, 4),
 			}
 			if len(tr.errors) > 0 {
-				out.first_error = tr.errors[0].message
+				out.first_error = strings.clone(tr.errors[0].message, context.allocator)
+				out.first_rule = strings.clone(tr.errors[0].rule_id, context.allocator)
+			}
+			for err_ctx in tr.errors {
+				if err_ctx.rule_id == "" {
+					continue
+				}
+				if !contains_string(out.rule_ids[:], err_ctx.rule_id) {
+					append(&out.rule_ids, strings.clone(err_ctx.rule_id, context.allocator))
+				}
+			}
+			if !tr.success && len(out.rule_ids) > 0 {
+				pair_label := fmt.tprintf("%s->%s", dialect_name(c.from), dialect_name(to))
+				for rule_id in out.rule_ids {
+					group := rule_group_ptr(&rule_groups, pair_label, rule_id)
+					group.count += 1
+					if len(group.examples) < 5 {
+						example := fmt.tprintf("%s (%s) path=%s", c.name, c.kind, c.path)
+						if !contains_string(group.examples[:], example) {
+							append(&group.examples, strings.clone(example, context.allocator))
+						}
+					}
+				}
 			}
 
 			summary.total_warnings += out.warning_count
@@ -300,6 +376,18 @@ main :: proc() {
 				tmp := summaries[i]
 				summaries[i] = summaries[j]
 				summaries[j] = tmp
+			}
+		}
+	}
+
+	for i in 0 ..< len(rule_groups) {
+		for j in i+1 ..< len(rule_groups) {
+			a := fmt.tprintf("%s|%s", rule_groups[i].pair_label, rule_groups[i].rule_id)
+			b := fmt.tprintf("%s|%s", rule_groups[j].pair_label, rule_groups[j].rule_id)
+			if b < a {
+				tmp := rule_groups[i]
+				rule_groups[i] = rule_groups[j]
+				rule_groups[j] = tmp
 			}
 		}
 	}
@@ -387,6 +475,29 @@ main :: proc() {
 				outcome.case_.path,
 			),
 		)
+	}
+
+	strings.write_string(&report, "\n## Validator Rule Failures\n\n")
+	if len(rule_groups) == 0 {
+		strings.write_string(&report, "- No validator rule failures.\n")
+	} else {
+		current_pair := ""
+		for group in rule_groups {
+			if group.pair_label != current_pair {
+				current_pair = group.pair_label
+				strings.write_string(&report, fmt.tprintf("\n### %s\n\n", current_pair))
+			}
+			strings.write_string(
+				&report,
+				fmt.tprintf("- `%s`: %d failures\n", group.rule_id, group.count),
+			)
+			for example in group.examples {
+				strings.write_string(
+					&report,
+					fmt.tprintf("  - %s\n", example),
+				)
+			}
+		}
 	}
 
 	report_path := "tests/corpus/stability_report.md"
