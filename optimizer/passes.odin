@@ -2,6 +2,7 @@ package optimizer
 
 import "../ir"
 import "core:fmt"
+import "core:mem"
 
 // OptimizationLevel represents the level of optimization to apply
 OptimizationLevel :: enum {
@@ -63,6 +64,17 @@ optimize :: proc(
 
 	case .Standard:
 		add_diagnostic(&result, "Running standard optimizations")
+
+		// Run common subexpression elimination
+		cse_result := common_subexpression_elimination(program, allocator)
+		if cse_result.changed {
+			result.changed = true
+		}
+		result.iterations += cse_result.iterations
+		for msg in cse_result.diagnostics {
+			add_diagnostic(&result, msg)
+		}
+		destroy_optimize_result(&cse_result)
 
 		// Run constant folding
 		cf_result := constant_folding(program, allocator)
@@ -247,7 +259,49 @@ constant_folding :: proc(program: ^ir.Program, allocator := context.allocator) -
 	}
 
 	// Helper to check if a value is a constant integer
-	evaluate_expression :: proc(expr: ir.Expression) -> (value: ir.Expression, is_constant: bool) {
+	int_to_string :: proc(value: int, allocator: mem.Allocator) -> string {
+		if value == 0 {
+			buffer := make([]byte, 1, allocator)
+			buffer[0] = '0'
+			return string(buffer)
+		}
+
+		is_negative := value < 0
+		n := value
+		if is_negative {
+			n = -n
+		}
+
+		digits := 0
+		tmp := n
+		for tmp > 0 {
+			digits += 1
+			tmp /= 10
+		}
+
+		total_len := digits
+		if is_negative {
+			total_len += 1
+		}
+		buffer := make([]byte, total_len, allocator)
+
+		idx := total_len - 1
+		for n > 0 {
+			buffer[idx] = byte('0' + (n % 10))
+			n /= 10
+			idx -= 1
+		}
+		if is_negative {
+			buffer[0] = '-'
+		}
+
+		return string(buffer)
+	}
+
+	evaluate_expression :: proc(
+		expr: ir.Expression,
+		allocator: mem.Allocator,
+	) -> (value: ir.Expression, is_constant: bool) {
 		if expr == nil {
 			return nil, false
 		}
@@ -256,8 +310,8 @@ constant_folding :: proc(program: ^ir.Program, allocator := context.allocator) -
 		case ^ir.Literal:
 			return expr, true
 		case ^ir.BinaryOp:
-			left, left_const := evaluate_expression(e.left)
-			right, right_const := evaluate_expression(e.right)
+			left, left_const := evaluate_expression(e.left, allocator)
+			right, right_const := evaluate_expression(e.right, allocator)
 			if !left_const || !right_const {
 				return expr, false
 			}
@@ -279,9 +333,9 @@ constant_folding :: proc(program: ^ir.Program, allocator := context.allocator) -
 					right_int = right_int * 10 + int(ch - '0')
 				}
 
-				new_literal := new(ir.Literal, context.allocator)
+				new_literal := new(ir.Literal, allocator)
 				new_literal.type = .Int
-				new_literal.value = fmt.tprintf("%d", left_int + right_int)
+				new_literal.value = int_to_string(left_int + right_int, allocator)
 				return new_literal, true
 			}
 		}
@@ -294,14 +348,14 @@ constant_folding :: proc(program: ^ir.Program, allocator := context.allocator) -
 		for &stmt in fn.body {
 			switch stmt.type {
 			case .Assign:
-				folded, is_const := evaluate_expression(stmt.assign.value)
+				folded, is_const := evaluate_expression(stmt.assign.value, allocator)
 				if is_const && folded != nil {
 					stmt.assign.value = folded
 					result.changed = true
 				}
 			case .Branch:
 				if stmt.branch.condition != nil {
-					_, _ = evaluate_expression(stmt.branch.condition)
+					_, _ = evaluate_expression(stmt.branch.condition, allocator)
 				}
 			case .Call, .Return, .Loop, .Pipeline:
 				// Other statement types
