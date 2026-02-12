@@ -1,2 +1,8 @@
 .kiro/
 shellx-phase1/
+docs_internal/
+
+vendor/
+build/
+*.dylib
+shellx
