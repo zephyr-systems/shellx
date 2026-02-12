@@ -67,8 +67,8 @@ detect_from_extension :: proc(filepath: string) -> DetectionResult {
 	case ".fish":
 		return DetectionResult{.Fish, .Extension, 0.95}
 	case ".sh":
-		// .sh is ambiguous, could be Bash or POSIX
-		return DetectionResult{.Bash, .Extension, 0.50}
+		// .sh typically indicates POSIX shell
+		return DetectionResult{.POSIX, .Extension, 0.70}
 	}
 
 	return DetectionResult{.Bash, .Extension, 0.0}
@@ -102,9 +102,13 @@ detect_from_shebang :: proc(code: string) -> DetectionResult {
 	if strings.contains(lower_line, "fish") {
 		return DetectionResult{.Fish, .Shebang, 0.90}
 	}
+	if strings.contains(lower_line, "/bin/sh") || strings.contains(lower_line, "/bin/dash") {
+		// POSIX shell (sh or dash)
+		return DetectionResult{.POSIX, .Shebang, 0.85}
+	}
 	if strings.contains(lower_line, "sh") {
-		// Generic sh, assume Bash
-		return DetectionResult{.Bash, .Shebang, 0.60}
+		// Generic sh, assume POSIX
+		return DetectionResult{.POSIX, .Shebang, 0.60}
 	}
 
 	return DetectionResult{.Bash, .Shebang, 0.0}
