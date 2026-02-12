@@ -75,7 +75,14 @@ translate :: proc(
 		source_name = "<input>"
 	}
 
-	arena := ir.create_arena(1024 * 1024)
+	arena_size := len(source_code) * 8
+	if arena_size < 8*1024*1024 {
+		arena_size = 8 * 1024 * 1024
+	}
+	if arena_size > 64*1024*1024 {
+		arena_size = 64 * 1024 * 1024
+	}
+	arena := ir.create_arena(arena_size)
 	defer ir.destroy_arena(&arena)
 
 	fe := frontend.create_frontend(from)

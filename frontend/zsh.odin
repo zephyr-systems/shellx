@@ -57,7 +57,7 @@ convert_zsh_node :: proc(
 		}
 		// Fall back to child traversal for non-logical lists.
 	case "ERROR":
-		append_zsh_raw_statements(arena, &program.statements, node, source)
+		recover_zsh_top_level_error(arena, program, node, source)
 		return
 	case "negated_command", "binary_expression", "unary_expression", "subshell":
 		append_zsh_raw_statements(arena, &program.statements, node, source)
@@ -341,6 +341,118 @@ zsh_declaration_has_assignment :: proc(node: ts.Node) -> bool {
 	return false
 }
 
+add_raw_line_statement :: proc(
+	arena: ^ir.Arena_IR,
+	body: ^[dynamic]ir.Statement,
+	line: string,
+	location: ir.SourceLocation,
+) {
+	if strings.trim_space(line) == "" {
+		return
+	}
+	stmt := ir.Statement{
+		type = .Call,
+		call = ir.Call{
+			function = ir.new_variable(arena, line),
+			arguments = make([dynamic]ir.Expression, 0, 0, mem.arena_allocator(&arena.arena)),
+			location = location,
+		},
+		location = location,
+	}
+	append(body, stmt)
+}
+
+extract_zsh_function_name_from_line :: proc(trimmed: string) -> (string, bool) {
+	line := trimmed
+	if strings.has_prefix(line, "function ") {
+		line = strings.trim_space(line[len("function "):])
+	}
+
+	name_end := -1
+	for i in 0 ..< len(line)-1 {
+		if line[i] == '(' && line[i+1] == ')' {
+			name_end = i
+			break
+		}
+	}
+	if name_end <= 0 {
+		return "", false
+	}
+
+	name := strings.trim_space(line[:name_end])
+	if name == "" {
+		return "", false
+	}
+	return name, true
+}
+
+is_zsh_function_start_line :: proc(trimmed: string) -> (string, bool) {
+	if !strings.contains(trimmed, "{") {
+		return "", false
+	}
+	if !strings.contains(trimmed, "()") && !strings.has_prefix(trimmed, "function ") {
+		return "", false
+	}
+	return extract_zsh_function_name_from_line(trimmed)
+}
+
+recover_zsh_top_level_error :: proc(
+	arena: ^ir.Arena_IR,
+	program: ^ir.Program,
+	node: ts.Node,
+	source: string,
+) {
+	location := node_location(node, source)
+	raw := intern_node_text(arena, node, source)
+	if raw == "" {
+		return
+	}
+
+	lines := strings.split_lines(raw)
+	defer delete(lines)
+
+	i := 0
+	for i < len(lines) {
+		trimmed := strings.trim_space(lines[i])
+		if trimmed == "" {
+			i += 1
+			continue
+		}
+
+		fn_name, is_fn := is_zsh_function_start_line(trimmed)
+		if !is_fn {
+			add_raw_line_statement(arena, &program.statements, lines[i], location)
+			i += 1
+			continue
+		}
+
+		end_idx := -1
+		for j in i + 1 ..< len(lines) {
+			end_line := strings.trim_space(lines[j])
+			if end_line == "}" || end_line == "};" {
+				end_idx = j
+				break
+			}
+		}
+		if end_idx == -1 {
+			add_raw_line_statement(arena, &program.statements, lines[i], location)
+			i += 1
+			continue
+		}
+
+		fn_loc := location
+		fn_loc.line = location.line + i
+		fn := ir.create_function(arena, ir.intern_string(arena, fn_name), fn_loc)
+
+		for j in i + 1 ..< end_idx {
+			add_raw_line_statement(arena, &fn.body, lines[j], location)
+		}
+
+		ir.add_function(program, fn)
+		i = end_idx + 1
+	}
+}
+
 split_case_patterns :: proc(pattern_text: string, allocator := context.temp_allocator) -> [dynamic]string {
 	patterns := make([dynamic]string, allocator)
 	for p in strings.split(pattern_text, "|") {
@@ -439,19 +551,7 @@ append_zsh_raw_statements :: proc(
 	defer delete(lines)
 
 	for line in lines {
-		if strings.trim_space(line) == "" {
-			continue
-		}
-		stmt := ir.Statement{
-			type = .Call,
-			call = ir.Call{
-				function = ir.new_variable(arena, line),
-				arguments = make([dynamic]ir.Expression, 0, 0, mem.arena_allocator(&arena.arena)),
-				location = location,
-			},
-			location = location,
-		}
-		append(body, stmt)
+		add_raw_line_statement(arena, body, line, location)
 	}
 }
 
