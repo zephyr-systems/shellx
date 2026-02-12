@@ -59,6 +59,8 @@ Error :: enum {
 	InternalError,
 }
 
+// translate converts shell source between dialects.
+// The caller owns result.output/warnings/errors and should call destroy_translation_result(&result).
 translate :: proc(
 	source_code: string,
 	from: ShellDialect,
@@ -199,6 +201,8 @@ translate :: proc(
 	return result
 }
 
+// translate_file reads a file and translates it.
+// The caller owns result.output/warnings/errors and should call destroy_translation_result(&result).
 translate_file :: proc(
 	filepath: string,
 	from: ShellDialect,
@@ -229,6 +233,9 @@ translate_file :: proc(
 	return translate(string(data), from, to, opts)
 }
 
+// translate_batch translates multiple files.
+// Caller owns the returned slice and each element's allocations.
+// Use destroy_translation_result on each item, then delete(batch).
 translate_batch :: proc(
 	files: []string,
 	from: ShellDialect,
@@ -243,6 +250,7 @@ translate_batch :: proc(
 	return results
 }
 
+// get_version returns the library semantic version string.
 get_version :: proc() -> string {
 	return "0.1.0"
 }

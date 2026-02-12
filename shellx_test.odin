@@ -327,3 +327,73 @@ test_get_version_api :: proc(t: ^testing.T) {
 	version := get_version()
 	testing.expect(t, len(version) > 0, "get_version should return a non-empty version string")
 }
+
+@(test)
+test_translate_insert_shims_option_api :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_insert_shims_option_api") { return }
+
+	options := DEFAULT_TRANSLATION_OPTIONS
+	options.insert_shims = true
+
+	result := translate("echo hello", .Bash, .Fish, options)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, result.success, "Translation should succeed with insert_shims enabled")
+	testing.expect(
+		t,
+		len(result.required_shims) > 0,
+		"Compatibility shims should be collected for Bash to Fish",
+	)
+}
+
+@(test)
+test_translate_preserve_comments_option_api :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_preserve_comments_option_api") { return }
+
+	options := DEFAULT_TRANSLATION_OPTIONS
+	options.preserve_comments = true
+
+	result := translate("# comment\necho hello\n", .Bash, .Bash, options)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, result.success, "Translation should succeed with preserve_comments enabled")
+	found_hint := false
+	for warning in result.warnings {
+		if strings.contains(warning, "preserve_comments") {
+			found_hint = true
+			break
+		}
+	}
+	testing.expect(t, found_hint, "Result should include preserve_comments lifecycle warning")
+}
+
+@(test)
+test_translate_optimization_level_api :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_optimization_level_api") { return }
+
+	options := DEFAULT_TRANSLATION_OPTIONS
+	options.optimization_level = .Standard
+
+	result := translate("x=1\ny=1\n", .Bash, .Bash, options)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, result.success, "Translation should succeed with optimization enabled")
+}
+
+@(test)
+test_script_builder_api :: proc(t: ^testing.T) {
+	if !should_run_test("test_script_builder_api") { return }
+
+	builder := create_script_builder(.Bash)
+	defer destroy_script_builder(&builder)
+
+	script_add_var(&builder, "name", "world")
+	script_add_call(&builder, "echo", "hello", "$name")
+
+	output := script_emit(&builder, .Bash)
+	defer delete(output)
+
+	testing.expect(t, len(output) > 0, "script_emit should return generated script")
+	testing.expect(t, strings.contains(output, "name="), "Output should contain assignment")
+	testing.expect(t, strings.contains(output, "echo"), "Output should contain command call")
+}

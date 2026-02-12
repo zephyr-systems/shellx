@@ -38,6 +38,8 @@ translate_code :: proc(
 		program, conv_err = frontend.zsh_to_ir(&arena, tree, from_code)
 	case .Fish:
 		program, conv_err = frontend.fish_to_ir(&arena, tree, from_code)
+	case .POSIX:
+		program, conv_err = frontend.bash_to_ir(&arena, tree, from_code)
 	case:
 		return "UNSUPPORTED_DIALECT"
 	}
@@ -49,8 +51,8 @@ translate_code :: proc(
 	// Emit to target dialect
 	result: string
 	switch to_dialect {
-	case .Bash:
-		be := backend.create_backend(.Bash)
+	case .Bash, .POSIX:
+		be := backend.create_backend(to_dialect)
 		defer backend.destroy_backend(&be)
 		result = backend.emit(&be, program, allocator)
 	case .Zsh:

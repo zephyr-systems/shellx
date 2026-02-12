@@ -136,6 +136,8 @@ add_error_context :: proc(
 	)
 }
 
+// destroy_translation_result releases all heap-owned fields in TranslationResult.
+// Call this for every result returned by translate/translate_file/translate_batch elements.
 destroy_translation_result :: proc(result: ^TranslationResult) {
 	if result.output != "" {
 		delete(result.output)
