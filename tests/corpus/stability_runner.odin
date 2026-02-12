@@ -5,6 +5,7 @@ import "../../frontend"
 import "../../ir"
 import "core:fmt"
 import "core:os"
+import "core:os/os2"
 import "core:strings"
 
 Case :: struct {
@@ -28,6 +29,9 @@ PairSummary :: struct {
 
 	translate_success: int,
 	parse_success: int,
+	parser_matrix_success: int,
+	parser_matrix_ran: int,
+	parser_matrix_skipped: int,
 	plugin_success: int,
 	theme_success: int,
 
@@ -55,6 +59,11 @@ CaseOutcome :: struct {
 	exists:            bool,
 	translate_success: bool,
 	parse_success:     bool,
+	parser_ran:        bool,
+	parser_success:    bool,
+	parser_command:    string,
+	parser_exit_code:  int,
+	parser_message:    string,
 
 	source_len: int,
 	output_len: int,
@@ -101,6 +110,68 @@ rule_group_ptr :: proc(groups: ^[dynamic]RuleFailureGroup, pair_label: string, r
 		examples = make([dynamic]string, 0, 4),
 	})
 	return &groups^[len(groups^)-1]
+}
+
+file_ext_for_dialect :: proc(dialect: shellx.ShellDialect) -> string {
+	switch dialect {
+	case .Fish:
+		return "fish"
+	case .Zsh:
+		return "zsh"
+	case .Bash:
+		return "bash"
+	case .POSIX:
+		return "sh"
+	}
+	return "sh"
+}
+
+run_target_parser_check :: proc(
+	output_code: string,
+	target: shellx.ShellDialect,
+	case_name: string,
+	run_index: int,
+) -> (ran: bool, ok: bool, command: string, exit_code: int, message: string) {
+	temp_path := fmt.tprintf("tests/corpus/.parser_check_%s_%d.%s", case_name, run_index, file_ext_for_dialect(target))
+	write_ok := os.write_entire_file(temp_path, transmute([]byte)output_code)
+	if !write_ok {
+		return false, false, "", -1, "failed to write parser temp file"
+	}
+	defer os.remove(temp_path)
+
+	cmd := make([dynamic]string, 0, 3, context.temp_allocator)
+	defer delete(cmd)
+	switch target {
+	case .Bash, .POSIX:
+		append(&cmd, "bash", "-n", temp_path)
+	case .Zsh:
+		append(&cmd, "zsh", "-n", temp_path)
+	case .Fish:
+		append(&cmd, "fish", "--no-execute", temp_path)
+	case:
+		return false, false, "", -1, "no parser command for target dialect"
+	}
+
+	command = strings.join(cmd[:], " ", context.temp_allocator)
+	desc := os2.Process_Desc{command = cmd[:]}
+	state, _, stderr, err := os2.process_exec(desc, context.allocator)
+	defer delete(stderr)
+
+	if err != nil {
+		return false, false, command, -1, fmt.tprintf("parser execution error: %v", err)
+	}
+
+	ran = true
+	ok = state.exit_code == 0
+	exit_code = state.exit_code
+	if !ok {
+		err_text := string(stderr)
+		if len(err_text) > 400 {
+			err_text = err_text[:400]
+		}
+		message = strings.clone(err_text, context.allocator)
+	}
+	return
 }
 
 dialect_name :: proc(d: shellx.ShellDialect) -> string {
@@ -335,6 +406,17 @@ main :: proc() {
 				}
 				frontend.destroy_frontend(&fe)
 
+				out.parser_ran, out.parser_success, out.parser_command, out.parser_exit_code, out.parser_message =
+					run_target_parser_check(tr.output, to, c.name, total_runs)
+				if out.parser_ran {
+					summary.parser_matrix_ran += 1
+					if out.parser_success {
+						summary.parser_matrix_success += 1
+					}
+				} else {
+					summary.parser_matrix_skipped += 1
+				}
+
 				target_functions, target_stats_ok := count_functions_for_dialect(to, tr.output)
 				if target_stats_ok {
 					out.target_functions = target_functions
@@ -395,8 +477,8 @@ main :: proc() {
 	strings.write_string(&report, fmt.tprintf("Cases configured: %d\n\n", len(cases)))
 	strings.write_string(&report, fmt.tprintf("Cross-dialect runs executed: %d\n\n", total_runs))
 	strings.write_string(&report, "## Pair Summary\n\n")
-	strings.write_string(&report, "| Pair | Cases | Translate | Parse | Plugin Parse | Theme Parse | Parse Warn | Compat Warn | Avg Size Ratio | Avg Fn Ratio | With Shims |\n")
-	strings.write_string(&report, "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n")
+	strings.write_string(&report, "| Pair | Cases | Translate | Parse | Parser Matrix | Parser Skipped | Plugin Parse | Theme Parse | Parse Warn | Compat Warn | Avg Size Ratio | Avg Fn Ratio | With Shims |\n")
+	strings.write_string(&report, "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n")
 
 	for s in summaries {
 		avg_size_ratio := 0.0
@@ -411,12 +493,14 @@ main :: proc() {
 		strings.write_string(
 			&report,
 				fmt.tprintf(
-					"| %s->%s | %d | %d/%d | %d/%d | %d/%d | %d/%d | %d | %d | %.3f | %.3f | %d |\n",
+					"| %s->%s | %d | %d/%d | %d/%d | %d/%d | %d | %d/%d | %d/%d | %d | %d | %.3f | %.3f | %d |\n",
 					dialect_name(s.key.from),
 					dialect_name(s.key.to),
 					s.total_cases,
 				s.translate_success, s.total_cases,
 				s.parse_success, s.total_cases,
+				s.parser_matrix_success, s.translate_success,
+				s.parser_matrix_skipped,
 				s.plugin_success, s.plugin_cases,
 				s.theme_success, s.theme_cases,
 				s.parse_warnings,
@@ -430,19 +514,22 @@ main :: proc() {
 
 	strings.write_string(&report, "\n## Failures\n\n")
 	for outcome in outcomes {
-		if outcome.translate_success && outcome.parse_success {
+		if outcome.translate_success && outcome.parse_success && outcome.parser_ran && outcome.parser_success {
 			continue
 		}
 		strings.write_string(
 			&report,
 			fmt.tprintf(
-				"- [FAIL] %s (%s) %s->%s translate=%v parse=%v err=%v warnings=%d(parse=%d compat=%d) shims=%d src_fn=%d out_fn=%d msg=%s path=%s\n",
+				"- [FAIL] %s (%s) %s->%s translate=%v parse=%v parser=%v/%v exit=%d err=%v warnings=%d(parse=%d compat=%d) shims=%d src_fn=%d out_fn=%d msg=%s parser_msg=%s path=%s\n",
 				outcome.case_.name,
 				outcome.case_.kind,
 				dialect_name(outcome.case_.from),
 				dialect_name(outcome.to),
 				outcome.translate_success,
 				outcome.parse_success,
+				outcome.parser_success,
+				outcome.parser_ran,
+				outcome.parser_exit_code,
 				outcome.error_code,
 				outcome.warning_count,
 				outcome.parse_warning_count,
@@ -451,9 +538,60 @@ main :: proc() {
 				outcome.source_functions,
 				outcome.target_functions,
 				outcome.first_error,
+				outcome.parser_message,
 				outcome.case_.path,
 			),
 		)
+	}
+
+	strings.write_string(&report, "\n## Parser Validation Failures\n\n")
+	parser_failures := 0
+	parser_skipped := 0
+	for outcome in outcomes {
+		if !outcome.translate_success {
+			continue
+		}
+		if !outcome.parser_ran {
+			parser_skipped += 1
+			strings.write_string(
+				&report,
+				fmt.tprintf(
+					"- [PARSER-SKIP] %s (%s) %s->%s command=`%s` message=%s path=%s\n",
+					outcome.case_.name,
+					outcome.case_.kind,
+					dialect_name(outcome.case_.from),
+					dialect_name(outcome.to),
+					outcome.parser_command,
+					outcome.parser_message,
+					outcome.case_.path,
+				),
+			)
+			continue
+		}
+		if outcome.parser_success {
+			continue
+		}
+		parser_failures += 1
+		strings.write_string(
+			&report,
+			fmt.tprintf(
+				"- [PARSER-FAIL] %s (%s) %s->%s command=`%s` exit=%d message=%s path=%s\n",
+				outcome.case_.name,
+				outcome.case_.kind,
+				dialect_name(outcome.case_.from),
+				dialect_name(outcome.to),
+				outcome.parser_command,
+				outcome.parser_exit_code,
+				outcome.parser_message,
+				outcome.case_.path,
+			),
+		)
+	}
+	if parser_failures == 0 {
+		strings.write_string(&report, "- No parser validation failures.\n")
+	}
+	if parser_skipped == 0 {
+		strings.write_string(&report, "- No parser validation skips.\n")
 	}
 
 	strings.write_string(&report, "\n## High Warning Runs\n\n")
