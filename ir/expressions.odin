@@ -72,7 +72,7 @@ expr_to_string :: proc(expr: Expression) -> string {
 	case ^Literal:
 		return e.value
 	case ^Variable:
-		return e.name
+		return fmt.tprintf("$%s", e.name)
 	case ^RawExpression:
 		return e.text
 	case ^TestCondition:

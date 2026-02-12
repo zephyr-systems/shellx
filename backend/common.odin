@@ -378,6 +378,7 @@ emit_expression :: proc(b: ^Backend, expr: ir.Expression) {
 	case ^ir.Literal:
 		strings.write_string(&b.builder, e.value)
 	case ^ir.Variable:
+		strings.write_string(&b.builder, "$")
 		strings.write_string(&b.builder, e.name)
 	case ^ir.RawExpression:
 		strings.write_string(&b.builder, e.text)

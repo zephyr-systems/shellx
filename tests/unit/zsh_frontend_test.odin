@@ -389,6 +389,10 @@ test_zsh_if_statement :: proc(t: ^testing.T) {
 
 	program, conv_err := frontend.zsh_to_ir(&arena, tree, code)
 	testing.expect(t, conv_err.error == .None, "Should convert to IR")
+	testing.expect(t, len(program.statements) == 1, "Top-level if should emit one statement")
+	if len(program.statements) == 1 {
+		testing.expect(t, program.statements[0].type == .Branch, "Top-level if should convert to Branch")
+	}
 }
 
 @(test)
@@ -410,4 +414,34 @@ test_zsh_array :: proc(t: ^testing.T) {
 
 	program, conv_err := frontend.zsh_to_ir(&arena, tree, code)
 	testing.expect(t, conv_err.error == .None, "Should convert to IR")
+}
+
+@(test)
+test_zsh_top_level_for_loop_items_preserved :: proc(t: ^testing.T) {
+	if !should_run_test("test_zsh_top_level_for_loop_items_preserved") { return }
+	code := "for i in 1 2 3; do\n\techo $i\n done"
+	arena := ir.create_arena(4096)
+	defer ir.destroy_arena(&arena)
+
+	fe := frontend.create_frontend(.Zsh)
+	defer frontend.destroy_frontend(&fe)
+
+	tree, parse_err := frontend.parse(&fe, code)
+	testing.expect(t, parse_err.error == .None, "Should parse successfully")
+	if parse_err.error != .None {
+		return
+	}
+	defer frontend.destroy_tree(tree)
+
+	program, conv_err := frontend.zsh_to_ir(&arena, tree, code)
+	testing.expect(t, conv_err.error == .None, "Should convert to IR")
+	testing.expect(t, len(program.statements) == 1, "Top-level for should emit one statement")
+	if len(program.statements) != 1 {
+		return
+	}
+	testing.expect(t, program.statements[0].type == .Loop, "Top-level for should convert to Loop")
+	if program.statements[0].type == .Loop {
+		items := ir.expr_to_string(program.statements[0].loop.items)
+		testing.expect(t, items == "1 2 3", "For-in iterable should preserve all items")
+	}
 }

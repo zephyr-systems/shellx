@@ -49,6 +49,22 @@ convert_zsh_node :: proc(
 		stmt := convert_zsh_case_to_statement(arena, node, source)
 		ir.add_statement(program, stmt)
 		return
+	case "if_statement":
+		stmt := convert_zsh_if_to_statement(arena, node, source)
+		ir.add_statement(program, stmt)
+		return
+	case "for_statement":
+		stmt := convert_zsh_for_to_statement(arena, node, source)
+		ir.add_statement(program, stmt)
+		return
+	case "while_statement":
+		stmt := convert_zsh_while_to_statement(arena, node, source)
+		ir.add_statement(program, stmt)
+		return
+	case "return_statement":
+		stmt := convert_zsh_return_to_statement(arena, node, source)
+		ir.add_statement(program, stmt)
+		return
 	case "list":
 		stmt, ok := convert_zsh_list_to_logical_statement(arena, node, source)
 		if ok {
@@ -142,6 +158,13 @@ convert_zsh_statement :: proc(
 	source: string,
 ) {
 	node_type_str := node_type(node)
+	if zsh_node_has_error_child(node) {
+		switch node_type_str {
+		case "if_statement", "for_statement", "while_statement", "case_statement":
+			append_zsh_raw_statements(arena, body, node, source)
+			return
+		}
+	}
 
 	switch node_type_str {
 	case "command":
@@ -833,6 +856,9 @@ convert_zsh_for_to_statement :: proc(
 	location := node_location(node, source)
 	variable_name := ""
 	iterable_text := ""
+	iter_builder := strings.builder_make()
+	defer strings.builder_destroy(&iter_builder)
+	in_header := true
 	body := make([dynamic]ir.Statement, 0, 4, mem.arena_allocator(&arena.arena))
 
 	for i in 0 ..< child_count(node) {
@@ -841,14 +867,22 @@ convert_zsh_for_to_statement :: proc(
 
 		if child_type == "variable_name" {
 			variable_name = intern_node_text(arena, child, source)
-		} else if child_type == "word" {
-			if iterable_text == "" {
-				iterable_text = intern_node_text(arena, child, source)
-			}
-		} else if child_type == "body" || child_type == "c_style_consequence" {
+		} else if child_type == "do_group" || child_type == "body" || child_type == "c_style_consequence" {
+			in_header = false
 			convert_zsh_body(arena, &body, child, source)
+		} else if child_type == "word" || child_type == "string" || child_type == "raw_string" || child_type == "expansion" || child_type == "simple_expansion" || child_type == "parameter_expansion" || child_type == "concatenation" {
+			if in_header {
+				word := strings.trim_space(intern_node_text(arena, child, source))
+				if word != "" && word != "in" {
+					if strings.builder_len(iter_builder) > 0 {
+						strings.write_byte(&iter_builder, ' ')
+					}
+					strings.write_string(&iter_builder, word)
+				}
+			}
 		}
 	}
+	iterable_text = strings.clone(strings.to_string(iter_builder), context.temp_allocator)
 
 	loop := ir.Loop {
 		kind     = .ForIn,
