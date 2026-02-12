@@ -38,6 +38,9 @@ convert_zsh_node :: proc(
 	case "command":
 		convert_zsh_command(arena, program, node, source)
 		return
+	case "declaration_command":
+		convert_zsh_command(arena, program, node, source)
+		return
 	case "variable_assignment":
 		convert_zsh_assignment(arena, program, node, source)
 		return
@@ -132,6 +135,9 @@ convert_zsh_statement :: proc(
 			stmt := convert_zsh_command_to_statement(arena, node, source)
 			append(body, stmt)
 		}
+	case "declaration_command":
+		stmt := convert_zsh_command_to_statement(arena, node, source)
+		append(body, stmt)
 	case "variable_assignment":
 		stmt := convert_zsh_assignment_to_statement(arena, node, source)
 		append(body, stmt)
@@ -146,6 +152,58 @@ convert_zsh_statement :: proc(
 		append(body, stmt)
 	case "return_statement":
 		stmt := convert_zsh_return_to_statement(arena, node, source)
+		append(body, stmt)
+	case "ERROR":
+		// Preserve parse-recovery fragments as raw command lines.
+		append_zsh_error_statements(arena, body, node, source)
+	case:
+		// Recursively traverse unhandled nodes so nested statements are not dropped.
+		for i in 0 ..< child_count(node) {
+			child_node := child(node, i)
+			if is_named(child_node) {
+				convert_zsh_statement(arena, body, child_node, source)
+			}
+		}
+	}
+}
+
+is_zsh_argument_node :: proc(child_type: string) -> bool {
+	switch child_type {
+	case "string", "word", "raw_string", "simple_expansion", "expansion", "concatenation", "special_variable_name", "command_substitution", "binary_expression", "regex", "flag", "flag_name":
+		return true
+	}
+	return false
+}
+
+append_zsh_error_statements :: proc(
+	arena: ^ir.Arena_IR,
+	body: ^[dynamic]ir.Statement,
+	node: ts.Node,
+	source: string,
+) {
+	location := node_location(node, source)
+	raw := strings.trim_space(intern_node_text(arena, node, source))
+	if raw == "" {
+		return
+	}
+
+	lines := strings.split_lines(raw)
+	defer delete(lines)
+
+	for line in lines {
+		trimmed := strings.trim_space(line)
+		if trimmed == "" || strings.has_prefix(trimmed, "#") {
+			continue
+		}
+		stmt := ir.Statement{
+			type = .Call,
+			call = ir.Call{
+				function = ir.new_variable(arena, trimmed),
+				arguments = make([dynamic]ir.Expression, 0, 0, mem.arena_allocator(&arena.arena)),
+				location = location,
+			},
+			location = location,
+		}
 		append(body, stmt)
 	}
 }
@@ -236,19 +294,29 @@ convert_zsh_command_to_statement :: proc(
 		if child_type == "command_name" {
 			for j in 0 ..< child_count(child) {
 				name_child_node := ts.ts_node_child(child, u32(j))
-				if node_type(name_child_node) == "word" {
-					cmd_name = node_text(
-						mem.arena_allocator(&arena.arena),
-						name_child_node,
-						source,
-					)
-					break
+				if is_named(name_child_node) {
+					cmd_name = strings.trim_space(intern_node_text(arena, name_child_node, source))
+					if cmd_name != "" {
+						break
+					}
 				}
 			}
-		} else if child_type == "string" || child_type == "word" {
-			arg_text := intern_node_text(arena, child, source)
-			append(&arguments, text_to_expression(arena, arg_text))
+		} else if is_zsh_argument_node(child_type) {
+			arg_text := strings.trim_space(intern_node_text(arena, child, source))
+			if arg_text != "" {
+				append(&arguments, text_to_expression(arena, arg_text))
+			}
 		}
+	}
+
+	// Fallback: treat the first argument as command name when parser omits command_name.
+	if cmd_name == "" && len(arguments) > 0 {
+		cmd_name = ir.expr_to_string(arguments[0])
+		delete(arguments[0])
+		arguments = arguments[1:]
+	}
+	if cmd_name == "" {
+		cmd_name = ":"
 	}
 
 	call := ir.Call {

@@ -3,6 +3,7 @@ package shellx
 import "backend"
 import ts "bindings/tree_sitter"
 import "compat"
+import "core:fmt"
 import "core:os"
 import "core:strings"
 import "detection"
@@ -96,15 +97,35 @@ translate :: proc(
 
 	parse_diags := frontend.collect_parse_diagnostics(tree, source_code, source_name)
 	defer delete(parse_diags)
-	for diag in parse_diags {
-		add_error_context(
-			&result,
-			.ParseSyntaxError,
-			diag.message,
-			diag.location,
-			diag.suggestion,
-			diag.snippet,
-		)
+
+	// Parse diagnostics are fatal in strict mode and same-dialect mode.
+	// For cross-dialect translation, keep them as warnings so translation can recover.
+	if len(parse_diags) > 0 {
+		if options.strict_mode || from == to {
+			for diag in parse_diags {
+				add_error_context(
+					&result,
+					.ParseSyntaxError,
+					diag.message,
+					diag.location,
+					diag.suggestion,
+					diag.snippet,
+				)
+			}
+			result.success = false
+			return result
+		}
+
+		for diag in parse_diags {
+			warning := fmt.tprintf(
+				"Parse diagnostic at %s:%d:%d: %s",
+				diag.location.file,
+				diag.location.line,
+				diag.location.column + 1,
+				diag.message,
+			)
+			append(&result.warnings, warning)
+		}
 	}
 
 	program, conv_err := convert_to_ir(&arena, from, tree, source_code)
@@ -193,10 +214,6 @@ translate :: proc(
 	}
 
 	result.output = emitted
-
-	if len(result.errors) > 0 {
-		result.success = false
-	}
 
 	return result
 }

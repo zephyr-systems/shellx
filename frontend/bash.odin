@@ -140,6 +140,14 @@ convert_bash_statement :: proc(
 	case "return_statement":
 		stmt := convert_bash_return_to_statement(arena, node, source) // Pass arena
 		append(body, stmt)
+	case:
+		// Recursively traverse unhandled nodes so nested statements are not dropped.
+		for i in 0 ..< child_count(node) {
+			child_node := child(node, i)
+			if is_named(child_node) {
+				convert_bash_statement(arena, body, child_node, source)
+			}
+		}
 	}
 }
 

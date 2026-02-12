@@ -141,6 +141,14 @@ convert_fish_statement :: proc(
 	case "return_statement":
 		stmt := convert_fish_return_to_statement(arena, node, source)
 		append(body, stmt)
+	case:
+		// Recursively traverse unhandled nodes so nested statements are not dropped.
+		for i in 0 ..< child_count(node) {
+			child_node := child(node, i)
+			if is_named(child_node) {
+				convert_fish_statement(arena, body, child_node, source)
+			}
+		}
 	}
 }
 

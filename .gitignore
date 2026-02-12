@@ -6,3 +6,6 @@ vendor/
 build/
 *.dylib
 shellx
+
+# Local corpus clones
+tests/corpus/repos/
