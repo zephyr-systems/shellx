@@ -95,3 +95,33 @@ test_zsh_to_bash_corpus_function_recovery :: proc(t: ^testing.T) {
 	testing.expect(t, len(result) > 0, "Should emit translated output for corpus plugin")
 	testing.expect(t, strings.contains(result, "function "), "Translated output should contain recovered functions")
 }
+
+@(test)
+test_zsh_to_bash_corpus_function_recovery_syntax_highlighting :: proc(t: ^testing.T) {
+	if !should_run_test("test_zsh_to_bash_corpus_function_recovery_syntax_highlighting") { return }
+	path := "tests/corpus/repos/zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+	if !os.is_file(path) {
+		return
+	}
+
+	result := translate_file(path, .Zsh, .Bash)
+	defer delete(result)
+
+	testing.expect(t, len(result) > 0, "Should emit translated output for syntax-highlighting corpus plugin")
+	testing.expect(t, strings.contains(result, "function "), "Translated output should contain recovered functions")
+}
+
+@(test)
+test_zsh_to_bash_corpus_function_recovery_theme :: proc(t: ^testing.T) {
+	if !should_run_test("test_zsh_to_bash_corpus_function_recovery_theme") { return }
+	path := "tests/corpus/repos/zsh/ohmyzsh/themes/agnoster.zsh-theme"
+	if !os.is_file(path) {
+		return
+	}
+
+	result := translate_file(path, .Zsh, .Bash)
+	defer delete(result)
+
+	testing.expect(t, len(result) > 0, "Should emit translated output for theme corpus file")
+	testing.expect(t, strings.contains(result, "function "), "Translated output should contain recovered functions")
+}

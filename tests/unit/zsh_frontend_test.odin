@@ -280,6 +280,74 @@ test_zsh_recover_functions_from_corpus_plugin :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_zsh_recover_functions_from_corpus_syntax_highlighting :: proc(t: ^testing.T) {
+	if !should_run_test("test_zsh_recover_functions_from_corpus_syntax_highlighting") { return }
+	path := "tests/corpus/repos/zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+	if !os.is_file(path) {
+		return
+	}
+
+	data, ok := os.read_entire_file(path)
+	testing.expect(t, ok, "Should read corpus file")
+	if !ok {
+		return
+	}
+	defer delete(data)
+	code := string(data)
+
+	arena := ir.create_arena(16 * 1024 * 1024)
+	defer ir.destroy_arena(&arena)
+
+	fe := frontend.create_frontend(.Zsh)
+	defer frontend.destroy_frontend(&fe)
+
+	tree, parse_err := frontend.parse(&fe, code)
+	testing.expect(t, parse_err.error == .None, "Should parse corpus source")
+	if parse_err.error != .None || tree == nil {
+		return
+	}
+	defer frontend.destroy_tree(tree)
+
+	program, conv_err := frontend.zsh_to_ir(&arena, tree, code)
+	testing.expect(t, conv_err.error == .None, "Should convert corpus source to IR")
+	testing.expect(t, len(program.functions) > 0, "Should recover functions from syntax-highlighting corpus")
+}
+
+@(test)
+test_zsh_recover_functions_from_corpus_theme :: proc(t: ^testing.T) {
+	if !should_run_test("test_zsh_recover_functions_from_corpus_theme") { return }
+	path := "tests/corpus/repos/zsh/ohmyzsh/themes/agnoster.zsh-theme"
+	if !os.is_file(path) {
+		return
+	}
+
+	data, ok := os.read_entire_file(path)
+	testing.expect(t, ok, "Should read corpus file")
+	if !ok {
+		return
+	}
+	defer delete(data)
+	code := string(data)
+
+	arena := ir.create_arena(16 * 1024 * 1024)
+	defer ir.destroy_arena(&arena)
+
+	fe := frontend.create_frontend(.Zsh)
+	defer frontend.destroy_frontend(&fe)
+
+	tree, parse_err := frontend.parse(&fe, code)
+	testing.expect(t, parse_err.error == .None, "Should parse corpus source")
+	if parse_err.error != .None || tree == nil {
+		return
+	}
+	defer frontend.destroy_tree(tree)
+
+	program, conv_err := frontend.zsh_to_ir(&arena, tree, code)
+	testing.expect(t, conv_err.error == .None, "Should convert corpus source to IR")
+	testing.expect(t, len(program.functions) > 0, "Should recover functions from theme corpus")
+}
+
+@(test)
 test_zsh_function :: proc(t: ^testing.T) {
 	if !should_run_test("test_zsh_function") { return }
 	code := "function hello() {\n\techo \"Hello\"\n}"
