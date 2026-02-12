@@ -29,6 +29,51 @@ make_binary_add :: proc(arena: ^ir.Arena_IR, left, right: string) -> ir.Expressi
 	return op
 }
 
+make_call_stmt :: proc(
+	arena: ^ir.Arena_IR,
+	command: string,
+	args: ..string,
+) -> ir.Statement {
+	call := ir.Call{
+		function = ir.new_variable(arena, command),
+		arguments = make([dynamic]ir.Expression, 0, len(args), mem.arena_allocator(&arena.arena)),
+	}
+	for arg in args {
+		append(&call.arguments, ir.expr_string(arena, arg))
+	}
+	return ir.Statement{type = .Call, call = call}
+}
+
+make_pipeline_stmt :: proc(
+	arena: ^ir.Arena_IR,
+	left_command: string,
+	left_args: []string,
+	right_command: string,
+	right_args: []string,
+) -> ir.Statement {
+	left := ir.Call{
+		function = ir.new_variable(arena, left_command),
+		arguments = make([dynamic]ir.Expression, 0, len(left_args), mem.arena_allocator(&arena.arena)),
+	}
+	for arg in left_args {
+		append(&left.arguments, ir.expr_string(arena, arg))
+	}
+
+	right := ir.Call{
+		function = ir.new_variable(arena, right_command),
+		arguments = make([dynamic]ir.Expression, 0, len(right_args), mem.arena_allocator(&arena.arena)),
+	}
+	for arg in right_args {
+		append(&right.arguments, ir.expr_string(arena, arg))
+	}
+
+	pipeline := ir.Pipeline{commands = make([dynamic]ir.Call, 0, 2, mem.arena_allocator(&arena.arena))}
+	append(&pipeline.commands, left)
+	append(&pipeline.commands, right)
+
+	return ir.Statement{type = .Pipeline, pipeline = pipeline}
+}
+
 @(test)
 test_optimizer_constant_folding :: proc(t: ^testing.T) {
 	if !should_run_local_test("test_optimizer_constant_folding") { return }
@@ -95,6 +140,79 @@ test_optimizer_pipeline_simplification :: proc(t: ^testing.T) {
 	defer optimizer.destroy_optimize_result(&res)
 
 	testing.expect(t, res.changed, "Pipeline simplification should simplify echo|cat")
+	testing.expect(t, program.functions[0].body[0].type == .Call, "Pipeline should become call")
+}
+
+@(test)
+test_optimizer_pipeline_simplification_sort_uniq :: proc(t: ^testing.T) {
+	if !should_run_local_test("test_optimizer_pipeline_simplification_sort_uniq") { return }
+
+	arena := ir.create_arena(1024 * 64)
+	defer ir.destroy_arena(&arena)
+
+	program := ir.create_program(&arena, .Bash)
+	fn := ir.create_function(&arena, "main", ir.SourceLocation{})
+	append(&fn.body, make_pipeline_stmt(&arena, "sort", []string{}, "uniq", []string{}))
+	ir.add_function(program, fn)
+
+	res := optimizer.pipeline_simplification(program)
+	defer optimizer.destroy_optimize_result(&res)
+
+	testing.expect(t, res.changed, "sort|uniq should simplify")
+	testing.expect(t, program.functions[0].body[0].type == .Call, "Pipeline should become call")
+	if program.functions[0].body[0].type == .Call {
+		call := program.functions[0].body[0].call
+		testing.expect(t, call.function != nil && call.function.name == "sort", "Call should remain sort")
+		testing.expect(t, len(call.arguments) > 0, "sort call should gain arguments")
+		if len(call.arguments) > 0 {
+			testing.expect(t, ir.expr_to_string(call.arguments[0]) == "-u", "sort should receive -u")
+		}
+	}
+}
+
+@(test)
+test_optimizer_pipeline_simplification_grep_wc_count :: proc(t: ^testing.T) {
+	if !should_run_local_test("test_optimizer_pipeline_simplification_grep_wc_count") { return }
+
+	arena := ir.create_arena(1024 * 64)
+	defer ir.destroy_arena(&arena)
+
+	program := ir.create_program(&arena, .Bash)
+	fn := ir.create_function(&arena, "main", ir.SourceLocation{})
+	append(&fn.body, make_pipeline_stmt(&arena, "grep", []string{"needle", "file.txt"}, "wc", []string{"-l"}))
+	ir.add_function(program, fn)
+
+	res := optimizer.pipeline_simplification(program)
+	defer optimizer.destroy_optimize_result(&res)
+
+	testing.expect(t, res.changed, "grep|wc -l should simplify")
+	testing.expect(t, program.functions[0].body[0].type == .Call, "Pipeline should become call")
+	if program.functions[0].body[0].type == .Call {
+		call := program.functions[0].body[0].call
+		testing.expect(t, call.function != nil && call.function.name == "grep", "Call should remain grep")
+		testing.expect(t, len(call.arguments) > 0, "grep call should gain arguments")
+		if len(call.arguments) > 0 {
+			testing.expect(t, ir.expr_to_string(call.arguments[0]) == "-c", "grep should receive -c")
+		}
+	}
+}
+
+@(test)
+test_optimizer_pipeline_simplification_tee_devnull :: proc(t: ^testing.T) {
+	if !should_run_local_test("test_optimizer_pipeline_simplification_tee_devnull") { return }
+
+	arena := ir.create_arena(1024 * 64)
+	defer ir.destroy_arena(&arena)
+
+	program := ir.create_program(&arena, .Bash)
+	fn := ir.create_function(&arena, "main", ir.SourceLocation{})
+	append(&fn.body, make_pipeline_stmt(&arena, "echo", []string{"ok"}, "tee", []string{"/dev/null"}))
+	ir.add_function(program, fn)
+
+	res := optimizer.pipeline_simplification(program)
+	defer optimizer.destroy_optimize_result(&res)
+
+	testing.expect(t, res.changed, "cmd|tee /dev/null should simplify")
 	testing.expect(t, program.functions[0].body[0].type == .Call, "Pipeline should become call")
 }
 

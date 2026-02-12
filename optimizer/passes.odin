@@ -379,9 +379,47 @@ pipeline_simplification :: proc(
 		return result
 	}
 
-	// Patterns to simplify:
-	// echo x | cat -> echo x (cat just passes through)
-	// echo x | tail -n 1 -> echo x (single line input)
+	command_name :: proc(call: ir.Call) -> string {
+		if call.function == nil {
+			return ""
+		}
+		return call.function.name
+	}
+
+	arg_text :: proc(expr: ir.Expression) -> string {
+		return ir.expr_to_string(expr)
+	}
+
+	has_grep_count_related_flag :: proc(call: ir.Call) -> bool {
+		for arg in call.arguments {
+			text := arg_text(arg)
+			switch text {
+			case "-c", "--count", "-q", "--quiet", "-l", "--files-with-matches":
+				return true
+			}
+		}
+		return false
+	}
+
+	with_leading_arg :: proc(call: ir.Call, arg: string, allocator: mem.Allocator) -> ir.Call {
+		new_args := make([dynamic]ir.Expression, 0, len(call.arguments)+1, allocator)
+		lit := new(ir.Literal, allocator)
+		lit.value = arg
+		lit.type = .String
+		append(&new_args, lit)
+		for existing in call.arguments {
+			append(&new_args, existing)
+		}
+		out := call
+		out.arguments = new_args
+		return out
+	}
+
+	// Patterns to simplify conservatively:
+	// echo ... | cat              -> echo ...
+	// cmd | tee /dev/null         -> cmd
+	// sort | uniq                 -> sort -u
+	// grep ... | wc -l            -> grep -c ...
 
 	for &fn in program.functions {
 		for &stmt, idx in fn.body {
@@ -393,15 +431,8 @@ pipeline_simplification :: proc(
 					first_cmd := pipeline.commands[0]
 					second_cmd := pipeline.commands[1]
 
-					// Pattern: echo ... | cat -> echo ...
-					first_name := ""
-					second_name := ""
-					if first_cmd.function != nil {
-						first_name = first_cmd.function.name
-					}
-					if second_cmd.function != nil {
-						second_name = second_cmd.function.name
-					}
+					first_name := command_name(first_cmd)
+					second_name := command_name(second_cmd)
 					if first_name == "echo" && second_name == "cat" {
 						// Replace pipeline with just the echo command
 						fn.body[idx] = ir.Statement {
@@ -412,6 +443,58 @@ pipeline_simplification :: proc(
 						result.changed = true
 						msg := fmt.aprintf(
 							"Simplified 'echo | cat' pipeline in %s",
+							fn.name,
+							allocator,
+						)
+						add_diagnostic(&result, msg)
+						continue
+					}
+
+					// Pattern: cmd | tee /dev/null -> cmd
+					if second_name == "tee" && len(second_cmd.arguments) == 1 && arg_text(second_cmd.arguments[0]) == "/dev/null" {
+						fn.body[idx] = ir.Statement{
+							type = .Call,
+							call = first_cmd,
+							location = stmt.location,
+						}
+						result.changed = true
+						msg := fmt.aprintf(
+							"Simplified '%s | tee /dev/null' pipeline in %s",
+							first_name,
+							fn.name,
+							allocator,
+						)
+						add_diagnostic(&result, msg)
+						continue
+					}
+
+					// Pattern: sort | uniq -> sort -u
+					if first_name == "sort" && second_name == "uniq" && len(second_cmd.arguments) == 0 {
+						fn.body[idx] = ir.Statement{
+							type = .Call,
+							call = with_leading_arg(first_cmd, "-u", allocator),
+							location = stmt.location,
+						}
+						result.changed = true
+						msg := fmt.aprintf(
+							"Simplified 'sort | uniq' pipeline in %s",
+							fn.name,
+							allocator,
+						)
+						add_diagnostic(&result, msg)
+						continue
+					}
+
+					// Pattern: grep ... | wc -l -> grep -c ...
+					if first_name == "grep" && second_name == "wc" && len(second_cmd.arguments) == 1 && arg_text(second_cmd.arguments[0]) == "-l" && !has_grep_count_related_flag(first_cmd) {
+						fn.body[idx] = ir.Statement{
+							type = .Call,
+							call = with_leading_arg(first_cmd, "-c", allocator),
+							location = stmt.location,
+						}
+						result.changed = true
+						msg := fmt.aprintf(
+							"Simplified 'grep | wc -l' pipeline in %s",
 							fn.name,
 							allocator,
 						)
