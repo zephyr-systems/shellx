@@ -97,7 +97,7 @@ translate :: proc(
 	defer backend.destroy_backend(&be)
 
 	fmt.println("Translate: Emitting code...")
-	output := backend.emit(&be, program)
+	output := backend.emit(&be, program, mem.arena_allocator(&arena.arena))
 	fmt.printf("Translate: Emission finished. Output length: %d\n", len(output))
 	fmt.printf("Translate: Output content: '%s'\n", output)
 

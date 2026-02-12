@@ -18,7 +18,7 @@ destroy_backend :: proc(b: ^Backend) {
 	strings.builder_destroy(&b.builder)
 }
 
-emit :: proc(b: ^Backend, program: ^ir.Program) -> string {
+emit :: proc(b: ^Backend, program: ^ir.Program, allocator := context.allocator) -> string {
 	strings.builder_reset(&b.builder)
 
 	for func in program.functions {
@@ -31,9 +31,9 @@ emit :: proc(b: ^Backend, program: ^ir.Program) -> string {
 		strings.write_byte(&b.builder, '\n')
 	}
 
-	// Create a copy of the string to ensure it's valid after the builder is destroyed
+	// Copy string to the provided allocator (arena in translate())
 	result := strings.to_string(b.builder)
-	return strings.clone(result)
+	return strings.clone(result, allocator)
 }
 
 emit_function :: proc(b: ^Backend, func: ir.Function) {
