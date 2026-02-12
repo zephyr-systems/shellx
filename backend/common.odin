@@ -222,13 +222,17 @@ emit_statement :: proc(b: ^Backend, stmt: ir.Statement) {
 }
 
 emit_assign :: proc(b: ^Backend, assign: ir.Assign) {
-	strings.write_string(&b.builder, assign.variable)
+	if assign.target != nil {
+		strings.write_string(&b.builder, assign.target.name)
+	}
 	strings.write_byte(&b.builder, '=')
-	strings.write_string(&b.builder, assign.value)
+	strings.write_string(&b.builder, ir.expr_to_string(assign.value))
 }
 
 emit_call :: proc(b: ^Backend, call: ir.Call) {
-	strings.write_string(&b.builder, call.command)
+	if call.function != nil {
+		strings.write_string(&b.builder, call.function.name)
+	}
 
 	if len(call.arguments) > 0 {
 		strings.write_byte(&b.builder, ' ')
@@ -236,19 +240,22 @@ emit_call :: proc(b: ^Backend, call: ir.Call) {
 			if idx > 0 {
 				strings.write_byte(&b.builder, ' ')
 			}
-			strings.write_string(&b.builder, call.arguments[idx])
+			strings.write_string(&b.builder, ir.expr_to_string(call.arguments[idx]))
 		}
 	}
 }
 
 emit_return :: proc(b: ^Backend, ret: ir.Return) {
-	strings.write_string(&b.builder, "return ")
-	strings.write_string(&b.builder, ret.value)
+	strings.write_string(&b.builder, "return")
+	if ret.value != nil {
+		strings.write_byte(&b.builder, ' ')
+		strings.write_string(&b.builder, ir.expr_to_string(ret.value))
+	}
 }
 
 emit_branch :: proc(b: ^Backend, branch: ir.Branch) {
 	strings.write_string(&b.builder, "if ")
-	strings.write_string(&b.builder, branch.condition)
+	strings.write_string(&b.builder, ir.expr_to_string(branch.condition))
 	strings.write_string(&b.builder, "; then\n")
 
 	b.indent_level += 1
@@ -266,24 +273,26 @@ emit_loop :: proc(b: ^Backend, loop: ir.Loop) {
 	switch loop.kind {
 	case .ForIn:
 		strings.write_string(&b.builder, "for ")
-		strings.write_string(&b.builder, loop.variable)
+		if loop.iterator != nil {
+			strings.write_string(&b.builder, loop.iterator.name)
+		}
 		strings.write_string(&b.builder, " in ")
-		strings.write_string(&b.builder, loop.iterable)
+		strings.write_string(&b.builder, ir.expr_to_string(loop.items))
 		strings.write_string(&b.builder, "; do\n")
 
 	case .ForC:
 		strings.write_string(&b.builder, "for (( ")
-		strings.write_string(&b.builder, loop.condition)
+		strings.write_string(&b.builder, ir.expr_to_string(loop.condition))
 		strings.write_string(&b.builder, " )); do\n")
 
 	case .While:
 		strings.write_string(&b.builder, "while ")
-		strings.write_string(&b.builder, loop.condition)
+		strings.write_string(&b.builder, ir.expr_to_string(loop.condition))
 		strings.write_string(&b.builder, "; do\n")
 
 	case .Until:
 		strings.write_string(&b.builder, "until ")
-		strings.write_string(&b.builder, loop.condition)
+		strings.write_string(&b.builder, ir.expr_to_string(loop.condition))
 		strings.write_string(&b.builder, "; do\n")
 	}
 

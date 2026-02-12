@@ -180,7 +180,7 @@ convert_zsh_typeset_to_statement :: proc(
 ) -> ir.Statement {
 	location := node_location(node, source)
 	variable_name := ""
-	value := ""
+	value := ir.Expression(nil)
 
 	for i in 0 ..< child_count(node) {
 		child := child(node, i)
@@ -195,15 +195,15 @@ convert_zsh_typeset_to_statement :: proc(
 			// First non-flag word is variable name
 			if variable_name == "" {
 				variable_name = text
-			} else if value == "" {
+			} else if value == nil {
 				// Second non-flag word is value
-				value = text
+				value = text_to_expression(arena, text)
 			}
 		}
 	}
 
 	assign := ir.Assign {
-		variable = variable_name,
+		target   = ir.new_variable(arena, variable_name),
 		value    = value,
 		location = location,
 	}
@@ -228,7 +228,7 @@ convert_zsh_command_to_statement :: proc(
 ) -> ir.Statement {
 	location := node_location(node, source)
 	cmd_name := ""
-	arguments := make([dynamic]string, 0, 4, mem.arena_allocator(&arena.arena))
+	arguments := make([dynamic]ir.Expression, 0, 4, mem.arena_allocator(&arena.arena))
 
 	for i in 0 ..< child_count(node) {
 		child := child(node, i)
@@ -248,12 +248,12 @@ convert_zsh_command_to_statement :: proc(
 			}
 		} else if child_type == "string" || child_type == "word" {
 			arg_text := node_text(mem.arena_allocator(&arena.arena), child, source)
-			append(&arguments, arg_text)
+			append(&arguments, text_to_expression(arena, arg_text))
 		}
 	}
 
 	call := ir.Call {
-		command   = cmd_name,
+		function  = ir.new_variable(arena, cmd_name),
 		arguments = arguments,
 		location  = location,
 	}
@@ -278,7 +278,7 @@ convert_zsh_assignment_to_statement :: proc(
 ) -> ir.Statement {
 	location := node_location(node, source)
 	variable_name := ""
-	value := ""
+	value := ir.Expression(nil)
 
 	for i in 0 ..< child_count(node) {
 		child := child(node, i)
@@ -287,12 +287,15 @@ convert_zsh_assignment_to_statement :: proc(
 		if child_type == "variable_name" {
 			variable_name = node_text(mem.arena_allocator(&arena.arena), child, source)
 		} else if child_type == "word" || child_type == "number" {
-			value = node_text(mem.arena_allocator(&arena.arena), child, source)
+			value = text_to_expression(
+				arena,
+				node_text(mem.arena_allocator(&arena.arena), child, source),
+			)
 		}
 	}
 
 	assign := ir.Assign {
-		variable = variable_name,
+		target   = ir.new_variable(arena, variable_name),
 		value    = value,
 		location = location,
 	}
@@ -306,7 +309,7 @@ convert_zsh_if_to_statement :: proc(
 	source: string,
 ) -> ir.Statement {
 	location := node_location(node, source)
-	condition := ""
+	condition := ir.Expression(nil)
 	then_body := make([dynamic]ir.Statement, 0, 4, mem.arena_allocator(&arena.arena))
 	else_body := make([dynamic]ir.Statement, 0, 4, mem.arena_allocator(&arena.arena))
 
@@ -315,7 +318,7 @@ convert_zsh_if_to_statement :: proc(
 		child_type := node_type(child)
 
 		if child_type == "condition" {
-			condition = extract_zsh_condition(arena, child, source)
+			condition = ir.new_raw_expr(arena, extract_zsh_condition(arena, child, source))
 		} else if child_type == "consequence" {
 			convert_zsh_body(arena, &then_body, child, source)
 		} else if child_type == "alternative" {
@@ -359,7 +362,7 @@ convert_zsh_for_to_statement :: proc(
 ) -> ir.Statement {
 	location := node_location(node, source)
 	variable_name := ""
-	iterable := ""
+	iterable_text := ""
 	body := make([dynamic]ir.Statement, 0, 4, mem.arena_allocator(&arena.arena))
 
 	for i in 0 ..< child_count(node) {
@@ -369,8 +372,8 @@ convert_zsh_for_to_statement :: proc(
 		if child_type == "variable_name" {
 			variable_name = node_text(mem.arena_allocator(&arena.arena), child, source)
 		} else if child_type == "word" {
-			if iterable == "" {
-				iterable = node_text(mem.arena_allocator(&arena.arena), child, source)
+			if iterable_text == "" {
+				iterable_text = node_text(mem.arena_allocator(&arena.arena), child, source)
 			}
 		} else if child_type == "body" || child_type == "c_style_consequence" {
 			convert_zsh_body(arena, &body, child, source)
@@ -379,8 +382,8 @@ convert_zsh_for_to_statement :: proc(
 
 	loop := ir.Loop {
 		kind     = .ForIn,
-		variable = variable_name,
-		iterable = iterable,
+		iterator = ir.new_variable(arena, variable_name),
+		items    = text_to_expression(arena, iterable_text),
 		body     = body,
 		location = location,
 	}
@@ -394,7 +397,7 @@ convert_zsh_while_to_statement :: proc(
 	source: string,
 ) -> ir.Statement {
 	location := node_location(node, source)
-	condition := ""
+	condition := ir.Expression(nil)
 	body := make([dynamic]ir.Statement, 0, 4, mem.arena_allocator(&arena.arena))
 
 	for i in 0 ..< child_count(node) {
@@ -402,7 +405,7 @@ convert_zsh_while_to_statement :: proc(
 		child_type := node_type(child)
 
 		if child_type == "condition" {
-			condition = extract_zsh_condition(arena, child, source)
+			condition = ir.new_raw_expr(arena, extract_zsh_condition(arena, child, source))
 		} else if child_type == "body" {
 			convert_zsh_body(arena, &body, child, source)
 		}
@@ -424,12 +427,15 @@ convert_zsh_return_to_statement :: proc(
 	source: string,
 ) -> ir.Statement {
 	location := node_location(node, source)
-	value := ""
+	value := ir.Expression(nil)
 
 	for i in 0 ..< child_count(node) {
 		child := child(node, i)
 		if node_type(child) == "word" {
-			value = node_text(mem.arena_allocator(&arena.arena), child, source)
+			value = text_to_expression(
+				arena,
+				node_text(mem.arena_allocator(&arena.arena), child, source),
+			)
 			break
 		}
 	}
@@ -462,7 +468,7 @@ convert_zsh_array_to_statement :: proc(
 ) -> ir.Statement {
 	location := node_location(node, source)
 	array_name := ""
-	values := make([dynamic]string, 0, 4, mem.arena_allocator(&arena.arena))
+	values := make([dynamic]ir.Expression, 0, 4, mem.arena_allocator(&arena.arena))
 
 	for i in 0 ..< child_count(node) {
 		child := child(node, i)
@@ -476,25 +482,15 @@ convert_zsh_array_to_statement :: proc(
 				elem_node := ts.ts_node_child(child, u32(j))
 				if node_type(elem_node) == "word" || node_type(elem_node) == "string" {
 					elem_text := node_text(mem.arena_allocator(&arena.arena), elem_node, source)
-					append(&values, elem_text)
+					append(&values, text_to_expression(arena, elem_text))
 				}
 			}
 		}
 	}
 
-	// Store as comma-separated values for now
-	result: strings.Builder
-	strings.builder_init(&result)
-	for idx in 0 ..< len(values) {
-		if idx > 0 {
-			strings.write_string(&result, ", ")
-		}
-		strings.write_string(&result, values[idx])
-	}
-
 	assign := ir.Assign {
-		variable = array_name,
-		value    = strings.to_string(result),
+		target   = ir.new_variable(arena, array_name),
+		value    = ir.new_array_expr(arena, values),
 		location = location,
 	}
 

@@ -203,7 +203,7 @@ convert_bash_command_to_statement :: proc(
 	fmt.println("convert_bash_command_to_statement: Starting.")
 	location := node_location(node, source)
 	cmd_name := ""
-	arguments := make([dynamic]string, 0, 4, mem.arena_allocator(&arena.arena))
+	arguments := make([dynamic]ir.Expression, 0, 4, mem.arena_allocator(&arena.arena))
 
 	for i in 0 ..< child_count(node) {
 		child := child(node, i)
@@ -230,13 +230,13 @@ convert_bash_command_to_statement :: proc(
 		} else if child_type == "string" || child_type == "word" {
 			// Arguments can be strings or words
 			arg_text := node_text(mem.arena_allocator(&arena.arena), child, source)
-			append(&arguments, arg_text)
+			append(&arguments, text_to_expression(arena, arg_text))
 			fmt.printf("convert_bash_command_to_statement: Found argument '%s'\n", arg_text)
 		}
 	}
 
 	call := ir.Call {
-		command   = cmd_name,
+		function  = ir.new_variable(arena, cmd_name),
 		arguments = arguments,
 		location  = location,
 	}
@@ -270,7 +270,7 @@ convert_bash_assignment_to_statement :: proc(
 	fmt.println("convert_bash_assignment_to_statement: Starting.")
 	location := node_location(node, source)
 	variable_name := ""
-	value := ""
+	value := ir.Expression(nil)
 
 	for i in 0 ..< child_count(node) {
 		child := child(node, i)
@@ -279,12 +279,15 @@ convert_bash_assignment_to_statement :: proc(
 		if child_type == "variable_name" {
 			variable_name = node_text(mem.arena_allocator(&arena.arena), child, source) // Pass allocator
 		} else if child_type == "word" || child_type == "number" {
-			value = node_text(mem.arena_allocator(&arena.arena), child, source) // Pass allocator
+			value = text_to_expression(
+				arena,
+				node_text(mem.arena_allocator(&arena.arena), child, source),
+			)
 		}
 	}
 
 	assign := ir.Assign {
-		variable = variable_name,
+		target   = ir.new_variable(arena, variable_name),
 		value    = value,
 		location = location,
 	}
@@ -300,7 +303,7 @@ convert_bash_if_to_statement :: proc(
 ) -> ir.Statement {
 	fmt.println("convert_bash_if_to_statement: Starting.")
 	location := node_location(node, source)
-	condition := ""
+	condition := ir.Expression(nil)
 	then_body := make([dynamic]ir.Statement, 0, 4, mem.arena_allocator(&arena.arena)) // Use mem.arena_allocator(&arena.arena)
 	else_body := make([dynamic]ir.Statement, 0, 4, mem.arena_allocator(&arena.arena)) // Use mem.arena_allocator(&arena.arena)
 
@@ -309,7 +312,7 @@ convert_bash_if_to_statement :: proc(
 		child_type := node_type(child)
 
 		if child_type == "condition" {
-			condition = extract_condition(arena, child, source)
+			condition = ir.new_raw_expr(arena, extract_condition(arena, child, source))
 		} else if child_type == "consequence" {
 			convert_bash_body(arena, &then_body, child, source) // Pass arena
 		} else if child_type == "alternative" {
@@ -356,7 +359,7 @@ convert_bash_for_to_statement :: proc(
 	fmt.println("convert_bash_for_to_statement: Starting.")
 	location := node_location(node, source)
 	variable_name := ""
-	iterable := ""
+	iterable_text := ""
 	body := make([dynamic]ir.Statement, 0, 4, mem.arena_allocator(&arena.arena)) // Use mem.arena_allocator(&arena.arena)
 
 	for i in 0 ..< child_count(node) {
@@ -366,8 +369,8 @@ convert_bash_for_to_statement :: proc(
 		if child_type == "variable_name" {
 			variable_name = node_text(mem.arena_allocator(&arena.arena), child, source) // Pass allocator
 		} else if child_type == "word" {
-			if iterable == "" {
-				iterable = node_text(mem.arena_allocator(&arena.arena), child, source) // Pass allocator
+			if iterable_text == "" {
+				iterable_text = node_text(mem.arena_allocator(&arena.arena), child, source) // Pass allocator
 			}
 		} else if child_type == "body" || child_type == "c_style_consequence" {
 			convert_bash_body(arena, &body, child, source) // Pass arena
@@ -378,8 +381,8 @@ convert_bash_for_to_statement :: proc(
 
 	loop := ir.Loop {
 		kind     = .ForIn if !is_c_style else .ForC,
-		variable = variable_name,
-		iterable = iterable,
+		iterator = ir.new_variable(arena, variable_name),
+		items    = text_to_expression(arena, iterable_text),
 		body     = body,
 		location = location,
 	}
@@ -395,7 +398,7 @@ convert_bash_while_to_statement :: proc(
 ) -> ir.Statement {
 	fmt.println("convert_bash_while_to_statement: Starting.")
 	location := node_location(node, source)
-	condition := ""
+	condition := ir.Expression(nil)
 	body := make([dynamic]ir.Statement, 0, 4, mem.arena_allocator(&arena.arena)) // Use mem.arena_allocator(&arena.arena)
 
 	for i in 0 ..< child_count(node) {
@@ -403,7 +406,7 @@ convert_bash_while_to_statement :: proc(
 		child_type := node_type(child)
 
 		if child_type == "condition" {
-			condition = extract_condition(arena, child, source)
+			condition = ir.new_raw_expr(arena, extract_condition(arena, child, source))
 		} else if child_type == "body" {
 			convert_bash_body(arena, &body, child, source) // Pass arena
 		}
@@ -427,12 +430,15 @@ convert_bash_return_to_statement :: proc(
 ) -> ir.Statement {
 	fmt.println("convert_bash_return_to_statement: Starting.")
 	location := node_location(node, source)
-	value := ""
+	value := ir.Expression(nil)
 
 	for i in 0 ..< child_count(node) {
 		child := child(node, i)
 		if node_type(child) == "word" {
-			value = node_text(mem.arena_allocator(&arena.arena), child, source) // Pass allocator
+			value = text_to_expression(
+				arena,
+				node_text(mem.arena_allocator(&arena.arena), child, source),
+			)
 			break
 		}
 	}

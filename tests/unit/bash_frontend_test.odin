@@ -31,8 +31,11 @@ test_bash_simple_variable :: proc(t: ^testing.T) {
 	// Verify the assignment
 	stmt := program.statements[0]
 	testing.expect(t, stmt.type == .Assign, "Should be assignment")
-	testing.expect(t, stmt.assign.variable == "x", "Variable should be 'x'")
-	testing.expect(t, stmt.assign.value == "5", "Value should be '5'")
+	testing.expect(t, stmt.assign.target != nil, "Assignment target should exist")
+	if stmt.assign.target != nil {
+		testing.expect(t, stmt.assign.target.name == "x", "Variable should be 'x'")
+	}
+	testing.expect(t, ir.expr_to_string(stmt.assign.value) == "5", "Value should be '5'")
 }
 
 @(test)
@@ -65,7 +68,10 @@ test_bash_function :: proc(t: ^testing.T) {
 	// Verify the echo command
 	stmt := func.body[0]
 	testing.expect(t, stmt.type == .Call, "Should be function call")
-	testing.expect(t, stmt.call.command == "echo", "Command should be 'echo'")
+	testing.expect(t, stmt.call.function != nil, "Function should be present")
+	if stmt.call.function != nil {
+		testing.expect(t, stmt.call.function.name == "echo", "Command should be 'echo'")
+	}
 }
 
 @(test)

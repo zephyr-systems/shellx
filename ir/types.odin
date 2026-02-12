@@ -29,6 +29,70 @@ Function :: struct {
 	location:   SourceLocation,
 }
 
+LiteralType :: enum {
+	String,
+	Int,
+	Bool,
+	Raw,
+}
+
+BinaryOperator :: enum {
+	Add,
+	Sub,
+	Mul,
+	Div,
+	Eq,
+	Neq,
+}
+
+UnaryOperator :: enum {
+	Negate,
+	Not,
+}
+
+Expression :: union {
+	^Literal,
+	^Variable,
+	^BinaryOp,
+	^UnaryOp,
+	^CallExpr,
+	^ArrayLiteral,
+	^RawExpression,
+}
+
+Literal :: struct {
+	value: string,
+	type:  LiteralType,
+}
+
+Variable :: struct {
+	name: string,
+}
+
+BinaryOp :: struct {
+	op:    BinaryOperator,
+	left:  Expression,
+	right: Expression,
+}
+
+UnaryOp :: struct {
+	op:      UnaryOperator,
+	operand: Expression,
+}
+
+CallExpr :: struct {
+	function:  ^Variable,
+	arguments: [dynamic]Expression,
+}
+
+ArrayLiteral :: struct {
+	elements: [dynamic]Expression,
+}
+
+RawExpression :: struct {
+	text: string,
+}
+
 StatementType :: enum {
 	Assign,
 	Call,
@@ -39,24 +103,24 @@ StatementType :: enum {
 }
 
 Assign :: struct {
-	variable: string,
-	value:    string,
+	target:   ^Variable,
+	value:    Expression,
 	location: SourceLocation,
 }
 
 Call :: struct {
-	command:   string,
-	arguments: [dynamic]string,
+	function:  ^Variable,
+	arguments: [dynamic]Expression,
 	location:  SourceLocation,
 }
 
 Return :: struct {
-	value:   string,
+	value:    Expression,
 	location: SourceLocation,
 }
 
 Branch :: struct {
-	condition: string,
+	condition: Expression,
 	then_body: [dynamic]Statement,
 	else_body: [dynamic]Statement,
 	location:  SourceLocation,
@@ -71,9 +135,9 @@ LoopKind :: enum {
 
 Loop :: struct {
 	kind:      LoopKind,
-	variable:  string,
-	iterable:  string,
-	condition: string,
+	iterator:  ^Variable,
+	items:     Expression,
+	condition: Expression,
 	body:      [dynamic]Statement,
 	location:  SourceLocation,
 }
@@ -114,4 +178,3 @@ Arena_IR :: struct {
 	arena: mem.Arena, // Contains the mem.Arena directly
 	backing_buffer: []byte, // Manage the backing buffer directly
 }
-

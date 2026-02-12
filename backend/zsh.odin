@@ -81,14 +81,18 @@ emit_zsh_statement :: proc(be: ^ZshBackend, stmt: ir.Statement) {
 // Zsh supports: x=5, typeset x=5, local x=5, export x=5
 emit_zsh_assign :: proc(be: ^ZshBackend, assign: ir.Assign) {
 	// Simple assignment is most common in Zsh
-	strings.write_string(&be.builder, assign.variable)
+	if assign.target != nil {
+		strings.write_string(&be.builder, assign.target.name)
+	}
 	strings.write_byte(&be.builder, '=')
-	strings.write_string(&be.builder, assign.value)
+	strings.write_string(&be.builder, ir.expr_to_string(assign.value))
 }
 
 // emit_zsh_call emits a command call
 emit_zsh_call :: proc(be: ^ZshBackend, call: ir.Call) {
-	strings.write_string(&be.builder, call.command)
+	if call.function != nil {
+		strings.write_string(&be.builder, call.function.name)
+	}
 
 	if len(call.arguments) > 0 {
 		strings.write_byte(&be.builder, ' ')
@@ -96,7 +100,7 @@ emit_zsh_call :: proc(be: ^ZshBackend, call: ir.Call) {
 			if idx > 0 {
 				strings.write_byte(&be.builder, ' ')
 			}
-			strings.write_string(&be.builder, call.arguments[idx])
+			strings.write_string(&be.builder, ir.expr_to_string(call.arguments[idx]))
 		}
 	}
 }
@@ -104,9 +108,9 @@ emit_zsh_call :: proc(be: ^ZshBackend, call: ir.Call) {
 // emit_zsh_return emits a return statement
 emit_zsh_return :: proc(be: ^ZshBackend, ret: ir.Return) {
 	strings.write_string(&be.builder, "return")
-	if ret.value != "" {
+	if ret.value != nil {
 		strings.write_byte(&be.builder, ' ')
-		strings.write_string(&be.builder, ret.value)
+		strings.write_string(&be.builder, ir.expr_to_string(ret.value))
 	}
 }
 
@@ -114,7 +118,7 @@ emit_zsh_return :: proc(be: ^ZshBackend, ret: ir.Return) {
 // Zsh uses: if [[ condition ]]; then ... elif ... else ... fi
 emit_zsh_branch :: proc(be: ^ZshBackend, branch: ir.Branch) {
 	strings.write_string(&be.builder, "if [[ ")
-	strings.write_string(&be.builder, branch.condition)
+	strings.write_string(&be.builder, ir.expr_to_string(branch.condition))
 	strings.write_string(&be.builder, " ]]; then\n")
 
 	be.indent_level += 1
@@ -145,9 +149,11 @@ emit_zsh_loop :: proc(be: ^ZshBackend, loop: ir.Loop) {
 	case .ForIn:
 		// Zsh: for var in iterable; do ... done
 		strings.write_string(&be.builder, "for ")
-		strings.write_string(&be.builder, loop.variable)
+		if loop.iterator != nil {
+			strings.write_string(&be.builder, loop.iterator.name)
+		}
 		strings.write_string(&be.builder, " in ")
-		strings.write_string(&be.builder, loop.iterable)
+		strings.write_string(&be.builder, ir.expr_to_string(loop.items))
 		strings.write_string(&be.builder, "; do\n")
 
 		be.indent_level += 1
@@ -163,7 +169,7 @@ emit_zsh_loop :: proc(be: ^ZshBackend, loop: ir.Loop) {
 	case .While:
 		// Zsh: while [[ condition ]]; do ... done
 		strings.write_string(&be.builder, "while [[ ")
-		strings.write_string(&be.builder, loop.condition)
+		strings.write_string(&be.builder, ir.expr_to_string(loop.condition))
 		strings.write_string(&be.builder, " ]]; do\n")
 
 		be.indent_level += 1
@@ -179,7 +185,7 @@ emit_zsh_loop :: proc(be: ^ZshBackend, loop: ir.Loop) {
 	case .ForC:
 		// C-style for loop: for (( ... )); do ... done
 		strings.write_string(&be.builder, "for (( ")
-		strings.write_string(&be.builder, loop.condition)
+		strings.write_string(&be.builder, ir.expr_to_string(loop.condition))
 		strings.write_string(&be.builder, " )); do\n")
 
 		be.indent_level += 1
@@ -195,7 +201,7 @@ emit_zsh_loop :: proc(be: ^ZshBackend, loop: ir.Loop) {
 	case .Until:
 		// Zsh: until [[ condition ]]; do ... done
 		strings.write_string(&be.builder, "until [[ ")
-		strings.write_string(&be.builder, loop.condition)
+		strings.write_string(&be.builder, ir.expr_to_string(loop.condition))
 		strings.write_string(&be.builder, " ]]; do\n")
 
 		be.indent_level += 1

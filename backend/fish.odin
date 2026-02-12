@@ -83,14 +83,18 @@ emit_fish_statement :: proc(be: ^FishBackend, stmt: ir.Statement) {
 // Fish uses: set variable value
 emit_fish_assign :: proc(be: ^FishBackend, assign: ir.Assign) {
 	strings.write_string(&be.builder, "set ")
-	strings.write_string(&be.builder, assign.variable)
+	if assign.target != nil {
+		strings.write_string(&be.builder, assign.target.name)
+	}
 	strings.write_byte(&be.builder, ' ')
-	strings.write_string(&be.builder, assign.value)
+	strings.write_string(&be.builder, ir.expr_to_string(assign.value))
 }
 
 // emit_fish_call emits a command call
 emit_fish_call :: proc(be: ^FishBackend, call: ir.Call) {
-	strings.write_string(&be.builder, call.command)
+	if call.function != nil {
+		strings.write_string(&be.builder, call.function.name)
+	}
 
 	if len(call.arguments) > 0 {
 		strings.write_byte(&be.builder, ' ')
@@ -98,7 +102,7 @@ emit_fish_call :: proc(be: ^FishBackend, call: ir.Call) {
 			if idx > 0 {
 				strings.write_byte(&be.builder, ' ')
 			}
-			strings.write_string(&be.builder, call.arguments[idx])
+			strings.write_string(&be.builder, ir.expr_to_string(call.arguments[idx]))
 		}
 	}
 }
@@ -106,9 +110,9 @@ emit_fish_call :: proc(be: ^FishBackend, call: ir.Call) {
 // emit_fish_return emits a return statement
 emit_fish_return :: proc(be: ^FishBackend, ret: ir.Return) {
 	strings.write_string(&be.builder, "return")
-	if ret.value != "" {
+	if ret.value != nil {
 		strings.write_byte(&be.builder, ' ')
-		strings.write_string(&be.builder, ret.value)
+		strings.write_string(&be.builder, ir.expr_to_string(ret.value))
 	}
 }
 
@@ -120,7 +124,7 @@ emit_fish_return :: proc(be: ^FishBackend, ret: ir.Return) {
 // end
 emit_fish_branch :: proc(be: ^FishBackend, branch: ir.Branch) {
 	strings.write_string(&be.builder, "if test ")
-	strings.write_string(&be.builder, branch.condition)
+	strings.write_string(&be.builder, ir.expr_to_string(branch.condition))
 	strings.write_byte(&be.builder, '\n')
 
 	be.indent_level += 1
@@ -153,9 +157,11 @@ emit_fish_loop :: proc(be: ^FishBackend, loop: ir.Loop) {
 		//     body
 		// end
 		strings.write_string(&be.builder, "for ")
-		strings.write_string(&be.builder, loop.variable)
+		if loop.iterator != nil {
+			strings.write_string(&be.builder, loop.iterator.name)
+		}
 		strings.write_string(&be.builder, " in ")
-		strings.write_string(&be.builder, loop.iterable)
+		strings.write_string(&be.builder, ir.expr_to_string(loop.items))
 		strings.write_byte(&be.builder, '\n')
 
 		be.indent_level += 1
@@ -173,7 +179,7 @@ emit_fish_loop :: proc(be: ^FishBackend, loop: ir.Loop) {
 		//     body
 		// end
 		strings.write_string(&be.builder, "while test ")
-		strings.write_string(&be.builder, loop.condition)
+		strings.write_string(&be.builder, ir.expr_to_string(loop.condition))
 		strings.write_byte(&be.builder, '\n')
 
 		be.indent_level += 1

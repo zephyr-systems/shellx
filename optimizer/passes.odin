@@ -165,29 +165,31 @@ dead_code_elimination :: proc(
 	// Scan for function calls
 	for fn in program.functions {
 		for stmt in fn.body {
-			#partial switch s in stmt {
-			case ^ir.Call:
-				if s.function != nil {
-					used_functions[s.function.name] = true
+			if stmt.type == .Call {
+				// Mark function as used if it's being called
+				if stmt.call.function != nil {
+					used_functions[stmt.call.function.name] = true
 				}
 			}
 		}
 	}
 
 	// Remove unused functions
-	new_functions := make([dynamic]^ir.Function, allocator)
+	new_functions := make([dynamic]ir.Function, allocator)
 	for fn in program.functions {
 		if used_functions[fn.name] {
 			append(&new_functions, fn)
 		} else {
 			result.changed = true
-			add_diagnostic(&result, fmt.tprintf("Removed unused function: %s", fn.name))
+			msg := fmt.aprintf("Removed unused function: %s", fn.name, allocator)
+			add_diagnostic(&result, msg)
 		}
 	}
-	program.functions = new_functions[:]
+	delete(program.functions)
+	program.functions = new_functions
 
 	// Remove unreachable statements after return/break/continue
-	for fn in program.functions {
+	for &fn in program.functions {
 		new_body := make([dynamic]ir.Statement, allocator)
 		found_terminal := false
 		removed_count := 0
@@ -202,27 +204,32 @@ dead_code_elimination :: proc(
 			append(&new_body, stmt)
 
 			// Check if this is a terminal statement
-			#partial switch s in stmt {
-			case ^ir.Return:
+			switch stmt.type {
+			case .Return:
 				found_terminal = true
-			case ^ir.Branch:
-				// For branches, check if it's a break/continue
-				if s.condition == nil {
-					// This is likely a break/continue - mark as terminal
+			case .Branch:
+				// For branches, check if it's an unconditional branch (break/continue)
+				if stmt.branch.condition == nil {
 					found_terminal = true
 				}
+			case .Assign, .Call, .Loop, .Pipeline:
+				// Not a terminal statement
 			}
 		}
 
 		if removed_count > 0 {
 			result.changed = true
-			add_diagnostic(
-				&result,
-				fmt.tprintf("Removed %d unreachable statements from %s", removed_count, fn.name),
+			msg := fmt.aprintf(
+				"Removed %d unreachable statements from %s",
+				removed_count,
+				fn.name,
+				allocator,
 			)
+			add_diagnostic(&result, msg)
 		}
 
-		fn.body = new_body[:]
+		delete(fn.body)
+		fn.body = new_body
 	}
 
 	return result
@@ -239,86 +246,65 @@ constant_folding :: proc(program: ^ir.Program, allocator := context.allocator) -
 		return result
 	}
 
-	// Helper to evaluate expressions
-	evaluate_expression :: proc(expr: ir.Expression) -> (value: string, is_constant: bool) {
+	// Helper to check if a value is a constant integer
+	evaluate_expression :: proc(expr: ir.Expression) -> (value: ir.Expression, is_constant: bool) {
+		if expr == nil {
+			return nil, false
+		}
+
 		#partial switch e in expr {
 		case ^ir.Literal:
-			return e.value, true
+			return expr, true
 		case ^ir.BinaryOp:
 			left, left_const := evaluate_expression(e.left)
 			right, right_const := evaluate_expression(e.right)
-			if left_const && right_const {
-				// Try to evaluate arithmetic
-				switch e.op {
-				case .Add:
-					// Try integer addition
-					left_int := 0
-					right_int := 0
-					left_ok := true
-					right_ok := true
-					// Simple integer parsing
-					for i := 0; i < len(left); i += 1 {
-						if left[i] < '0' || left[i] > '9' {
-							left_ok = false
-							break
-						}
-						left_int = left_int * 10 + int(left[i] - '0')
-					}
-					for i := 0; i < len(right); i += 1 {
-						if right[i] < '0' || right[i] > '9' {
-							right_ok = false
-							break
-						}
-						right_int = right_int * 10 + int(right[i] - '0')
-					}
-					if left_ok && right_ok {
-						return fmt.tprintf("%d", left_int + right_int), true
-					}
-					// String concatenation
-					return fmt.tprintf("%s%s", left, right), true
+			if !left_const || !right_const {
+				return expr, false
+			}
+
+			left_lit, left_ok := left.(^ir.Literal)
+			right_lit, right_ok := right.(^ir.Literal)
+			if !left_ok || !right_ok {
+				return expr, false
+			}
+
+			if e.op == .Add && left_lit.type == .Int && right_lit.type == .Int {
+				left_int := 0
+				right_int := 0
+
+				for ch in left_lit.value {
+					left_int = left_int * 10 + int(ch - '0')
 				}
+				for ch in right_lit.value {
+					right_int = right_int * 10 + int(ch - '0')
+				}
+
+				new_literal := new(ir.Literal, context.allocator)
+				new_literal.type = .Int
+				new_literal.value = fmt.tprintf("%d", left_int + right_int)
+				return new_literal, true
 			}
 		}
-		return "", false
+
+		return expr, false
 	}
 
 	// Process each function
-	for fn in program.functions {
-		for stmt, idx in fn.body {
-			#partial switch s in stmt {
-			case ^ir.Assign:
-				// Try to fold the expression
-				folded_value, is_const := evaluate_expression(s.value)
-				if is_const {
-					// Create new literal expression
-					new_literal := new(ir.Literal)
-					new_literal.value = folded_value
-					s.value = new_literal
+	for &fn in program.functions {
+		for &stmt in fn.body {
+			switch stmt.type {
+			case .Assign:
+				folded, is_const := evaluate_expression(stmt.assign.value)
+				if is_const && folded != nil {
+					stmt.assign.value = folded
 					result.changed = true
-					add_diagnostic(
-						&result,
-						fmt.tprintf("Folded constant expression in %s", fn.name),
-					)
 				}
-			case ^ir.Branch:
-				// Try to fold condition
-				if s.condition != nil {
-					#partial switch cond in s.condition {
-					case ^ir.BinaryOp:
-						if cond.op == .Eq || cond.op == .Neq {
-							left, left_const := evaluate_expression(cond.left)
-							right, right_const := evaluate_expression(cond.right)
-							if left_const && right_const {
-								// We can simplify this branch
-								result.changed = true
-								add_diagnostic(
-									&result,
-									fmt.tprintf("Simplified constant conditional in %s", fn.name),
-								)
-							}
-						}
-					}
+			case .Branch:
+				if stmt.branch.condition != nil {
+					_, _ = evaluate_expression(stmt.branch.condition)
 				}
+			case .Call, .Return, .Loop, .Pipeline:
+				// Other statement types
 			}
 		}
 	}
@@ -343,27 +329,39 @@ pipeline_simplification :: proc(
 	// echo x | cat -> echo x (cat just passes through)
 	// echo x | tail -n 1 -> echo x (single line input)
 
-	for fn in program.functions {
-		for stmt, idx in fn.body {
-			#partial switch pipeline in stmt {
-			case ^ir.Pipeline:
+	for &fn in program.functions {
+		for &stmt, idx in fn.body {
+			if stmt.type == .Pipeline {
+				pipeline := &stmt.pipeline
+
 				// Check for simplification patterns
 				if len(pipeline.commands) == 2 {
 					first_cmd := pipeline.commands[0]
 					second_cmd := pipeline.commands[1]
 
 					// Pattern: echo ... | cat -> echo ...
-					if first_cmd.name == "echo" && second_cmd.name == "cat" {
+					first_name := ""
+					second_name := ""
+					if first_cmd.function != nil {
+						first_name = first_cmd.function.name
+					}
+					if second_cmd.function != nil {
+						second_name = second_cmd.function.name
+					}
+					if first_name == "echo" && second_name == "cat" {
 						// Replace pipeline with just the echo command
-						new_call := new(ir.Call)
-						new_call.name = first_cmd.name
-						new_call.arguments = first_cmd.arguments
-						fn.body[idx] = new_call
+						fn.body[idx] = ir.Statement {
+							type     = .Call,
+							call     = first_cmd,
+							location = stmt.location,
+						}
 						result.changed = true
-						add_diagnostic(
-							&result,
-							fmt.tprintf("Simplified 'echo | cat' pipeline in %s", fn.name),
+						msg := fmt.aprintf(
+							"Simplified 'echo | cat' pipeline in %s",
+							fn.name,
+							allocator,
 						)
+						add_diagnostic(&result, msg)
 					}
 				}
 			}
@@ -387,7 +385,7 @@ inline_small_functions :: proc(
 	}
 
 	// Find small functions (single statement, no parameters)
-	small_functions := make(map[string]^ir.Function, allocator)
+	small_functions := make(map[string]ir.Function, allocator)
 	defer delete(small_functions)
 
 	for fn in program.functions {
@@ -402,19 +400,25 @@ inline_small_functions :: proc(
 	}
 
 	// Inline calls to small functions
-	for fn in program.functions {
-		for stmt, idx in fn.body {
-			#partial switch call in stmt {
-			case ^ir.Call:
-				if target, ok := small_functions[call.name]; ok && target != nil {
+	for &fn in program.functions {
+		for &stmt, idx in fn.body {
+			if stmt.type == .Call {
+				call_name := ""
+				if stmt.call.function != nil {
+					call_name = stmt.call.function.name
+				}
+				if target, ok := small_functions[call_name]; ok {
 					// Inline the function body
 					if len(target.body) > 0 {
 						fn.body[idx] = target.body[0]
 						result.changed = true
-						add_diagnostic(
-							&result,
-							fmt.tprintf("Inlined function '%s' in '%s'", call.name, fn.name),
+						msg := fmt.aprintf(
+							"Inlined function '%s' in '%s'",
+							call_name,
+							fn.name,
+							allocator,
 						)
+						add_diagnostic(&result, msg)
 					}
 				}
 			}
@@ -437,46 +441,24 @@ loop_unrolling :: proc(program: ^ir.Program, allocator := context.allocator) -> 
 
 	MAX_UNROLL_COUNT :: 4 // Maximum iterations to unroll
 
-	for fn in program.functions {
-		for stmt, idx in fn.body {
-			#partial switch loop in stmt {
-			case ^ir.Loop:
-				// Check if this is a for loop with constant iteration count
-				if loop.iterator != nil && loop.items != nil {
-					#partial switch items in loop.items {
-					case ^ir.ArrayLiteral:
-						// Check if iteration count is small enough
-						if len(items.elements) <= MAX_UNROLL_COUNT && len(items.elements) > 0 {
-							// Create unrolled statements
-							new_statements := make([dynamic]ir.Statement, allocator)
+	for &fn in program.functions {
+		for &stmt in fn.body {
+			if stmt.type == .Loop {
+				loop := &stmt.loop
 
-							for elem in items.elements {
-								// Create assignment: iterator = element
-								assign := new(ir.Assign)
-								assign.target = loop.iterator
-								assign.value = elem
-								append(&new_statements, assign)
+				// Check if this is a for-in loop with an iterable
+				if loop.kind == .ForIn && loop.items != nil {
+					// Try to determine if the iterable is a constant array
+					// This is simplified - in reality you'd need to parse the iterable
+					// For now, we'll just check if it looks like a simple list
 
-								// Copy loop body
-								for body_stmt in loop.body {
-									append(&new_statements, body_stmt)
-								}
-							}
+					// Example: "1 2 3 4" or similar
+					// In a real implementation, you'd parse this properly
 
-							// Replace loop with unrolled statements
-							// Note: In a real implementation, we'd need to handle
-							// replacing one statement with multiple
-							result.changed = true
-							add_diagnostic(
-								&result,
-								fmt.tprintf(
-									"Unrolled loop with %d iterations in '%s'",
-									len(items.elements),
-									fn.name,
-								),
-							)
-						}
-					}
+					// For now, just mark that we attempted loop unrolling
+					result.changed = false
+					msg := fmt.aprintf("Analyzed loop in '%s' for unrolling", fn.name, allocator)
+					add_diagnostic(&result, msg)
 				}
 			}
 		}

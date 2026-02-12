@@ -150,3 +150,30 @@ node_text :: proc(allocator: mem.Allocator, node: ts.Node, source: string) -> st
 	}
 	return ""
 }
+
+text_to_expression :: proc(arena: ^ir.Arena_IR, text: string) -> ir.Expression {
+	if text == "" {
+		return nil
+	}
+
+	if text[0] == '$' && len(text) > 1 {
+		return ir.new_variable_expr(arena, text[1:])
+	}
+
+	is_integer := true
+	for i in 0 ..< len(text) {
+		if text[i] < '0' || text[i] > '9' {
+			is_integer = false
+			break
+		}
+	}
+	if is_integer {
+		return ir.new_literal_expr(arena, text, .Int)
+	}
+
+	if text == "true" || text == "false" {
+		return ir.new_literal_expr(arena, text, .Bool)
+	}
+
+	return ir.new_literal_expr(arena, text, .String)
+}
