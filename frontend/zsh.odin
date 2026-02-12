@@ -45,6 +45,10 @@ convert_zsh_node :: proc(
 	case "variable_assignment":
 		convert_zsh_assignment(arena, program, node, source)
 		return
+	case "case_statement":
+		stmt := convert_zsh_case_to_statement(arena, node, source)
+		ir.add_statement(program, stmt)
+		return
 	case "list":
 		stmt, ok := convert_zsh_list_to_logical_statement(arena, node, source)
 		if ok {
@@ -154,6 +158,9 @@ convert_zsh_statement :: proc(
 		append(body, stmt)
 	case "variable_assignment":
 		stmt := convert_zsh_assignment_to_statement(arena, node, source)
+		append(body, stmt)
+	case "case_statement":
+		stmt := convert_zsh_case_to_statement(arena, node, source)
 		append(body, stmt)
 	case "if_statement":
 		stmt := convert_zsh_if_to_statement(arena, node, source)
@@ -332,6 +339,88 @@ zsh_declaration_has_assignment :: proc(node: ts.Node) -> bool {
 		}
 	}
 	return false
+}
+
+split_case_patterns :: proc(pattern_text: string, allocator := context.temp_allocator) -> [dynamic]string {
+	patterns := make([dynamic]string, allocator)
+	for p in strings.split(pattern_text, "|") {
+		trimmed := strings.trim_space(p)
+		if trimmed != "" {
+			append(&patterns, trimmed)
+		}
+	}
+	return patterns
+}
+
+convert_zsh_case_to_statement :: proc(
+	arena: ^ir.Arena_IR,
+	node: ts.Node,
+	source: string,
+) -> ir.Statement {
+	location := node_location(node, source)
+	case_value := ir.Expression(nil)
+	arms := make([dynamic]ir.CaseArm, 0, 2, mem.arena_allocator(&arena.arena))
+
+	for i in 0 ..< child_count(node) {
+		child_node := child(node, i)
+		if !is_named(child_node) {
+			continue
+		}
+
+		child_type := node_type(child_node)
+		if child_type == "case_item" {
+			arm_location := node_location(child_node, source)
+			patterns := make([dynamic]string, 0, 2, mem.arena_allocator(&arena.arena))
+			arm_body := make([dynamic]ir.Statement, 0, 2, mem.arena_allocator(&arena.arena))
+
+			pattern_set := false
+			for j in 0 ..< child_count(child_node) {
+				item_child := child(child_node, j)
+				if !is_named(item_child) {
+					continue
+				}
+
+				item_type := node_type(item_child)
+				if !pattern_set && (item_type == "word" || item_type == "string" || item_type == "raw_string" || item_type == "concatenation") {
+					parts := split_case_patterns(intern_node_text(arena, item_child, source))
+					defer delete(parts)
+					for part in parts {
+						append(&patterns, ir.intern_string(arena, part))
+					}
+					pattern_set = true
+					continue
+				}
+
+				convert_zsh_statement(arena, &arm_body, item_child, source)
+			}
+
+			if len(patterns) == 0 {
+				append(&patterns, "*")
+			}
+
+			append(&arms, ir.CaseArm{
+				patterns = patterns,
+				body = arm_body,
+				location = arm_location,
+			})
+		} else if case_value == nil {
+			case_value = text_to_expression(
+				arena,
+				strings.trim_space(intern_node_text(arena, child_node, source)),
+			)
+		}
+	}
+
+	if case_value == nil {
+		case_value = ir.new_literal_expr(arena, "\"\"", .String)
+	}
+
+	case_stmt := ir.CaseStatement{
+		value = case_value,
+		arms = arms,
+		location = location,
+	}
+	return ir.Statement{type = .Case, case_ = case_stmt, location = location}
 }
 
 append_zsh_raw_statements :: proc(

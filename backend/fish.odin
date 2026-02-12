@@ -70,6 +70,8 @@ emit_fish_statement :: proc(be: ^FishBackend, stmt: ir.Statement) {
 		emit_fish_call(be, stmt.call)
 	case .Logical:
 		emit_fish_logical(be, stmt.logical)
+	case .Case:
+		emit_fish_case_statement(be, stmt.case_)
 	case .Return:
 		emit_fish_return(be, stmt.return_)
 	case .Branch:
@@ -96,6 +98,35 @@ emit_fish_logical :: proc(be: ^FishBackend, logical: ir.LogicalChain) {
 		}
 		emit_fish_call(be, segment.call)
 	}
+}
+
+emit_fish_case_statement :: proc(be: ^FishBackend, case_stmt: ir.CaseStatement) {
+	strings.write_string(&be.builder, "switch ")
+	strings.write_string(&be.builder, ir.expr_to_string(case_stmt.value))
+	strings.write_byte(&be.builder, '\n')
+
+	be.indent_level += 1
+	for arm in case_stmt.arms {
+		write_fish_indent(be)
+		strings.write_string(&be.builder, "case ")
+		for idx in 0 ..< len(arm.patterns) {
+			if idx > 0 {
+				strings.write_byte(&be.builder, ' ')
+			}
+			strings.write_string(&be.builder, arm.patterns[idx])
+		}
+		strings.write_byte(&be.builder, '\n')
+
+		be.indent_level += 1
+		for stmt in arm.body {
+			emit_fish_statement(be, stmt)
+			strings.write_byte(&be.builder, '\n')
+		}
+		be.indent_level -= 1
+	}
+	be.indent_level -= 1
+	write_fish_indent(be)
+	strings.write_string(&be.builder, "end")
 }
 
 // emit_fish_assign emits a variable assignment

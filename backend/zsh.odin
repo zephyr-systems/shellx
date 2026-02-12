@@ -68,6 +68,8 @@ emit_zsh_statement :: proc(be: ^ZshBackend, stmt: ir.Statement) {
 		emit_zsh_call(be, stmt.call)
 	case .Logical:
 		emit_zsh_logical(be, stmt.logical)
+	case .Case:
+		emit_zsh_case_statement(be, stmt.case_)
 	case .Return:
 		emit_zsh_return(be, stmt.return_)
 	case .Branch:
@@ -94,6 +96,37 @@ emit_zsh_logical :: proc(be: ^ZshBackend, logical: ir.LogicalChain) {
 		}
 		emit_zsh_call(be, segment.call)
 	}
+}
+
+emit_zsh_case_statement :: proc(be: ^ZshBackend, case_stmt: ir.CaseStatement) {
+	strings.write_string(&be.builder, "case ")
+	strings.write_string(&be.builder, ir.expr_to_string(case_stmt.value))
+	strings.write_string(&be.builder, " in\n")
+
+	be.indent_level += 1
+	for arm in case_stmt.arms {
+		write_zsh_indent(be)
+		for idx in 0 ..< len(arm.patterns) {
+			if idx > 0 {
+				strings.write_byte(&be.builder, '|')
+			}
+			strings.write_string(&be.builder, arm.patterns[idx])
+		}
+		strings.write_string(&be.builder, ")\n")
+
+		be.indent_level += 1
+		for stmt in arm.body {
+			emit_zsh_statement(be, stmt)
+			strings.write_byte(&be.builder, '\n')
+		}
+		be.indent_level -= 1
+
+		write_zsh_indent(be)
+		strings.write_string(&be.builder, ";;\n")
+	}
+	be.indent_level -= 1
+	write_zsh_indent(be)
+	strings.write_string(&be.builder, "esac")
 }
 
 // emit_zsh_assign emits a variable assignment

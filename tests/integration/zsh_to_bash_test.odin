@@ -67,3 +67,15 @@ test_zsh_to_bash_logical_chain :: proc(t: ^testing.T) {
 	testing.expect(t, strings.contains(result, "||"), "Should preserve OR operator")
 	testing.expect(t, strings.contains(result, "! bar"), "Should preserve negation")
 }
+
+@(test)
+test_zsh_to_bash_case_statement :: proc(t: ^testing.T) {
+	if !should_run_test("test_zsh_to_bash_case_statement") { return }
+	zsh_code := "case \"$x\" in foo|bar) echo ok ;; baz) echo no ;; esac"
+	result := translate_code(zsh_code, .Zsh, .Bash)
+	defer delete(result)
+
+	testing.expect(t, strings.contains(result, "case "), "Should emit case")
+	testing.expect(t, strings.contains(result, "foo|bar)"), "Should preserve first case pattern")
+	testing.expect(t, strings.contains(result, "esac"), "Should emit esac")
+}

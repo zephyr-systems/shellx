@@ -212,6 +212,8 @@ emit_statement :: proc(b: ^Backend, stmt: ir.Statement) {
 		emit_call(b, stmt.call)
 	case .Logical:
 		emit_logical(b, stmt.logical)
+	case .Case:
+		emit_case_statement(b, stmt.case_)
 	case .Return:
 		emit_return(b, stmt.return_)
 	case .Branch:
@@ -238,6 +240,38 @@ emit_logical :: proc(b: ^Backend, logical: ir.LogicalChain) {
 		}
 		emit_call(b, segment.call)
 	}
+}
+
+emit_case_statement :: proc(b: ^Backend, case_stmt: ir.CaseStatement) {
+	strings.write_string(&b.builder, "case ")
+	emit_expression(b, case_stmt.value)
+	strings.write_string(&b.builder, " in\n")
+
+	b.indent_level += 1
+	for arm in case_stmt.arms {
+		write_indent(b)
+		for idx in 0 ..< len(arm.patterns) {
+			if idx > 0 {
+				strings.write_byte(&b.builder, '|')
+			}
+			strings.write_string(&b.builder, arm.patterns[idx])
+		}
+		strings.write_string(&b.builder, ")\n")
+
+		b.indent_level += 1
+		for stmt in arm.body {
+			emit_statement(b, stmt)
+			strings.write_byte(&b.builder, '\n')
+		}
+		b.indent_level -= 1
+
+		write_indent(b)
+		strings.write_string(&b.builder, ";;\n")
+	}
+	b.indent_level -= 1
+
+	write_indent(b)
+	strings.write_string(&b.builder, "esac")
 }
 
 emit_assign :: proc(b: ^Backend, assign: ir.Assign) {

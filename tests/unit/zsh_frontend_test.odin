@@ -214,6 +214,37 @@ test_zsh_logical_negation :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_zsh_case_statement :: proc(t: ^testing.T) {
+	if !should_run_test("test_zsh_case_statement") { return }
+	code := "case \"$x\" in foo|bar) echo ok ;; baz) echo no ;; esac"
+	arena := ir.create_arena(4096)
+	defer ir.destroy_arena(&arena)
+
+	fe := frontend.create_frontend(.Zsh)
+	defer frontend.destroy_frontend(&fe)
+
+	tree, parse_err := frontend.parse(&fe, code)
+	testing.expect(t, parse_err.error == .None, "Should parse successfully")
+	if parse_err.error != .None {
+		return
+	}
+	defer frontend.destroy_tree(tree)
+
+	program, conv_err := frontend.zsh_to_ir(&arena, tree, code)
+	testing.expect(t, conv_err.error == .None, "Should convert to IR")
+	testing.expect(t, len(program.statements) == 1, "Should emit one case statement")
+	if len(program.statements) != 1 {
+		return
+	}
+
+	stmt := program.statements[0]
+	testing.expect(t, stmt.type == .Case, "Should convert to Case statement")
+	if stmt.type == .Case {
+		testing.expect(t, len(stmt.case_.arms) == 2, "Should produce two case arms")
+	}
+}
+
+@(test)
 test_zsh_function :: proc(t: ^testing.T) {
 	if !should_run_test("test_zsh_function") { return }
 	code := "function hello() {\n\techo \"Hello\"\n}"

@@ -381,6 +381,14 @@ propagate_program_file :: proc(program: ^ir.Program, file: string) {
 			for &segment in stmt.logical.segments {
 				set_location_file_if_empty(&segment.call.location, file)
 			}
+		case .Case:
+			set_location_file_if_empty(&stmt.case_.location, file)
+			for &arm in stmt.case_.arms {
+				set_location_file_if_empty(&arm.location, file)
+				for &nested in arm.body {
+					walk_statement(&nested, file)
+				}
+			}
 		case .Return:
 			set_location_file_if_empty(&stmt.return_.location, file)
 		case .Branch:

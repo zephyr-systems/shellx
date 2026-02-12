@@ -224,7 +224,7 @@ dead_code_elimination :: proc(
 				if stmt.branch.condition == nil {
 					found_terminal = true
 				}
-			case .Assign, .Call, .Logical, .Loop, .Pipeline:
+			case .Assign, .Call, .Logical, .Case, .Loop, .Pipeline:
 				// Not a terminal statement
 			}
 		}
@@ -357,7 +357,7 @@ constant_folding :: proc(program: ^ir.Program, allocator := context.allocator) -
 				if stmt.branch.condition != nil {
 					_, _ = evaluate_expression(stmt.branch.condition, allocator)
 				}
-			case .Call, .Logical, .Return, .Loop, .Pipeline:
+			case .Call, .Logical, .Case, .Return, .Loop, .Pipeline:
 				// Other statement types
 			}
 		}

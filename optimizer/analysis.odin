@@ -140,6 +140,13 @@ collect_stmt_counts :: proc(stmt: ir.Statement, counts: ^map[ExprKey]int) {
 				collect_expr_counts(arg, counts)
 			}
 		}
+	case .Case:
+		collect_expr_counts(stmt.case_.value, counts)
+		for arm in stmt.case_.arms {
+			for nested in arm.body {
+				collect_stmt_counts(nested, counts)
+			}
+		}
 	case .Return:
 		collect_expr_counts(stmt.return_.value, counts)
 	case .Branch:
@@ -387,6 +394,25 @@ cse_block :: proc(body: ^[dynamic]ir.Statement, allocator := context.allocator) 
 						stmt.logical.segments[seg_idx].call.arguments[arg_idx] = repl
 						changed = true
 					}
+				}
+			}
+		case .Case:
+			value_repl, value_changed := replace_common_expr(
+				stmt.case_.value,
+				common,
+				&names,
+				&extracted,
+				&insert_before,
+				stmt.location,
+				allocator,
+			)
+			if value_changed {
+				stmt.case_.value = value_repl
+				changed = true
+			}
+			for &arm in stmt.case_.arms {
+				if cse_block(&arm.body, allocator) {
+					changed = true
 				}
 			}
 		case .Branch:

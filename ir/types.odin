@@ -97,6 +97,7 @@ StatementType :: enum {
 	Assign,
 	Call,
 	Logical,
+	Case,
 	Return,
 	Branch,
 	Loop,
@@ -129,6 +130,18 @@ LogicalChain :: struct {
 	segments:  [dynamic]LogicalSegment,
 	operators: [dynamic]LogicalOperator,
 	location:  SourceLocation,
+}
+
+CaseArm :: struct {
+	patterns: [dynamic]string,
+	body:     [dynamic]Statement,
+	location: SourceLocation,
+}
+
+CaseStatement :: struct {
+	value:    Expression,
+	arms:     [dynamic]CaseArm,
+	location: SourceLocation,
 }
 
 Return :: struct {
@@ -169,6 +182,7 @@ Statement :: struct {
 	assign:    Assign,
 	call:      Call,
 	logical:   LogicalChain,
+	case_:     CaseStatement,
 	return_:   Return,
 	branch:    Branch,
 	loop:      Loop,
