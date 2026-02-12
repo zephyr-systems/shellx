@@ -44,6 +44,9 @@ convert_zsh_node :: proc(
 	case "variable_assignment":
 		convert_zsh_assignment(arena, program, node, source)
 		return
+	case "ERROR":
+		append_zsh_error_statements(arena, &program.statements, node, source)
+		return
 	}
 
 	// For other node types, process children
@@ -312,8 +315,15 @@ convert_zsh_command_to_statement :: proc(
 	// Fallback: treat the first argument as command name when parser omits command_name.
 	if cmd_name == "" && len(arguments) > 0 {
 		cmd_name = ir.expr_to_string(arguments[0])
-		delete(arguments[0])
-		arguments = arguments[1:]
+		if len(arguments) > 1 {
+			remaining := make([dynamic]ir.Expression, 0, len(arguments)-1, mem.arena_allocator(&arena.arena))
+			for i in 1 ..< len(arguments) {
+				append(&remaining, arguments[i])
+			}
+			arguments = remaining
+		} else {
+			clear(&arguments)
+		}
 	}
 	if cmd_name == "" {
 		cmd_name = ":"
