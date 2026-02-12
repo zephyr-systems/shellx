@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:mem"
 import "core:strings"
 import "core:testing"
+import "frontend"
 import "ir"
 import "optimizer"
 
@@ -209,4 +210,54 @@ test_multiple_parse_errors_collected :: proc(t: ^testing.T) {
 		parse_error_count >= 1,
 		"At least one parse syntax error should be collected",
 	)
+}
+
+@(test)
+test_ir_string_interning :: proc(t: ^testing.T) {
+	if !should_run_test("test_ir_string_interning") { return }
+	arena := ir.create_arena(1024 * 16)
+	defer ir.destroy_arena(&arena)
+
+	a := strings.clone("var_x", context.temp_allocator)
+	b := strings.clone("var_x", context.temp_allocator)
+	i1 := ir.intern_string(&arena, a)
+	i2 := ir.intern_string(&arena, b)
+
+	testing.expect(t, raw_data(i1) == raw_data(i2), "Interned strings should share storage")
+}
+
+@(test)
+test_frontend_uses_interned_variable_names :: proc(t: ^testing.T) {
+	if !should_run_test("test_frontend_uses_interned_variable_names") { return }
+
+	code := "x=1\nx=2"
+	arena := ir.create_arena(1024 * 32)
+	defer ir.destroy_arena(&arena)
+
+	fe := frontend.create_frontend(.Bash)
+	defer frontend.destroy_frontend(&fe)
+
+	tree, parse_err := frontend.parse(&fe, code)
+	testing.expect(t, parse_err.error == .None, "Parsing should succeed")
+	if parse_err.error != .None {
+		return
+	}
+	defer frontend.destroy_tree(tree)
+
+	program, conv_err := frontend.bash_to_ir(&arena, tree, code)
+	testing.expect(t, conv_err.error == .None, "Conversion should succeed")
+	if conv_err.error != .None || len(program.statements) < 2 {
+		return
+	}
+
+	first := program.statements[0].assign.target
+	second := program.statements[1].assign.target
+	testing.expect(t, first != nil && second != nil, "Assignments should have targets")
+	if first != nil && second != nil {
+		testing.expect(
+			t,
+			raw_data(first.name) == raw_data(second.name),
+			"Repeated variable names should reuse interned string storage",
+		)
+	}
 }

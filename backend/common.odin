@@ -226,7 +226,7 @@ emit_assign :: proc(b: ^Backend, assign: ir.Assign) {
 		strings.write_string(&b.builder, assign.target.name)
 	}
 	strings.write_byte(&b.builder, '=')
-	strings.write_string(&b.builder, ir.expr_to_string(assign.value))
+	emit_expression(b, assign.value)
 }
 
 emit_call :: proc(b: ^Backend, call: ir.Call) {
@@ -240,7 +240,7 @@ emit_call :: proc(b: ^Backend, call: ir.Call) {
 			if idx > 0 {
 				strings.write_byte(&b.builder, ' ')
 			}
-			strings.write_string(&b.builder, ir.expr_to_string(call.arguments[idx]))
+			emit_expression(b, call.arguments[idx])
 		}
 	}
 }
@@ -249,13 +249,13 @@ emit_return :: proc(b: ^Backend, ret: ir.Return) {
 	strings.write_string(&b.builder, "return")
 	if ret.value != nil {
 		strings.write_byte(&b.builder, ' ')
-		strings.write_string(&b.builder, ir.expr_to_string(ret.value))
+		emit_expression(b, ret.value)
 	}
 }
 
 emit_branch :: proc(b: ^Backend, branch: ir.Branch) {
 	strings.write_string(&b.builder, "if ")
-	strings.write_string(&b.builder, ir.expr_to_string(branch.condition))
+	emit_expression(b, branch.condition)
 	strings.write_string(&b.builder, "; then\n")
 
 	b.indent_level += 1
@@ -277,22 +277,22 @@ emit_loop :: proc(b: ^Backend, loop: ir.Loop) {
 			strings.write_string(&b.builder, loop.iterator.name)
 		}
 		strings.write_string(&b.builder, " in ")
-		strings.write_string(&b.builder, ir.expr_to_string(loop.items))
+		emit_expression(b, loop.items)
 		strings.write_string(&b.builder, "; do\n")
 
 	case .ForC:
 		strings.write_string(&b.builder, "for (( ")
-		strings.write_string(&b.builder, ir.expr_to_string(loop.condition))
+		emit_expression(b, loop.condition)
 		strings.write_string(&b.builder, " )); do\n")
 
 	case .While:
 		strings.write_string(&b.builder, "while ")
-		strings.write_string(&b.builder, ir.expr_to_string(loop.condition))
+		emit_expression(b, loop.condition)
 		strings.write_string(&b.builder, "; do\n")
 
 	case .Until:
 		strings.write_string(&b.builder, "until ")
-		strings.write_string(&b.builder, ir.expr_to_string(loop.condition))
+		emit_expression(b, loop.condition)
 		strings.write_string(&b.builder, "; do\n")
 	}
 
@@ -313,5 +313,61 @@ emit_pipeline :: proc(b: ^Backend, pipeline: ir.Pipeline) {
 			strings.write_string(&b.builder, " | ")
 		}
 		emit_call(b, pipeline.commands[idx])
+	}
+}
+
+emit_expression :: proc(b: ^Backend, expr: ir.Expression) {
+	if expr == nil {
+		return
+	}
+
+	#partial switch e in expr {
+	case ^ir.Literal:
+		strings.write_string(&b.builder, e.value)
+	case ^ir.Variable:
+		strings.write_string(&b.builder, e.name)
+	case ^ir.RawExpression:
+		strings.write_string(&b.builder, e.text)
+	case ^ir.UnaryOp:
+		if e.op == .Not {
+			strings.write_byte(&b.builder, '!')
+		} else {
+			strings.write_byte(&b.builder, '-')
+		}
+		emit_expression(b, e.operand)
+	case ^ir.BinaryOp:
+		emit_expression(b, e.left)
+		strings.write_byte(&b.builder, ' ')
+		switch e.op {
+		case .Add:
+			strings.write_byte(&b.builder, '+')
+		case .Sub:
+			strings.write_byte(&b.builder, '-')
+		case .Mul:
+			strings.write_byte(&b.builder, '*')
+		case .Div:
+			strings.write_byte(&b.builder, '/')
+		case .Eq:
+			strings.write_string(&b.builder, "==")
+		case .Neq:
+			strings.write_string(&b.builder, "!=")
+		}
+		strings.write_byte(&b.builder, ' ')
+		emit_expression(b, e.right)
+	case ^ir.CallExpr:
+		if e.function != nil {
+			strings.write_string(&b.builder, e.function.name)
+		}
+		for arg in e.arguments {
+			strings.write_byte(&b.builder, ' ')
+			emit_expression(b, arg)
+		}
+	case ^ir.ArrayLiteral:
+		for elem, idx in e.elements {
+			if idx > 0 {
+				strings.write_byte(&b.builder, ' ')
+			}
+			emit_expression(b, elem)
+		}
 	}
 }

@@ -5,13 +5,13 @@ import "core:mem"
 
 new_variable :: proc(arena: ^Arena_IR, name: string) -> ^Variable {
 	variable := new(Variable, mem.arena_allocator(&arena.arena))
-	variable.name = name
+	variable.name = intern_string(arena, name)
 	return variable
 }
 
 new_literal_expr :: proc(arena: ^Arena_IR, value: string, literal_type: LiteralType) -> Expression {
 	lit := new(Literal, mem.arena_allocator(&arena.arena))
-	lit.value = value
+	lit.value = intern_string(arena, value)
 	lit.type = literal_type
 	return lit
 }
@@ -22,7 +22,7 @@ new_variable_expr :: proc(arena: ^Arena_IR, name: string) -> Expression {
 
 new_raw_expr :: proc(arena: ^Arena_IR, text: string) -> Expression {
 	raw := new(RawExpression, mem.arena_allocator(&arena.arena))
-	raw.text = text
+	raw.text = intern_string(arena, text)
 	return raw
 }
 

@@ -214,28 +214,33 @@ node_text :: proc(allocator: mem.Allocator, node: ts.Node, source: string) -> st
 }
 
 text_to_expression :: proc(arena: ^ir.Arena_IR, text: string) -> ir.Expression {
-	if text == "" {
+	interned := ir.intern_string(arena, text)
+	if interned == "" {
 		return nil
 	}
 
-	if text[0] == '$' && len(text) > 1 {
-		return ir.new_variable_expr(arena, text[1:])
+	if interned[0] == '$' && len(interned) > 1 {
+		return ir.new_variable_expr(arena, interned[1:])
 	}
 
 	is_integer := true
-	for i in 0 ..< len(text) {
-		if text[i] < '0' || text[i] > '9' {
+	for i in 0 ..< len(interned) {
+		if interned[i] < '0' || interned[i] > '9' {
 			is_integer = false
 			break
 		}
 	}
 	if is_integer {
-		return ir.new_literal_expr(arena, text, .Int)
+		return ir.new_literal_expr(arena, interned, .Int)
 	}
 
-	if text == "true" || text == "false" {
-		return ir.new_literal_expr(arena, text, .Bool)
+	if interned == "true" || interned == "false" {
+		return ir.new_literal_expr(arena, interned, .Bool)
 	}
 
-	return ir.new_literal_expr(arena, text, .String)
+	return ir.new_literal_expr(arena, interned, .String)
+}
+
+intern_node_text :: proc(arena: ^ir.Arena_IR, node: ts.Node, source: string) -> string {
+	return ir.intern_string(arena, node_text(mem.arena_allocator(&arena.arena), node, source))
 }

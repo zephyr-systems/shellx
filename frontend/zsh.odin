@@ -2,7 +2,6 @@ package frontend
 
 import ts "../bindings/tree_sitter"
 import "../ir"
-import "core:fmt"
 import "core:mem"
 import "core:strings"
 
@@ -82,7 +81,7 @@ convert_zsh_function :: proc(
 		child_type := node_type(child)
 
 		if child_type == "word" && func_name == "" {
-			func_name = node_text(mem.arena_allocator(&arena.arena), child, source)
+			func_name = intern_node_text(arena, child, source)
 		}
 	}
 
@@ -187,7 +186,7 @@ convert_zsh_typeset_to_statement :: proc(
 		child_type := node_type(child)
 
 		if child_type == "word" {
-			text := node_text(mem.arena_allocator(&arena.arena), child, source)
+			text := intern_node_text(arena, child, source)
 			// Skip flags like -i, -r, -x
 			if strings.has_prefix(text, "-") {
 				continue
@@ -247,7 +246,7 @@ convert_zsh_command_to_statement :: proc(
 				}
 			}
 		} else if child_type == "string" || child_type == "word" {
-			arg_text := node_text(mem.arena_allocator(&arena.arena), child, source)
+			arg_text := intern_node_text(arena, child, source)
 			append(&arguments, text_to_expression(arena, arg_text))
 		}
 	}
@@ -285,11 +284,11 @@ convert_zsh_assignment_to_statement :: proc(
 		child_type := node_type(child)
 
 		if child_type == "variable_name" {
-			variable_name = node_text(mem.arena_allocator(&arena.arena), child, source)
+			variable_name = intern_node_text(arena, child, source)
 		} else if child_type == "word" || child_type == "number" {
 			value = text_to_expression(
 				arena,
-				node_text(mem.arena_allocator(&arena.arena), child, source),
+				intern_node_text(arena, child, source),
 			)
 		}
 	}
@@ -344,7 +343,7 @@ extract_zsh_condition :: proc(arena: ^ir.Arena_IR, node: ts.Node, source: string
 	for i in 0 ..< child_count(node) {
 		child := child(node, i)
 		if is_named(child) {
-			text := node_text(mem.arena_allocator(&arena.arena), child, source)
+			text := intern_node_text(arena, child, source)
 			if strings.builder_len(result) > 0 {
 				strings.write_byte(&result, ' ')
 			}
@@ -370,10 +369,10 @@ convert_zsh_for_to_statement :: proc(
 		child_type := node_type(child)
 
 		if child_type == "variable_name" {
-			variable_name = node_text(mem.arena_allocator(&arena.arena), child, source)
+			variable_name = intern_node_text(arena, child, source)
 		} else if child_type == "word" {
 			if iterable_text == "" {
-				iterable_text = node_text(mem.arena_allocator(&arena.arena), child, source)
+				iterable_text = intern_node_text(arena, child, source)
 			}
 		} else if child_type == "body" || child_type == "c_style_consequence" {
 			convert_zsh_body(arena, &body, child, source)
@@ -434,7 +433,7 @@ convert_zsh_return_to_statement :: proc(
 		if node_type(child) == "word" {
 			value = text_to_expression(
 				arena,
-				node_text(mem.arena_allocator(&arena.arena), child, source),
+				intern_node_text(arena, child, source),
 			)
 			break
 		}
@@ -475,13 +474,13 @@ convert_zsh_array_to_statement :: proc(
 		child_type := node_type(child)
 
 		if child_type == "variable_name" {
-			array_name = node_text(mem.arena_allocator(&arena.arena), child, source)
+			array_name = intern_node_text(arena, child, source)
 		} else if child_type == "array" || child_type == "compound_statement" {
 			// Extract array elements
 			for j in 0 ..< child_count(child) {
 				elem_node := ts.ts_node_child(child, u32(j))
 				if node_type(elem_node) == "word" || node_type(elem_node) == "string" {
-					elem_text := node_text(mem.arena_allocator(&arena.arena), elem_node, source)
+					elem_text := intern_node_text(arena, elem_node, source)
 					append(&values, text_to_expression(arena, elem_text))
 				}
 			}

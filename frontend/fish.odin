@@ -78,7 +78,7 @@ convert_fish_function :: proc(
 		child_type := node_type(child)
 
 		if child_type == "word" && func_name == "" {
-			func_name = node_text(mem.arena_allocator(&arena.arena), child, source)
+			func_name = intern_node_text(arena, child, source)
 		}
 	}
 
@@ -180,7 +180,7 @@ convert_fish_set_to_statement :: proc(
 		child_type := node_type(child)
 
 		if child_type == "word" {
-			text := node_text(mem.arena_allocator(&arena.arena), child, source)
+			text := intern_node_text(arena, child, source)
 			// Skip 'set' command itself
 			if text == "set" {
 				continue
@@ -244,7 +244,7 @@ convert_fish_command_to_statement :: proc(
 				}
 			}
 		} else if child_type == "string" || child_type == "word" {
-			arg_text := node_text(mem.arena_allocator(&arena.arena), child, source)
+			arg_text := intern_node_text(arena, child, source)
 			append(&arguments, text_to_expression(arena, arg_text))
 		}
 	}
@@ -298,7 +298,7 @@ extract_fish_condition :: proc(arena: ^ir.Arena_IR, node: ts.Node, source: strin
 	for i in 0 ..< child_count(node) {
 		child := child(node, i)
 		if is_named(child) {
-			text := node_text(mem.arena_allocator(&arena.arena), child, source)
+			text := intern_node_text(arena, child, source)
 			if strings.builder_len(result) > 0 {
 				strings.write_byte(&result, ' ')
 			}
@@ -324,10 +324,10 @@ convert_fish_for_to_statement :: proc(
 		child_type := node_type(child)
 
 		if child_type == "variable_name" {
-			variable_name = node_text(mem.arena_allocator(&arena.arena), child, source)
+			variable_name = intern_node_text(arena, child, source)
 		} else if child_type == "word" {
 			if iterable_text == "" {
-				iterable_text = node_text(mem.arena_allocator(&arena.arena), child, source)
+				iterable_text = intern_node_text(arena, child, source)
 			}
 		} else if child_type == "body" {
 			convert_fish_body(arena, &body, child, source)
@@ -388,7 +388,7 @@ convert_fish_return_to_statement :: proc(
 		if node_type(child) == "word" {
 			value = text_to_expression(
 				arena,
-				node_text(mem.arena_allocator(&arena.arena), child, source),
+				intern_node_text(arena, child, source),
 			)
 			break
 		}

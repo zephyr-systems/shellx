@@ -177,4 +177,5 @@ ValidatorErrorType :: enum {
 Arena_IR :: struct {
 	arena: mem.Arena, // Contains the mem.Arena directly
 	backing_buffer: []byte, // Manage the backing buffer directly
+	string_intern: map[string]string,
 }
