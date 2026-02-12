@@ -320,6 +320,24 @@ test_translate_zsh_parameter_expansion_rewrite_nested :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_rewrite_zsh_parameter_expansion_advanced_tokens :: proc(t: ^testing.T) {
+	if !should_run_test("test_rewrite_zsh_parameter_expansion_advanced_tokens") { return }
+
+	input := "x=${(@On)descending_list}; y=${(@on)output}; z=${(@Pk)1}; q=${~q:l}"
+	output, changed := rewrite_zsh_parameter_expansion_for_bash(input)
+	defer delete(output)
+
+	testing.expect(t, changed, "Advanced zsh parameter tokens should be rewritten for bash")
+	testing.expect(t, strings.contains(output, "${descending_list[@]}"), "Should rewrite (@On) array modifier")
+	testing.expect(t, strings.contains(output, "${output[@]}"), "Should rewrite (@on) array modifier")
+	testing.expect(t, strings.contains(output, "$(eval"), "Should rewrite (@Pk) indirect keys via bash eval expansion")
+	testing.expect(t, strings.contains(output, "${q,,}"), "Should rewrite ${~q:l} to bash lowercase expansion")
+	testing.expect(t, !strings.contains(output, "(@On)"), "Should not leave (@On) token in output")
+	testing.expect(t, !strings.contains(output, "(@Pk)"), "Should not leave (@Pk) token in output")
+	testing.expect(t, !strings.contains(output, "${~"), "Should not leave zsh ${~...} glob-interpretation token in output")
+}
+
+@(test)
 test_translate_file_and_batch_api :: proc(t: ^testing.T) {
 	if !should_run_test("test_translate_file_and_batch_api") { return }
 

@@ -907,6 +907,15 @@ rewrite_zsh_modifier_parameter_tokens :: proc(inner: string, allocator := contex
 		if i+4 <= len(inner) && inner[i:i+4] == "(@k)" {
 			token_len = 4
 			mode = "keys"
+		} else if i+5 <= len(inner) && inner[i:i+5] == "(@Pk)" {
+			token_len = 5
+			mode = "indirect_keys"
+		} else if i+5 <= len(inner) && inner[i:i+5] == "(@On)" {
+			token_len = 5
+			mode = "array_sorted_desc"
+		} else if i+5 <= len(inner) && inner[i:i+5] == "(@on)" {
+			token_len = 5
+			mode = "array_sorted_asc"
 		} else if i+3 <= len(inner) && inner[i:i+3] == "(@)" {
 			token_len = 3
 			mode = "array"
@@ -925,6 +934,33 @@ rewrite_zsh_modifier_parameter_tokens :: proc(inner: string, allocator := contex
 				switch mode {
 				case "keys":
 					strings.write_string(&builder, fmt.tprintf("!%s[@]", name))
+				case "indirect_keys":
+					var_ref := ""
+					is_digits := true
+					for ch in name {
+						if ch < '0' || ch > '9' {
+							is_digits = false
+							break
+						}
+					}
+					if is_digits {
+						if len(name) == 1 {
+							var_ref = fmt.tprintf("$%s", name)
+						} else {
+							var_ref = fmt.tprintf("${%s}", name)
+						}
+					} else {
+						var_ref = fmt.tprintf("$%s", name)
+					}
+					raw_expr := fmt.tprintf("$(eval \"printf '%%s\\n' \\\"\\${!%s[@]}\\\"\")", var_ref)
+					if i == 0 && j == len(inner) {
+						return strings.clone(fmt.tprintf("__SHELLX_RAW__%s", raw_expr), allocator), true
+					}
+					strings.write_string(&builder, raw_expr)
+				case "array_sorted_desc", "array_sorted_asc":
+					// Preserve element expansion even when zsh sorting modifiers are unavailable.
+					// This keeps script behavior functionally usable instead of emitting zsh-only syntax.
+					strings.write_string(&builder, fmt.tprintf("%s[@]", name))
 				case "array":
 					strings.write_string(&builder, fmt.tprintf("%s[@]", name))
 				}
@@ -1033,9 +1069,13 @@ rewrite_zsh_parameter_expansion_for_bash :: proc(
 				if stage1_changed || stage2_changed || stage3_changed {
 					changed = true
 				}
-				strings.write_string(&builder, "${")
-				strings.write_string(&builder, rewrite_stage3)
-				strings.write_byte(&builder, '}')
+				if strings.has_prefix(rewrite_stage3, "__SHELLX_RAW__") {
+					strings.write_string(&builder, rewrite_stage3[len("__SHELLX_RAW__"):])
+				} else {
+					strings.write_string(&builder, "${")
+					strings.write_string(&builder, rewrite_stage3)
+					strings.write_byte(&builder, '}')
+				}
 				delete(rewrite_stage1)
 				delete(rewrite_stage2)
 				delete(rewrite_stage3)
@@ -1065,9 +1105,13 @@ rewrite_zsh_parameter_expansion_for_bash :: proc(
 				rewrite_stage3, stage3_changed := rewrite_zsh_case_modifiers_for_bash(rewrite_stage2, allocator)
 				if stage1_changed || stage2_changed || stage3_changed {
 					changed = true
-					strings.write_string(&builder, "${")
-					strings.write_string(&builder, rewrite_stage3)
-					strings.write_byte(&builder, '}')
+					if strings.has_prefix(rewrite_stage3, "__SHELLX_RAW__") {
+						strings.write_string(&builder, rewrite_stage3[len("__SHELLX_RAW__"):])
+					} else {
+						strings.write_string(&builder, "${")
+						strings.write_string(&builder, rewrite_stage3)
+						strings.write_byte(&builder, '}')
+					}
 				} else {
 					strings.write_byte(&builder, '{')
 					strings.write_string(&builder, inner)
@@ -1085,7 +1129,18 @@ rewrite_zsh_parameter_expansion_for_bash :: proc(
 		i += 1
 	}
 
-	return strings.clone(strings.to_string(builder), allocator), changed
+	out := strings.clone(strings.to_string(builder), allocator)
+	tilde_rewritten, tilde_changed := strings.replace_all(out, "${~", "${", allocator)
+	if tilde_changed {
+		delete(out)
+		out = tilde_rewritten
+		changed = true
+	} else {
+		if raw_data(tilde_rewritten) != raw_data(out) {
+			delete(tilde_rewritten)
+		}
+	}
+	return out, changed
 }
 
 propagate_program_file :: proc(program: ^ir.Program, file: string) {
