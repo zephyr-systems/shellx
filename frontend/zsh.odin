@@ -776,7 +776,7 @@ convert_zsh_if_to_statement :: proc(
 		child_type := node_type(child)
 
 		if child_type == "condition" {
-			condition = ir.new_raw_expr(arena, extract_zsh_condition(arena, child, source))
+			condition = new_zsh_condition_expr(arena, child, source)
 		} else if child_type == "consequence" {
 			convert_zsh_body(arena, &then_body, child, source)
 		} else if child_type == "alternative" {
@@ -792,6 +792,18 @@ convert_zsh_if_to_statement :: proc(
 	}
 
 	return ir.Statement{type = .Branch, branch = branch, location = location}
+}
+
+new_zsh_condition_expr :: proc(arena: ^ir.Arena_IR, node: ts.Node, source: string) -> ir.Expression {
+	text := extract_zsh_condition(arena, node, source)
+	trimmed := strings.trim_space(text)
+	syntax := ir.ConditionSyntax.Unknown
+	if strings.has_prefix(trimmed, "[[") {
+		syntax = .DoubleBracket
+	} else if strings.has_prefix(trimmed, "test ") {
+		syntax = .TestBuiltin
+	}
+	return ir.new_test_condition_expr(arena, text, syntax)
 }
 
 extract_zsh_condition :: proc(arena: ^ir.Arena_IR, node: ts.Node, source: string) -> string {
@@ -863,7 +875,7 @@ convert_zsh_while_to_statement :: proc(
 		child_type := node_type(child)
 
 		if child_type == "condition" {
-			condition = ir.new_raw_expr(arena, extract_zsh_condition(arena, child, source))
+			condition = new_zsh_condition_expr(arena, child, source)
 		} else if child_type == "body" {
 			convert_zsh_body(arena, &body, child, source)
 		}

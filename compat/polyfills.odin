@@ -280,6 +280,8 @@ detect_required_polyfills :: proc(
 	case .Fish:
 		// Fish might need polyfills for associative arrays
 		append(&required, "array_operations") // For associative array emulation
+	case .Bash, .Zsh:
+		// No baseline polyfills required for Bash/Zsh targets.
 	}
 	
 	return required[:]

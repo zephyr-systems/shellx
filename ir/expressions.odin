@@ -2,6 +2,7 @@ package ir
 
 import "core:fmt"
 import "core:mem"
+import "core:strings"
 
 new_variable :: proc(arena: ^Arena_IR, name: string) -> ^Variable {
 	variable := new(Variable, mem.arena_allocator(&arena.arena))
@@ -26,6 +27,36 @@ new_raw_expr :: proc(arena: ^Arena_IR, text: string) -> Expression {
 	return raw
 }
 
+normalize_test_condition_text :: proc(text: string, syntax: ConditionSyntax) -> string {
+	trimmed := strings.trim_space(text)
+	switch syntax {
+	case .DoubleBracket:
+		if strings.has_prefix(trimmed, "[[") {
+			trimmed = strings.trim_space(trimmed[2:])
+		}
+		if strings.has_suffix(trimmed, "]]") && len(trimmed) >= 2 {
+			trimmed = strings.trim_space(trimmed[:len(trimmed)-2])
+		}
+	case .TestBuiltin:
+		if strings.has_prefix(trimmed, "test ") {
+			trimmed = strings.trim_space(trimmed[5:])
+		}
+	case .FishTest:
+		if strings.has_prefix(trimmed, "test ") {
+			trimmed = strings.trim_space(trimmed[5:])
+		}
+	case .Unknown, .Command:
+	}
+	return trimmed
+}
+
+new_test_condition_expr :: proc(arena: ^Arena_IR, text: string, syntax: ConditionSyntax) -> Expression {
+	cond := new(TestCondition, mem.arena_allocator(&arena.arena))
+	cond.text = intern_string(arena, normalize_test_condition_text(text, syntax))
+	cond.syntax = syntax
+	return cond
+}
+
 new_array_expr :: proc(arena: ^Arena_IR, elements: [dynamic]Expression) -> Expression {
 	array := new(ArrayLiteral, mem.arena_allocator(&arena.arena))
 	array.elements = elements
@@ -43,6 +74,8 @@ expr_to_string :: proc(expr: Expression) -> string {
 	case ^Variable:
 		return e.name
 	case ^RawExpression:
+		return e.text
+	case ^TestCondition:
 		return e.text
 	case ^UnaryOp:
 		op := "-"

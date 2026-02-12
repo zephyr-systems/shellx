@@ -57,6 +57,7 @@ Expression :: union {
 	^UnaryOp,
 	^CallExpr,
 	^ArrayLiteral,
+	^TestCondition,
 	^RawExpression,
 }
 
@@ -87,6 +88,19 @@ CallExpr :: struct {
 
 ArrayLiteral :: struct {
 	elements: [dynamic]Expression,
+}
+
+ConditionSyntax :: enum {
+	Unknown,
+	Command,
+	DoubleBracket,
+	TestBuiltin,
+	FishTest,
+}
+
+TestCondition :: struct {
+	text:   string,
+	syntax: ConditionSyntax,
 }
 
 RawExpression :: struct {

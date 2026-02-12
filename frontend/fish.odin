@@ -281,7 +281,7 @@ convert_fish_if_to_statement :: proc(
 		child_type := node_type(child)
 
 		if child_type == "condition" {
-			condition = ir.new_raw_expr(arena, extract_fish_condition(arena, child, source))
+			condition = new_fish_condition_expr(arena, child, source)
 		} else if child_type == "consequence" {
 			convert_fish_body(arena, &then_body, child, source)
 		} else if child_type == "alternative" {
@@ -297,6 +297,16 @@ convert_fish_if_to_statement :: proc(
 	}
 
 	return ir.Statement{type = .Branch, branch = branch, location = location}
+}
+
+new_fish_condition_expr :: proc(arena: ^ir.Arena_IR, node: ts.Node, source: string) -> ir.Expression {
+	text := extract_fish_condition(arena, node, source)
+	trimmed := strings.trim_space(text)
+	syntax := ir.ConditionSyntax.Unknown
+	if strings.has_prefix(trimmed, "test ") {
+		syntax = .FishTest
+	}
+	return ir.new_test_condition_expr(arena, text, syntax)
 }
 
 extract_fish_condition :: proc(arena: ^ir.Arena_IR, node: ts.Node, source: string) -> string {
@@ -367,7 +377,7 @@ convert_fish_while_to_statement :: proc(
 		child_type := node_type(child)
 
 		if child_type == "condition" {
-			condition = ir.new_raw_expr(arena, extract_fish_condition(arena, child, source))
+			condition = new_fish_condition_expr(arena, child, source)
 		} else if child_type == "body" {
 			convert_fish_body(arena, &body, child, source)
 		}

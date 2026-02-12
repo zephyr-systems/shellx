@@ -308,7 +308,7 @@ emit_return :: proc(b: ^Backend, ret: ir.Return) {
 
 emit_branch :: proc(b: ^Backend, branch: ir.Branch) {
 	strings.write_string(&b.builder, "if ")
-	emit_expression(b, branch.condition)
+	emit_condition_command(b, branch.condition)
 	strings.write_string(&b.builder, "; then\n")
 
 	b.indent_level += 1
@@ -340,12 +340,12 @@ emit_loop :: proc(b: ^Backend, loop: ir.Loop) {
 
 	case .While:
 		strings.write_string(&b.builder, "while ")
-		emit_expression(b, loop.condition)
+		emit_condition_command(b, loop.condition)
 		strings.write_string(&b.builder, "; do\n")
 
 	case .Until:
 		strings.write_string(&b.builder, "until ")
-		emit_expression(b, loop.condition)
+		emit_condition_command(b, loop.condition)
 		strings.write_string(&b.builder, "; do\n")
 	}
 
@@ -380,6 +380,8 @@ emit_expression :: proc(b: ^Backend, expr: ir.Expression) {
 	case ^ir.Variable:
 		strings.write_string(&b.builder, e.name)
 	case ^ir.RawExpression:
+		strings.write_string(&b.builder, e.text)
+	case ^ir.TestCondition:
 		strings.write_string(&b.builder, e.text)
 	case ^ir.UnaryOp:
 		if e.op == .Not {
@@ -422,5 +424,29 @@ emit_expression :: proc(b: ^Backend, expr: ir.Expression) {
 			}
 			emit_expression(b, elem)
 		}
+	}
+}
+
+emit_condition_command :: proc(b: ^Backend, expr: ir.Expression) {
+	if expr == nil {
+		return
+	}
+	#partial switch e in expr {
+	case ^ir.TestCondition:
+		switch e.syntax {
+		case .Command:
+			strings.write_string(&b.builder, e.text)
+		case .DoubleBracket:
+			strings.write_string(&b.builder, "[[ ")
+			strings.write_string(&b.builder, e.text)
+			strings.write_string(&b.builder, " ]]")
+		case .TestBuiltin, .FishTest:
+			strings.write_string(&b.builder, "test ")
+			strings.write_string(&b.builder, e.text)
+		case .Unknown:
+			strings.write_string(&b.builder, e.text)
+		}
+	case:
+		emit_expression(b, expr)
 	}
 }

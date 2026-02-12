@@ -173,8 +173,8 @@ emit_fish_return :: proc(be: ^FishBackend, ret: ir.Return) {
 //     else_body
 // end
 emit_fish_branch :: proc(be: ^FishBackend, branch: ir.Branch) {
-	strings.write_string(&be.builder, "if test ")
-	strings.write_string(&be.builder, ir.expr_to_string(branch.condition))
+	strings.write_string(&be.builder, "if ")
+	emit_fish_condition_command(be, branch.condition)
 	strings.write_byte(&be.builder, '\n')
 
 	be.indent_level += 1
@@ -228,8 +228,8 @@ emit_fish_loop :: proc(be: ^FishBackend, loop: ir.Loop) {
 		// Fish: while test condition
 		//     body
 		// end
-		strings.write_string(&be.builder, "while test ")
-		strings.write_string(&be.builder, ir.expr_to_string(loop.condition))
+		strings.write_string(&be.builder, "while ")
+		emit_fish_condition_command(be, loop.condition)
 		strings.write_byte(&be.builder, '\n')
 
 		be.indent_level += 1
@@ -263,5 +263,26 @@ emit_fish_pipeline :: proc(be: ^FishBackend, pipeline: ir.Pipeline) {
 write_fish_indent :: proc(be: ^FishBackend) {
 	for _ in 0 ..< be.indent_level {
 		strings.write_byte(&be.builder, '\t')
+	}
+}
+
+emit_fish_condition_command :: proc(be: ^FishBackend, expr: ir.Expression) {
+	if expr == nil {
+		return
+	}
+
+	#partial switch e in expr {
+	case ^ir.TestCondition:
+		switch e.syntax {
+		case .Command:
+			strings.write_string(&be.builder, e.text)
+		case .DoubleBracket, .TestBuiltin, .FishTest:
+			strings.write_string(&be.builder, "test ")
+			strings.write_string(&be.builder, e.text)
+		case .Unknown:
+			strings.write_string(&be.builder, e.text)
+		}
+	case:
+		strings.write_string(&be.builder, ir.expr_to_string(expr))
 	}
 }

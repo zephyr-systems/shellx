@@ -255,7 +255,7 @@ convert_bash_if_to_statement :: proc(
 		child_type := node_type(child)
 
 		if child_type == "condition" {
-			condition = ir.new_raw_expr(arena, extract_condition(arena, child, source))
+			condition = new_bash_condition_expr(arena, child, source)
 		} else if child_type == "consequence" {
 			convert_bash_body(arena, &then_body, child, source) // Pass arena
 		} else if child_type == "alternative" {
@@ -270,6 +270,18 @@ convert_bash_if_to_statement :: proc(
 		location  = location,
 	}
 	return ir.Statement{type = .Branch, branch = branch, location = location}
+}
+
+new_bash_condition_expr :: proc(arena: ^ir.Arena_IR, node: ts.Node, source: string) -> ir.Expression {
+	text := extract_condition(arena, node, source)
+	trimmed := strings.trim_space(text)
+	syntax := ir.ConditionSyntax.Unknown
+	if strings.has_prefix(trimmed, "[[") {
+		syntax = .DoubleBracket
+	} else if strings.has_prefix(trimmed, "test ") {
+		syntax = .TestBuiltin
+	}
+	return ir.new_test_condition_expr(arena, text, syntax)
 }
 
 extract_condition :: proc(arena: ^ir.Arena_IR, node: ts.Node, source: string) -> string {
@@ -340,7 +352,7 @@ convert_bash_while_to_statement :: proc(
 		child_type := node_type(child)
 
 		if child_type == "condition" {
-			condition = ir.new_raw_expr(arena, extract_condition(arena, child, source))
+			condition = new_bash_condition_expr(arena, child, source)
 		} else if child_type == "body" {
 			convert_bash_body(arena, &body, child, source) // Pass arena
 		}

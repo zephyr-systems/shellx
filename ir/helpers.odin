@@ -30,6 +30,15 @@ expr_raw :: proc(arena: ^Arena_IR, text: string) -> Expression {
 	return new_raw_expr(arena, text)
 }
 
+// expr_test_condition creates a structured test-condition expression.
+expr_test_condition :: proc(
+	arena: ^Arena_IR,
+	text: string,
+	syntax: ConditionSyntax,
+) -> Expression {
+	return new_test_condition_expr(arena, text, syntax)
+}
+
 // stmt_assign creates an assignment statement.
 stmt_assign :: proc(
 	arena: ^Arena_IR,

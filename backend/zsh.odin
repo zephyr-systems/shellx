@@ -169,9 +169,9 @@ emit_zsh_return :: proc(be: ^ZshBackend, ret: ir.Return) {
 // emit_zsh_branch emits if/else statement
 // Zsh uses: if [[ condition ]]; then ... elif ... else ... fi
 emit_zsh_branch :: proc(be: ^ZshBackend, branch: ir.Branch) {
-	strings.write_string(&be.builder, "if [[ ")
-	strings.write_string(&be.builder, ir.expr_to_string(branch.condition))
-	strings.write_string(&be.builder, " ]]; then\n")
+	strings.write_string(&be.builder, "if ")
+	emit_zsh_condition_command(be, branch.condition)
+	strings.write_string(&be.builder, "; then\n")
 
 	be.indent_level += 1
 	for stmt in branch.then_body {
@@ -220,9 +220,9 @@ emit_zsh_loop :: proc(be: ^ZshBackend, loop: ir.Loop) {
 
 	case .While:
 		// Zsh: while [[ condition ]]; do ... done
-		strings.write_string(&be.builder, "while [[ ")
-		strings.write_string(&be.builder, ir.expr_to_string(loop.condition))
-		strings.write_string(&be.builder, " ]]; do\n")
+		strings.write_string(&be.builder, "while ")
+		emit_zsh_condition_command(be, loop.condition)
+		strings.write_string(&be.builder, "; do\n")
 
 		be.indent_level += 1
 		for stmt in loop.body {
@@ -252,9 +252,9 @@ emit_zsh_loop :: proc(be: ^ZshBackend, loop: ir.Loop) {
 
 	case .Until:
 		// Zsh: until [[ condition ]]; do ... done
-		strings.write_string(&be.builder, "until [[ ")
-		strings.write_string(&be.builder, ir.expr_to_string(loop.condition))
-		strings.write_string(&be.builder, " ]]; do\n")
+		strings.write_string(&be.builder, "until ")
+		emit_zsh_condition_command(be, loop.condition)
+		strings.write_string(&be.builder, "; do\n")
 
 		be.indent_level += 1
 		for stmt in loop.body {
@@ -282,5 +282,30 @@ emit_zsh_pipeline :: proc(be: ^ZshBackend, pipeline: ir.Pipeline) {
 write_zsh_indent :: proc(be: ^ZshBackend) {
 	for _ in 0 ..< be.indent_level {
 		strings.write_byte(&be.builder, '\t')
+	}
+}
+
+emit_zsh_condition_command :: proc(be: ^ZshBackend, expr: ir.Expression) {
+	if expr == nil {
+		return
+	}
+
+	#partial switch e in expr {
+	case ^ir.TestCondition:
+		switch e.syntax {
+		case .Command:
+			strings.write_string(&be.builder, e.text)
+		case .DoubleBracket:
+			strings.write_string(&be.builder, "[[ ")
+			strings.write_string(&be.builder, e.text)
+			strings.write_string(&be.builder, " ]]")
+		case .TestBuiltin, .FishTest:
+			strings.write_string(&be.builder, "test ")
+			strings.write_string(&be.builder, e.text)
+		case .Unknown:
+			strings.write_string(&be.builder, e.text)
+		}
+	case:
+		strings.write_string(&be.builder, ir.expr_to_string(expr))
 	}
 }

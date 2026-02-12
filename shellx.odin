@@ -208,6 +208,10 @@ translate :: proc(
 		defer optimizer.destroy_optimize_result(&opt_result)
 	}
 
+	if options.insert_shims && len(result.required_shims) > 0 {
+		apply_ir_shim_rewrites(program, result.required_shims[:], from, to)
+	}
+
 	emitted, emit_ok := emit_program(program, to)
 	if !emit_ok {
 		result.success = false
@@ -223,8 +227,6 @@ translate :: proc(
 
 	result.output = emitted
 	if options.insert_shims && len(result.required_shims) > 0 {
-		apply_ir_shim_rewrites(program, result.required_shims[:], from, to)
-
 		rewritten, changed := apply_shim_callsite_rewrites(emitted, result.required_shims[:], from, to, context.allocator)
 		if changed {
 			delete(emitted)
@@ -393,17 +395,6 @@ has_required_shim :: proc(required_shims: []string, name: string) -> bool {
 	return false
 }
 
-normalize_fish_condition_text :: proc(text: string) -> string {
-	trimmed := strings.trim_space(text)
-	if strings.has_prefix(trimmed, "[[") {
-		trimmed = strings.trim_space(trimmed[2:])
-	}
-	if strings.has_suffix(trimmed, "]]") {
-		trimmed = strings.trim_space(trimmed[:len(trimmed)-2])
-	}
-	return trimmed
-}
-
 rewrite_expr_for_shims :: proc(
 	expr: ir.Expression,
 	required_shims: []string,
@@ -414,10 +405,23 @@ rewrite_expr_for_shims :: proc(
 		return
 	}
 	#partial switch e in expr {
-	case ^ir.RawExpression:
-		if has_required_shim(required_shims, "condition_semantics") && to == .Fish {
-			e.text = normalize_fish_condition_text(e.text)
+	case ^ir.TestCondition:
+		if has_required_shim(required_shims, "condition_semantics") {
+			cond_text := strings.trim_space(e.text)
+			if to == .Fish {
+				if e.syntax == .DoubleBracket || e.syntax == .TestBuiltin || e.syntax == .Unknown {
+					if !strings.has_prefix(cond_text, "__shellx_test ") {
+						e.text = strings.concatenate([]string{"__shellx_test ", cond_text}, context.allocator)
+					}
+					e.syntax = .Command
+				}
+			} else if to == .POSIX && e.syntax == .DoubleBracket {
+				e.syntax = .TestBuiltin
+			} else if (to == .Bash || to == .Zsh || to == .POSIX) && e.syntax == .FishTest {
+				e.syntax = .TestBuiltin
+			}
 		}
+	case ^ir.RawExpression:
 	case ^ir.UnaryOp:
 		rewrite_expr_for_shims(e.operand, required_shims, from, to)
 	case ^ir.BinaryOp:
@@ -446,10 +450,6 @@ rewrite_call_for_shims :: proc(
 
 	if has_required_shim(required_shims, "hooks_events") && call.function.name == "add-zsh-hook" {
 		call.function.name = "__shellx_register_hook"
-	}
-
-	if has_required_shim(required_shims, "condition_semantics") && to == .Fish && call.function.name == "[[" {
-		call.function.name = "__shellx_test"
 	}
 
 	for arg in call.arguments {
@@ -537,11 +537,6 @@ apply_shim_callsite_rewrites :: proc(
 	}
 
 	if has_required_shim(required_shims, "condition_semantics") {
-		if to == .Fish {
-			out, changed_any = replace_with_flag(out, "if [[ ", "if __shellx_test ", changed_any, allocator)
-			out, changed_any = replace_with_flag(out, "[[ ", "__shellx_test ", changed_any, allocator)
-			out, changed_any = replace_with_flag(out, " ]]", "", changed_any, allocator)
-		}
 		if from == .Fish && (to == .Bash || to == .Zsh || to == .POSIX) {
 			out, changed_any = replace_with_flag(out, "string match ", "__shellx_test ", changed_any, allocator)
 		}
