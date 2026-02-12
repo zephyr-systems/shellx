@@ -39,7 +39,8 @@ convert_zsh_node :: proc(
 		convert_zsh_command(arena, program, node, source)
 		return
 	case "declaration_command":
-		convert_zsh_command(arena, program, node, source)
+		stmt := convert_zsh_declaration_or_command_to_statement(arena, node, source)
+		ir.add_statement(program, stmt)
 		return
 	case "variable_assignment":
 		convert_zsh_assignment(arena, program, node, source)
@@ -134,7 +135,7 @@ convert_zsh_statement :: proc(
 	switch node_type_str {
 	case "command":
 		// Check if this is a typeset/local/export command
-		if is_zsh_var_declaration(node) {
+		if is_zsh_var_declaration(node) && zsh_declaration_has_assignment(node) {
 			stmt := convert_zsh_typeset_to_statement(arena, node, source)
 			append(body, stmt)
 		} else {
@@ -142,7 +143,7 @@ convert_zsh_statement :: proc(
 			append(body, stmt)
 		}
 	case "declaration_command":
-		stmt := convert_zsh_command_to_statement(arena, node, source)
+		stmt := convert_zsh_declaration_or_command_to_statement(arena, node, source)
 		append(body, stmt)
 	case "variable_assignment":
 		stmt := convert_zsh_assignment_to_statement(arena, node, source)
@@ -176,10 +177,30 @@ convert_zsh_statement :: proc(
 	}
 }
 
+convert_zsh_declaration_or_command_to_statement :: proc(
+	arena: ^ir.Arena_IR,
+	node: ts.Node,
+	source: string,
+) -> ir.Statement {
+	if zsh_declaration_has_assignment(node) {
+		return convert_zsh_typeset_to_statement(arena, node, source)
+	}
+	return convert_zsh_command_to_statement(arena, node, source)
+}
+
 is_zsh_argument_node :: proc(child_type: string) -> bool {
 	switch child_type {
 	case "string", "word", "raw_string", "simple_expansion", "expansion", "concatenation", "special_variable_name", "command_substitution", "binary_expression", "regex", "flag", "flag_name":
 		return true
+	}
+	return false
+}
+
+zsh_declaration_has_assignment :: proc(node: ts.Node) -> bool {
+	for i in 0 ..< child_count(node) {
+		if node_type(child(node, i)) == "variable_assignment" {
+			return true
+		}
 	}
 	return false
 }
@@ -191,7 +212,7 @@ append_zsh_raw_statements :: proc(
 	source: string,
 ) {
 	location := node_location(node, source)
-	raw := strings.trim_space(intern_node_text(arena, node, source))
+	raw := intern_node_text(arena, node, source)
 	if raw == "" {
 		return
 	}
@@ -200,14 +221,13 @@ append_zsh_raw_statements :: proc(
 	defer delete(lines)
 
 	for line in lines {
-		trimmed := strings.trim_space(line)
-		if trimmed == "" || strings.has_prefix(trimmed, "#") {
+		if strings.trim_space(line) == "" {
 			continue
 		}
 		stmt := ir.Statement{
 			type = .Call,
 			call = ir.Call{
-				function = ir.new_variable(arena, trimmed),
+				function = ir.new_variable(arena, line),
 				arguments = make([dynamic]ir.Expression, 0, 0, mem.arena_allocator(&arena.arena)),
 				location = location,
 			},
@@ -215,6 +235,36 @@ append_zsh_raw_statements :: proc(
 		}
 		append(body, stmt)
 	}
+}
+
+make_zsh_raw_statement :: proc(
+	arena: ^ir.Arena_IR,
+	node: ts.Node,
+	source: string,
+) -> ir.Statement {
+	location := node_location(node, source)
+	raw := strings.trim_space(intern_node_text(arena, node, source))
+	if raw == "" {
+		raw = ":"
+	}
+	return ir.Statement{
+		type = .Call,
+		call = ir.Call{
+			function = ir.new_variable(arena, raw),
+			arguments = make([dynamic]ir.Expression, 0, 0, mem.arena_allocator(&arena.arena)),
+			location = location,
+		},
+		location = location,
+	}
+}
+
+zsh_node_has_error_child :: proc(node: ts.Node) -> bool {
+	for i in 0 ..< child_count(node) {
+		if node_type(child(node, i)) == "ERROR" {
+			return true
+		}
+	}
+	return false
 }
 
 // Check if command is typeset, local, or export
@@ -293,6 +343,10 @@ convert_zsh_command_to_statement :: proc(
 	source: string,
 ) -> ir.Statement {
 	location := node_location(node, source)
+	if zsh_node_has_error_child(node) {
+		return make_zsh_raw_statement(arena, node, source)
+	}
+
 	cmd_name := ""
 	arguments := make([dynamic]ir.Expression, 0, 4, mem.arena_allocator(&arena.arena))
 
@@ -333,6 +387,9 @@ convert_zsh_command_to_statement :: proc(
 	}
 	if cmd_name == "" {
 		cmd_name = ":"
+	}
+	if strings.contains(cmd_name, "\n") {
+		return make_zsh_raw_statement(arena, node, source)
 	}
 
 	call := ir.Call {
