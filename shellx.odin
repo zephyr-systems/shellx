@@ -4,6 +4,7 @@ import "backend"
 import ts "bindings/tree_sitter"
 import "compat"
 import "core:fmt"
+import "core:mem"
 import "core:os"
 import "core:strings"
 import "detection"
@@ -222,6 +223,14 @@ translate :: proc(
 
 	result.output = emitted
 	if options.insert_shims && len(result.required_shims) > 0 {
+		rewritten, changed := apply_shim_callsite_rewrites(emitted, result.required_shims[:], from, to, context.allocator)
+		if changed {
+			delete(emitted)
+			emitted = rewritten
+		} else {
+			delete(rewritten)
+		}
+
 		shim_prelude := compat.build_shim_prelude(result.required_shims[:], from, to, context.allocator)
 		if shim_prelude != "" {
 			result.output = strings.concatenate([]string{shim_prelude, emitted}, context.allocator)
@@ -371,6 +380,71 @@ append_unique :: proc(items: ^[dynamic]string, value: string) {
 		}
 	}
 	append(items, value)
+}
+
+has_required_shim :: proc(required_shims: []string, name: string) -> bool {
+	for shim in required_shims {
+		if shim == name {
+			return true
+		}
+	}
+	return false
+}
+
+apply_shim_callsite_rewrites :: proc(
+	text: string,
+	required_shims: []string,
+	from: ShellDialect,
+	to: ShellDialect,
+	allocator := context.allocator,
+) -> (string, bool) {
+	out := strings.clone(text, allocator)
+	changed_any := false
+
+	if has_required_shim(required_shims, "hooks_events") {
+		out, changed_any = replace_with_flag(out, "add-zsh-hook precmd ", "__shellx_register_precmd ", changed_any, allocator)
+		out, changed_any = replace_with_flag(out, "add-zsh-hook preexec ", "__shellx_register_preexec ", changed_any, allocator)
+	}
+
+	if has_required_shim(required_shims, "condition_semantics") {
+		if to == .Fish {
+			out, changed_any = replace_with_flag(out, "if [[ ", "if __shellx_test ", changed_any, allocator)
+			out, changed_any = replace_with_flag(out, "[[ ", "__shellx_test ", changed_any, allocator)
+			out, changed_any = replace_with_flag(out, " ]]", "", changed_any, allocator)
+		}
+		if from == .Fish && (to == .Bash || to == .Zsh || to == .POSIX) {
+			out, changed_any = replace_with_flag(out, "string match ", "__shellx_test ", changed_any, allocator)
+		}
+	}
+
+	if has_required_shim(required_shims, "arrays_lists") {
+		if to == .Fish {
+			out, changed_any = replace_with_flag(out, "declare -a ", "__shellx_array_set ", changed_any, allocator)
+		}
+		if from == .Fish && (to == .Bash || to == .Zsh) {
+			out, changed_any = replace_with_flag(out, "set ", "__shellx_list_to_array ", changed_any, allocator)
+		}
+	}
+
+	return out, changed_any
+}
+
+replace_with_flag :: proc(
+	text: string,
+	from_s: string,
+	to_s: string,
+	changed_any: bool,
+	allocator: mem.Allocator,
+) -> (string, bool) {
+	replaced, changed := strings.replace_all(text, from_s, to_s, allocator)
+	if changed {
+		delete(text)
+		return replaced, true
+	}
+	if raw_data(replaced) != raw_data(text) {
+		delete(replaced)
+	}
+	return text, changed_any
 }
 
 propagate_program_file :: proc(program: ^ir.Program, file: string) {

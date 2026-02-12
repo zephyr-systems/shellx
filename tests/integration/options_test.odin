@@ -36,6 +36,20 @@ test_options_insert_shims_integration :: proc(t: ^testing.T) {
 	defer shellx.destroy_translation_result(&result)
 	testing.expect(t, len(result.required_shims) > 0, "Insert shims should collect required shims")
 	testing.expect(t, strings.contains(result.output, "__shellx_test"), "Shim prelude should be injected")
+	testing.expect(t, strings.contains(result.output, "if __shellx_test"), "Condition callsite should be rewritten to shim wrapper")
+}
+
+@(test)
+test_options_insert_shims_hook_rewrite_integration :: proc(t: ^testing.T) {
+	if !should_run_local_test("test_options_insert_shims_hook_rewrite_integration") { return }
+
+	opts := shellx.DEFAULT_TRANSLATION_OPTIONS
+	opts.insert_shims = true
+
+	result := shellx.translate("add-zsh-hook precmd my_precmd", .Zsh, .Bash, opts)
+	defer shellx.destroy_translation_result(&result)
+	testing.expect(t, result.success, "Translation should succeed with hook rewrite")
+	testing.expect(t, strings.contains(result.output, "__shellx_register_precmd"), "Hook callsite should be rewritten to shim wrapper")
 }
 
 @(test)
