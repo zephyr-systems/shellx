@@ -1,6 +1,7 @@
 package unit_tests
 
 import "core:testing"
+import "core:os"
 import "frontend"
 import "ir"
 
@@ -242,6 +243,40 @@ test_zsh_case_statement :: proc(t: ^testing.T) {
 	if stmt.type == .Case {
 		testing.expect(t, len(stmt.case_.arms) == 2, "Should produce two case arms")
 	}
+}
+
+@(test)
+test_zsh_recover_functions_from_corpus_plugin :: proc(t: ^testing.T) {
+	if !should_run_test("test_zsh_recover_functions_from_corpus_plugin") { return }
+	path := "tests/corpus/repos/zsh/zsh-autosuggestions/zsh-autosuggestions.zsh"
+	if !os.is_file(path) {
+		return
+	}
+
+	data, ok := os.read_entire_file(path)
+	testing.expect(t, ok, "Should read corpus file")
+	if !ok {
+		return
+	}
+	defer delete(data)
+	code := string(data)
+
+	arena := ir.create_arena(16 * 1024 * 1024)
+	defer ir.destroy_arena(&arena)
+
+	fe := frontend.create_frontend(.Zsh)
+	defer frontend.destroy_frontend(&fe)
+
+	tree, parse_err := frontend.parse(&fe, code)
+	testing.expect(t, parse_err.error == .None, "Should parse corpus source")
+	if parse_err.error != .None || tree == nil {
+		return
+	}
+	defer frontend.destroy_tree(tree)
+
+	program, conv_err := frontend.zsh_to_ir(&arena, tree, code)
+	testing.expect(t, conv_err.error == .None, "Should convert corpus source to IR")
+	testing.expect(t, len(program.functions) > 0, "Should recover functions from malformed corpus regions")
 }
 
 @(test)
