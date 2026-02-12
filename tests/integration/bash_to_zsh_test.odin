@@ -70,6 +70,7 @@ translate_code :: proc(
 
 @(test)
 test_bash_to_zsh_variable :: proc(t: ^testing.T) {
+	if !should_run_test("test_bash_to_zsh_variable") { return }
 	bash_code := "x=5"
 	result := translate_code(bash_code, .Bash, .Zsh)
 	defer delete(result)
@@ -80,6 +81,7 @@ test_bash_to_zsh_variable :: proc(t: ^testing.T) {
 
 @(test)
 test_bash_to_zsh_function :: proc(t: ^testing.T) {
+	if !should_run_test("test_bash_to_zsh_function") { return }
 	bash_code := `function hello() {
 	echo "Hello, World!"
 }`
@@ -96,6 +98,7 @@ test_bash_to_zsh_function :: proc(t: ^testing.T) {
 
 @(test)
 test_bash_to_zsh_if_statement :: proc(t: ^testing.T) {
+	if !should_run_test("test_bash_to_zsh_if_statement") { return }
 	bash_code := `if [ "$x" = "5" ]; then
 	echo "x is 5"
 fi`
@@ -107,6 +110,7 @@ fi`
 
 @(test)
 test_bash_to_zsh_for_loop :: proc(t: ^testing.T) {
+	if !should_run_test("test_bash_to_zsh_for_loop") { return }
 	bash_code := `for i in 1 2 3; do
 	echo $i
 done`
@@ -118,6 +122,7 @@ done`
 
 @(test)
 test_bash_to_zsh_while_loop :: proc(t: ^testing.T) {
+	if !should_run_test("test_bash_to_zsh_while_loop") { return }
 	bash_code := `while [ $x -lt 10 ]; do
 	echo $x
 done`
@@ -129,6 +134,7 @@ done`
 
 @(test)
 test_bash_to_zsh_pipeline :: proc(t: ^testing.T) {
+	if !should_run_test("test_bash_to_zsh_pipeline") { return }
 	bash_code := "echo 'hello' | grep 'h' | wc -l"
 	result := translate_code(bash_code, .Bash, .Zsh)
 	defer delete(result)

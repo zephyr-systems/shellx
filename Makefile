@@ -1,4 +1,4 @@
-.PHONY: all build test clean install setup-tree-sitter example
+.PHONY: all build test test-runner clean install setup-tree-sitter example
 
 ODIN := odin
 BUILD_DIR := build
@@ -24,6 +24,9 @@ build-debug:
 
 test:
 	$(ODIN) test . -all-packages
+
+test-runner:
+	./scripts/test_runner.sh
 
 test-verbose:
 	$(ODIN) test . -all-packages -v

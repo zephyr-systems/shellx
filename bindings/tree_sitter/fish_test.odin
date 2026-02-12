@@ -5,6 +5,7 @@ import "core:testing"
 
 @(test)
 test_fish_grammar_loads :: proc(t: ^testing.T) {
+	if !should_run_test("test_fish_grammar_loads") { return }
 	// Test that Fish grammar can be loaded
 	lang := tree_sitter_fish()
 	testing.expect(t, lang != nil, "Fish grammar should load successfully")
@@ -15,6 +16,7 @@ test_fish_grammar_loads :: proc(t: ^testing.T) {
 
 @(test)
 test_fish_parse_simple :: proc(t: ^testing.T) {
+	if !should_run_test("test_fish_parse_simple") { return }
 	// Test parsing simple Fish code
 	parser := ts_parser_new()
 	defer ts_parser_delete(parser)

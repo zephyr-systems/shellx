@@ -7,6 +7,7 @@ import "ir"
 
 @(test)
 test_bash_simple_variable :: proc(t: ^testing.T) {
+	if !should_run_test("test_bash_simple_variable") { return }
 	code := "x=5"
 	arena := ir.create_arena(1024)
 	defer ir.destroy_arena(&arena)
@@ -40,6 +41,7 @@ test_bash_simple_variable :: proc(t: ^testing.T) {
 
 @(test)
 test_bash_function :: proc(t: ^testing.T) {
+	if !should_run_test("test_bash_function") { return }
 	code := `function hello() {
 	echo "Hello, World!"
 }`
@@ -76,6 +78,7 @@ test_bash_function :: proc(t: ^testing.T) {
 
 @(test)
 test_bash_if_statement :: proc(t: ^testing.T) {
+	if !should_run_test("test_bash_if_statement") { return }
 	code := `if [ "$x" = "5" ]; then
 	echo "x is 5"
 fi`
@@ -103,6 +106,7 @@ fi`
 
 @(test)
 test_bash_for_loop :: proc(t: ^testing.T) {
+	if !should_run_test("test_bash_for_loop") { return }
 	code := `for i in 1 2 3; do
 	echo $i
 done`
@@ -130,6 +134,7 @@ done`
 
 @(test)
 test_bash_while_loop :: proc(t: ^testing.T) {
+	if !should_run_test("test_bash_while_loop") { return }
 	code := `while [ $x -lt 10 ]; do
 	echo $x
 	x=$((x + 1))
@@ -158,6 +163,7 @@ done`
 
 @(test)
 test_bash_pipeline :: proc(t: ^testing.T) {
+	if !should_run_test("test_bash_pipeline") { return }
 	code := "echo 'hello' | grep 'h' | wc -l"
 	arena := ir.create_arena(1024)
 	defer ir.destroy_arena(&arena)

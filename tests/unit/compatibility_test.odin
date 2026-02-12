@@ -8,6 +8,7 @@ import "core:testing"
 
 @(test)
 test_bash_capabilities :: proc(t: ^testing.T) {
+	if !should_run_test("test_bash_capabilities") { return }
 	caps := compat.get_capabilities(.Bash)
 
 	// Bash should support all features
@@ -38,6 +39,7 @@ test_bash_capabilities :: proc(t: ^testing.T) {
 
 @(test)
 test_zsh_capabilities :: proc(t: ^testing.T) {
+	if !should_run_test("test_zsh_capabilities") { return }
 	caps := compat.get_capabilities(.Zsh)
 
 	// Zsh should support all features (Bash-compatible)
@@ -64,6 +66,7 @@ test_zsh_capabilities :: proc(t: ^testing.T) {
 
 @(test)
 test_fish_capabilities :: proc(t: ^testing.T) {
+	if !should_run_test("test_fish_capabilities") { return }
 	caps := compat.get_capabilities(.Fish)
 
 	// Fish does NOT support many features
@@ -98,6 +101,7 @@ test_fish_capabilities :: proc(t: ^testing.T) {
 
 @(test)
 test_posix_capabilities :: proc(t: ^testing.T) {
+	if !should_run_test("test_posix_capabilities") { return }
 	caps := compat.get_capabilities(.POSIX)
 
 	// POSIX is a subset - many features missing
@@ -134,6 +138,7 @@ test_posix_capabilities :: proc(t: ^testing.T) {
 
 @(test)
 test_bash_to_fish_incompatibility :: proc(t: ^testing.T) {
+	if !should_run_test("test_bash_to_fish_incompatibility") { return }
 	differences := compat.compare_capabilities(.Bash, .Fish, context.temp_allocator)
 	defer delete(differences)
 
@@ -167,6 +172,7 @@ test_bash_to_fish_incompatibility :: proc(t: ^testing.T) {
 
 @(test)
 test_bash_to_zsh_compatibility :: proc(t: ^testing.T) {
+	if !should_run_test("test_bash_to_zsh_compatibility") { return }
 	differences := compat.compare_capabilities(.Bash, .Zsh, context.temp_allocator)
 	defer delete(differences)
 
@@ -176,6 +182,7 @@ test_bash_to_zsh_compatibility :: proc(t: ^testing.T) {
 
 @(test)
 test_has_unsupported_features :: proc(t: ^testing.T) {
+	if !should_run_test("test_has_unsupported_features") { return }
 	// Bash → Fish has unsupported features
 	testing.expect(
 		t,
@@ -202,6 +209,7 @@ test_has_unsupported_features :: proc(t: ^testing.T) {
 
 @(test)
 test_check_feature_support :: proc(t: ^testing.T) {
+	if !should_run_test("test_check_feature_support") { return }
 	// Arrays
 	testing.expect(t, compat.check_feature_support(.Bash, "arrays"), "Bash supports arrays")
 	testing.expect(
@@ -249,6 +257,7 @@ test_check_feature_support :: proc(t: ^testing.T) {
 
 @(test)
 test_needs_shim_detection :: proc(t: ^testing.T) {
+	if !should_run_test("test_needs_shim_detection") { return }
 	// Bash → Fish needs shims for arrays
 	testing.expect(t, compat.needs_shim("arrays", .Bash, .Fish), "Bash arrays need shim for Fish")
 	testing.expect(
@@ -286,6 +295,7 @@ test_needs_shim_detection :: proc(t: ^testing.T) {
 
 @(test)
 test_shim_descriptions :: proc(t: ^testing.T) {
+	if !should_run_test("test_shim_descriptions") { return }
 	array_desc := compat.get_shim_description(.ArrayToList)
 	testing.expect(t, len(array_desc) > 0, "Array shim should have description")
 	testing.expect(
@@ -305,6 +315,7 @@ test_shim_descriptions :: proc(t: ^testing.T) {
 
 @(test)
 test_generate_array_shim :: proc(t: ^testing.T) {
+	if !should_run_test("test_generate_array_shim") { return }
 	values := []string{"one", "two", "three"}
 	shim := compat.generate_array_shim("myarr", values)
 	defer delete(shim)
@@ -318,6 +329,7 @@ test_generate_array_shim :: proc(t: ^testing.T) {
 
 @(test)
 test_generate_empty_array_shim :: proc(t: ^testing.T) {
+	if !should_run_test("test_generate_empty_array_shim") { return }
 	values := []string{}
 	shim := compat.generate_array_shim("emptyarr", values)
 	defer delete(shim)

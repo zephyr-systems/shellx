@@ -7,6 +7,7 @@ import "ir"
 
 @(test)
 test_fish_to_bash_set :: proc(t: ^testing.T) {
+	if !should_run_test("test_fish_to_bash_set") { return }
 	fish_code := "set x 5"
 	result := translate_code(fish_code, .Fish, .Bash)
 	defer delete(result)
@@ -16,6 +17,7 @@ test_fish_to_bash_set :: proc(t: ^testing.T) {
 
 @(test)
 test_fish_to_bash_function :: proc(t: ^testing.T) {
+	if !should_run_test("test_fish_to_bash_function") { return }
 	fish_code := "function hello\n\techo Hello\nend"
 	result := translate_code(fish_code, .Fish, .Bash)
 	defer delete(result)
@@ -25,6 +27,7 @@ test_fish_to_bash_function :: proc(t: ^testing.T) {
 
 @(test)
 test_fish_to_bash_if_statement :: proc(t: ^testing.T) {
+	if !should_run_test("test_fish_to_bash_if_statement") { return }
 	fish_code := "if test $x -eq 5\n\techo yes\nend"
 	result := translate_code(fish_code, .Fish, .Bash)
 	defer delete(result)
@@ -34,6 +37,7 @@ test_fish_to_bash_if_statement :: proc(t: ^testing.T) {
 
 @(test)
 test_fish_to_bash_for_loop :: proc(t: ^testing.T) {
+	if !should_run_test("test_fish_to_bash_for_loop") { return }
 	fish_code := "for i in 1 2 3\n\techo $i\nend"
 	result := translate_code(fish_code, .Fish, .Bash)
 	defer delete(result)
@@ -43,6 +47,7 @@ test_fish_to_bash_for_loop :: proc(t: ^testing.T) {
 
 @(test)
 test_fish_to_bash_list :: proc(t: ^testing.T) {
+	if !should_run_test("test_fish_to_bash_list") { return }
 	fish_code := "set arr one two three"
 	result := translate_code(fish_code, .Fish, .Bash)
 	defer delete(result)

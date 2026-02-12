@@ -5,6 +5,7 @@ import "core:testing"
 
 @(test)
 test_zsh_grammar_loads :: proc(t: ^testing.T) {
+	if !should_run_test("test_zsh_grammar_loads") { return }
 	// Test that Zsh grammar can be loaded
 	lang := tree_sitter_zsh()
 	testing.expect(t, lang != nil, "Zsh grammar should load successfully")
@@ -15,6 +16,7 @@ test_zsh_grammar_loads :: proc(t: ^testing.T) {
 
 @(test)
 test_zsh_parse_simple :: proc(t: ^testing.T) {
+	if !should_run_test("test_zsh_parse_simple") { return }
 	// Test parsing simple Zsh code
 	parser := ts_parser_new()
 	defer ts_parser_delete(parser)

@@ -6,6 +6,7 @@ import "ir"
 
 @(test)
 test_zsh_typeset_variable :: proc(t: ^testing.T) {
+	if !should_run_test("test_zsh_typeset_variable") { return }
 	code := "typeset x=5"
 	arena := ir.create_arena(1024)
 	defer ir.destroy_arena(&arena)
@@ -28,6 +29,7 @@ test_zsh_typeset_variable :: proc(t: ^testing.T) {
 
 @(test)
 test_zsh_local_variable :: proc(t: ^testing.T) {
+	if !should_run_test("test_zsh_local_variable") { return }
 	code := "local name=\"value\""
 	arena := ir.create_arena(1024)
 	defer ir.destroy_arena(&arena)
@@ -48,6 +50,7 @@ test_zsh_local_variable :: proc(t: ^testing.T) {
 
 @(test)
 test_zsh_export_variable :: proc(t: ^testing.T) {
+	if !should_run_test("test_zsh_export_variable") { return }
 	code := "export PATH=/bin"
 	arena := ir.create_arena(1024)
 	defer ir.destroy_arena(&arena)
@@ -68,6 +71,7 @@ test_zsh_export_variable :: proc(t: ^testing.T) {
 
 @(test)
 test_zsh_function :: proc(t: ^testing.T) {
+	if !should_run_test("test_zsh_function") { return }
 	code := "function hello() {\n\techo \"Hello\"\n}"
 	arena := ir.create_arena(1024)
 	defer ir.destroy_arena(&arena)
@@ -90,6 +94,7 @@ test_zsh_function :: proc(t: ^testing.T) {
 
 @(test)
 test_zsh_if_statement :: proc(t: ^testing.T) {
+	if !should_run_test("test_zsh_if_statement") { return }
 	code := "if [[ $x -eq 5 ]]; then\n\techo \"yes\"\nfi"
 	arena := ir.create_arena(1024)
 	defer ir.destroy_arena(&arena)
@@ -110,6 +115,7 @@ test_zsh_if_statement :: proc(t: ^testing.T) {
 
 @(test)
 test_zsh_array :: proc(t: ^testing.T) {
+	if !should_run_test("test_zsh_array") { return }
 	code := "arr=(one two three)"
 	arena := ir.create_arena(1024)
 	defer ir.destroy_arena(&arena)

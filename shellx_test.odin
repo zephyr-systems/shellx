@@ -6,6 +6,7 @@ import "core:testing"
 // Test: Simple variable assignment
 @(test)
 test_variable_assignment :: proc(t: ^testing.T) {
+	if !should_run_test("test_variable_assignment") { return }
 	bash_code := `x=5`
 	result := translate(bash_code, .Bash, .Bash)
 
@@ -20,6 +21,7 @@ test_variable_assignment :: proc(t: ^testing.T) {
 // Test: Function definition
 @(test)
 test_function_definition :: proc(t: ^testing.T) {
+	if !should_run_test("test_function_definition") { return }
 	bash_code := `
 function hello() {
 	echo "Hello, World!"
@@ -39,6 +41,7 @@ function hello() {
 // Test: If-else statement
 @(test)
 test_if_else :: proc(t: ^testing.T) {
+	if !should_run_test("test_if_else") { return }
 	bash_code := `
 if [ "$x" -eq 5 ]; then
 	echo "x is 5"
@@ -54,6 +57,7 @@ fi
 // Test: For loop
 @(test)
 test_for_loop :: proc(t: ^testing.T) {
+	if !should_run_test("test_for_loop") { return }
 	bash_code := `
 for i in 1 2 3; do
 	echo "Number: $i"
@@ -67,6 +71,7 @@ done
 // Test: Roundtrip preservation
 @(test)
 test_roundtrip_preservation :: proc(t: ^testing.T) {
+	if !should_run_test("test_roundtrip_preservation") { return }
 	bash_code := `x=5`
 	result := translate(bash_code, .Bash, .Bash)
 
@@ -77,6 +82,7 @@ test_roundtrip_preservation :: proc(t: ^testing.T) {
 // Test: Command with arguments
 @(test)
 test_command_with_args :: proc(t: ^testing.T) {
+	if !should_run_test("test_command_with_args") { return }
 	bash_code := `echo hello world`
 	result := translate(bash_code, .Bash, .Bash)
 
