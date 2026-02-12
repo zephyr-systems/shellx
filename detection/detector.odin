@@ -57,18 +57,23 @@ detect_from_extension :: proc(filepath: string) -> DetectionResult {
 		return DetectionResult{.Bash, .Extension, 0.0}
 	}
 
-	ext := strings.to_lower(filepath[dot_idx:])
+	ext := filepath[dot_idx:]
 
 	switch ext {
-	case ".bash":
-		return DetectionResult{.Bash, .Extension, 0.95}
-	case ".zsh":
-		return DetectionResult{.Zsh, .Extension, 0.95}
-	case ".fish":
-		return DetectionResult{.Fish, .Extension, 0.95}
-	case ".sh":
-		// .sh typically indicates POSIX shell
-		return DetectionResult{.POSIX, .Extension, 0.70}
+	case:
+		if strings.equal_fold(ext, ".bash") {
+			return DetectionResult{.Bash, .Extension, 0.95}
+		}
+		if strings.equal_fold(ext, ".zsh") {
+			return DetectionResult{.Zsh, .Extension, 0.95}
+		}
+		if strings.equal_fold(ext, ".fish") {
+			return DetectionResult{.Fish, .Extension, 0.95}
+		}
+		if strings.equal_fold(ext, ".sh") {
+			// .sh typically indicates POSIX shell
+			return DetectionResult{.POSIX, .Extension, 0.70}
+		}
 	}
 
 	return DetectionResult{.Bash, .Extension, 0.0}
@@ -91,6 +96,7 @@ detect_from_shebang :: proc(code: string) -> DetectionResult {
 	}
 
 	lower_line := strings.to_lower(first_line)
+	defer delete(lower_line)
 
 	// Check for shell names
 	if strings.contains(lower_line, "bash") {
@@ -123,6 +129,7 @@ detect_from_content :: proc(code: string) -> DetectionResult {
 	fish_score := 0
 
 	lower_code := strings.to_lower(code)
+	defer delete(lower_code)
 
 	// Bash patterns
 	bash_patterns := []string {

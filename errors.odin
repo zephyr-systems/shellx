@@ -34,6 +34,8 @@ error_to_string :: proc(err: Error) -> string {
 		return "validation invalid control flow"
 	case .EmissionError:
 		return "emission error"
+	case .IOError:
+		return "io error"
 	case .InternalError:
 		return "internal error"
 	}
@@ -135,6 +137,10 @@ add_error_context :: proc(
 }
 
 destroy_translation_result :: proc(result: ^TranslationResult) {
+	if result.output != "" {
+		delete(result.output)
+		result.output = ""
+	}
 	delete(result.warnings)
 	delete(result.required_shims)
 	delete(result.errors)

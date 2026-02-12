@@ -80,7 +80,6 @@ test_whitespace_only_script :: proc(t: ^testing.T) {
 
 		// Edge case detection
 		edge_cases := utils.detect_edge_cases(source)
-		defer delete(edge_cases)
 
 		found_whitespace := false
 		for ec in edge_cases {
@@ -90,11 +89,12 @@ test_whitespace_only_script :: proc(t: ^testing.T) {
 			}
 		}
 		testing.expect(t, found_whitespace, "Should detect WhitespaceOnly edge case")
+		delete(edge_cases)
 
 		// Validation should fail
 		valid, issues := utils.validate_before_translation(source)
-		defer delete(issues)
 		testing.expect(t, !valid, "Whitespace-only should fail validation")
+		delete(issues)
 	}
 }
 
@@ -112,7 +112,6 @@ test_comments_only_script :: proc(t: ^testing.T) {
 	for source in comments_only_sources {
 		// Should detect comments-only
 		edge_cases := utils.detect_edge_cases(source)
-		defer delete(edge_cases)
 
 		found_comments := false
 		for ec in edge_cases {
@@ -122,6 +121,7 @@ test_comments_only_script :: proc(t: ^testing.T) {
 			}
 		}
 		testing.expect(t, found_comments, "Should detect CommentsOnly edge case")
+		delete(edge_cases)
 	}
 
 	// Script with actual code should NOT be comments-only
@@ -179,7 +179,6 @@ test_edge_case_detection_malformed :: proc(t: ^testing.T) {
 
 	for source in malformed_sources {
 		edge_cases := utils.detect_edge_cases(source)
-		defer delete(edge_cases)
 
 		found_mismatched := false
 		for ec in edge_cases {
@@ -189,6 +188,7 @@ test_edge_case_detection_malformed :: proc(t: ^testing.T) {
 			}
 		}
 		testing.expect(t, found_mismatched, "Should detect mismatched quotes in malformed input")
+		delete(edge_cases)
 	}
 }
 
@@ -280,6 +280,13 @@ fi`
 test_script_size_categories :: proc(t: ^testing.T) {
 	if !should_run_test("test_script_size_categories") {return}
 
+	small_source := strings.repeat("echo line\n", 50)
+	defer delete(small_source)
+	medium_source := strings.repeat("echo line\n", 500)
+	defer delete(medium_source)
+	large_source := strings.repeat("echo line\n", 5000)
+	defer delete(large_source)
+
 	test_cases := []struct {
 		source:   string,
 		expected: utils.ScriptSizeCategory,
@@ -288,9 +295,9 @@ test_script_size_categories :: proc(t: ^testing.T) {
 		{"\n\n\n", .Empty},
 		{"echo hello", .Tiny},
 		{"echo 1\necho 2\necho 3\necho 4\necho 5\necho 6\necho 7\necho 8\necho 9", .Tiny},
-		{strings.repeat("echo line\n", 50), .Small},
-		{strings.repeat("echo line\n", 500), .Medium},
-		{strings.repeat("echo line\n", 5000), .Large},
+		{small_source, .Small},
+		{medium_source, .Medium},
+		{large_source, .Large},
 	}
 
 	for tc in test_cases {
@@ -323,7 +330,6 @@ test_unicode_detection :: proc(t: ^testing.T) {
 
 		// Check edge case detection
 		edge_cases := utils.detect_edge_cases(source)
-		defer delete(edge_cases)
 
 		found_unicode := false
 		for ec in edge_cases {
@@ -333,6 +339,7 @@ test_unicode_detection :: proc(t: ^testing.T) {
 			}
 		}
 		testing.expect(t, found_unicode, "Should detect UnicodeContent edge case")
+		delete(edge_cases)
 	}
 
 	// Script without Unicode
@@ -410,26 +417,26 @@ test_validation_before_translation :: proc(t: ^testing.T) {
 	// Valid script
 	valid_script := `echo "hello world"`
 	valid, issues := utils.validate_before_translation(valid_script)
-	defer delete(issues)
 	testing.expect(t, valid, "Valid script should pass validation")
+	delete(issues)
 
 	// Empty script should fail
 	empty_script := ""
 	valid, issues = utils.validate_before_translation(empty_script)
-	defer delete(issues)
 	testing.expect(t, !valid, "Empty script should fail validation")
+	delete(issues)
 
 	// Whitespace-only should fail
 	whitespace_script := "   \n\t  "
 	valid, issues = utils.validate_before_translation(whitespace_script)
-	defer delete(issues)
 	testing.expect(t, !valid, "Whitespace-only should fail validation")
+	delete(issues)
 
 	// Mismatched quotes should fail
 	mismatched_script := `echo "unclosed`
 	valid, issues = utils.validate_before_translation(mismatched_script)
-	defer delete(issues)
 	testing.expect(t, !valid, "Mismatched quotes should fail validation")
+	delete(issues)
 }
 
 @(test)
@@ -620,13 +627,12 @@ test_edge_cases_integration :: proc(t: ^testing.T) {
 	// Scenario 1: Empty script
 	empty := ""
 	valid, issues := utils.validate_before_translation(empty)
-	defer delete(issues)
 	testing.expect(t, !valid, "Empty script should be invalid")
+	delete(issues)
 
 	// Scenario 2: Valid script with Unicode
 	unicode_script := `echo "Hello 世界"`
 	valid, issues = utils.validate_before_translation(unicode_script)
-	defer delete(issues)
 	testing.expect(t, valid, "Unicode script should be valid")
 
 	// Check that Unicode was detected as info (not error)
@@ -638,6 +644,7 @@ test_edge_cases_integration :: proc(t: ^testing.T) {
 		}
 	}
 	testing.expect(t, found_unicode, "Should detect Unicode in valid script")
+	delete(issues)
 }
 
 @(test)

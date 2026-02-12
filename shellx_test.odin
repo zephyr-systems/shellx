@@ -2,6 +2,7 @@ package shellx
 
 import "core:fmt"
 import "core:mem"
+import "core:os"
 import "core:strings"
 import "core:testing"
 import "frontend"
@@ -14,6 +15,7 @@ test_variable_assignment :: proc(t: ^testing.T) {
 	if !should_run_test("test_variable_assignment") { return }
 	bash_code := `x=5`
 	result := translate(bash_code, .Bash, .Bash)
+	defer destroy_translation_result(&result)
 
 	testing.expect(t, result.success, "Translation should succeed")
 	testing.expect(
@@ -33,6 +35,7 @@ function hello() {
 }
 `
 	result := translate(bash_code, .Bash, .Bash)
+	defer destroy_translation_result(&result)
 
 	testing.expect(t, result.success, "Translation should succeed")
 	testing.expect(t, len(result.output) > 0, "Output should not be empty")
@@ -55,6 +58,7 @@ else
 fi
 `
 	result := translate(bash_code, .Bash, .Bash)
+	defer destroy_translation_result(&result)
 
 	testing.expect(t, result.success, "Translation should succeed")
 }
@@ -69,6 +73,7 @@ for i in 1 2 3; do
 done
 `
 	result := translate(bash_code, .Bash, .Bash)
+	defer destroy_translation_result(&result)
 
 	testing.expect(t, result.success, "Translation should succeed")
 }
@@ -79,6 +84,7 @@ test_roundtrip_preservation :: proc(t: ^testing.T) {
 	if !should_run_test("test_roundtrip_preservation") { return }
 	bash_code := `x=5`
 	result := translate(bash_code, .Bash, .Bash)
+	defer destroy_translation_result(&result)
 
 	testing.expect(t, result.success, "Translation should succeed")
 	testing.expect(t, result.output == "x=5\n", "Roundtrip should preserve variable assignment")
@@ -90,6 +96,7 @@ test_command_with_args :: proc(t: ^testing.T) {
 	if !should_run_test("test_command_with_args") { return }
 	bash_code := `echo hello world`
 	result := translate(bash_code, .Bash, .Bash)
+	defer destroy_translation_result(&result)
 
 	testing.expect(t, result.success, "Translation should succeed")
 	// Note: Currently commands lose their command name in translation
@@ -157,10 +164,10 @@ test_common_subexpression_elimination :: proc(t: ^testing.T) {
 @(test)
 test_error_context_generation :: proc(t: ^testing.T) {
 	if !should_run_test("test_error_context_generation") { return }
-	result := translate("echo hello", .Zsh, .Bash)
+	result := translate(`echo "unterminated`, .Bash, .Bash)
 	defer destroy_translation_result(&result)
-	testing.expect(t, !result.success, "Unsupported dialect conversion should fail")
-	testing.expect(t, result.error == .ConversionUnsupportedDialect, "Error code should be specific")
+	testing.expect(t, !result.success, "Malformed input should fail")
+	testing.expect(t, result.error == .ParseSyntaxError, "Error code should be specific")
 	testing.expect(t, len(result.errors) > 0, "Error contexts should be populated")
 	if len(result.errors) > 0 {
 		testing.expect(
@@ -260,4 +267,63 @@ test_frontend_uses_interned_variable_names :: proc(t: ^testing.T) {
 			"Repeated variable names should reuse interned string storage",
 		)
 	}
+}
+
+@(test)
+test_detect_shell_from_path_api :: proc(t: ^testing.T) {
+	if !should_run_test("test_detect_shell_from_path_api") { return }
+
+	detected := detect_shell_from_path("script.zsh", "echo hello")
+	testing.expect(t, detected == .Zsh, "Expected .Zsh from .zsh extension")
+}
+
+@(test)
+test_translate_strict_mode_api :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_strict_mode_api") { return }
+
+	options := DEFAULT_TRANSLATION_OPTIONS
+	options.strict_mode = true
+
+	result := translate("echo hello", .Bash, .Fish, options)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, !result.success, "Strict mode should fail on compatibility errors")
+	testing.expect(t, result.error == .ValidationError, "Strict mode should surface validation error")
+}
+
+@(test)
+test_translate_file_and_batch_api :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_file_and_batch_api") { return }
+
+	test_file := "/tmp/shellx_api_translate_file_test.sh"
+	content := "x=5\n"
+	ok := os.write_entire_file(test_file, transmute([]byte)content)
+	testing.expect(t, ok, "Expected test file to be writable")
+	if !ok {
+		return
+	}
+	defer os.remove(test_file)
+
+	file_result := translate_file(test_file, .Bash, .Bash)
+	defer destroy_translation_result(&file_result)
+	testing.expect(t, file_result.success, "translate_file should succeed for valid input")
+	testing.expect(t, strings.contains(file_result.output, "x=5"), "translate_file output should contain assignment")
+
+	batch := translate_batch([]string{test_file}, .Bash, .Bash)
+	defer {
+		for &result in batch {
+			destroy_translation_result(&result)
+		}
+		delete(batch)
+	}
+	testing.expect(t, len(batch) == 1, "translate_batch should return one result for one file")
+	testing.expect(t, batch[0].success, "translate_batch item should succeed")
+}
+
+@(test)
+test_get_version_api :: proc(t: ^testing.T) {
+	if !should_run_test("test_get_version_api") { return }
+
+	version := get_version()
+	testing.expect(t, len(version) > 0, "get_version should return a non-empty version string")
 }

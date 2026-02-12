@@ -11,6 +11,26 @@ ShimType :: enum {
 	ProcessSubstitution, // Bash <(cmd) -> Fish temp file workaround
 }
 
+ParameterExpansionModifier :: enum {
+	None,
+	DefaultValue,
+	Length,
+	Substring,
+}
+
+ParameterExpansionData :: struct {
+	variable:      string,
+	modifier:      ParameterExpansionModifier,
+	default_value: string,
+	offset:        int,
+	length:        int,
+}
+
+ProcessSubstitutionDirection :: enum {
+	Input,
+	Output,
+}
+
 // Shim represents a compatibility shim
 Shim :: struct {
 	name:        string,
@@ -61,6 +81,8 @@ generate_array_shim :: proc(var_name: string, values: []string) -> string {
 // Handles: ${var:-default}, ${var:=default}, ${var:?error}, ${var:+alt}, ${#var}
 generate_parameter_expansion_shim :: proc(expansion: ParameterExpansionData) -> string {
 	switch expansion.modifier {
+	case .None:
+		return fmt.tprintf("$%s", expansion.variable)
 	case .DefaultValue:
 		// ${var:-default} -> if not set $var; or echo $var; else; echo default; end
 		return fmt.tprintf(
