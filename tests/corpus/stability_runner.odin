@@ -36,6 +36,8 @@ PairSummary :: struct {
 	with_shims: int,
 
 	total_warnings: int,
+	parse_warnings: int,
+	compat_warnings: int,
 	total_errors: int,
 	total_shims: int,
 
@@ -61,6 +63,8 @@ CaseOutcome :: struct {
 	target_functions: int,
 
 	warning_count: int,
+	parse_warning_count: int,
+	compat_warning_count: int,
 	error_count: int,
 	shim_count: int,
 	error_code: shellx.Error,
@@ -211,31 +215,13 @@ main :: proc() {
 	targets := []shellx.ShellDialect{.Bash, .Zsh, .Fish, .POSIX}
 
 	outcomes := make([dynamic]CaseOutcome, 0, 256)
-	defer {
-		for &outcome in outcomes {
-			delete(outcome.first_error)
-			delete(outcome.first_rule)
-			for rule_id in outcome.rule_ids {
-				delete(rule_id)
-			}
-			delete(outcome.rule_ids)
-		}
-		delete(outcomes)
-	}
+	defer delete(outcomes)
 
 	summaries := make([dynamic]PairSummary, 0, 16)
 	defer delete(summaries)
 
 	rule_groups := make([dynamic]RuleFailureGroup, 0, 32)
-	defer {
-		for &group in rule_groups {
-			for example in group.examples {
-				delete(example)
-			}
-			delete(group.examples)
-		}
-		delete(rule_groups)
-	}
+	defer delete(rule_groups)
 
 	total_runs := 0
 	for c in cases {
@@ -286,6 +272,13 @@ main :: proc() {
 				error_code = tr.error,
 				rule_ids = make([dynamic]string, 0, 4),
 			}
+			for w in tr.warnings {
+				if strings.has_prefix(w, "Parse diagnostic at ") {
+					out.parse_warning_count += 1
+				} else {
+					out.compat_warning_count += 1
+				}
+			}
 			if len(tr.errors) > 0 {
 				out.first_error = strings.clone(tr.errors[0].message, context.allocator)
 				out.first_rule = strings.clone(tr.errors[0].rule_id, context.allocator)
@@ -313,6 +306,8 @@ main :: proc() {
 			}
 
 			summary.total_warnings += out.warning_count
+			summary.parse_warnings += out.parse_warning_count
+			summary.compat_warnings += out.compat_warning_count
 			summary.total_errors += out.error_count
 			summary.total_shims += out.shim_count
 			if out.shim_count > 0 {
@@ -399,8 +394,8 @@ main :: proc() {
 	strings.write_string(&report, fmt.tprintf("Cases configured: %d\n\n", len(cases)))
 	strings.write_string(&report, fmt.tprintf("Cross-dialect runs executed: %d\n\n", total_runs))
 	strings.write_string(&report, "## Pair Summary\n\n")
-	strings.write_string(&report, "| Pair | Cases | Translate | Parse | Plugin Parse | Theme Parse | Avg Size Ratio | Avg Fn Ratio | With Shims |\n")
-	strings.write_string(&report, "|---|---:|---:|---:|---:|---:|---:|---:|---:|\n")
+	strings.write_string(&report, "| Pair | Cases | Translate | Parse | Plugin Parse | Theme Parse | Parse Warn | Compat Warn | Avg Size Ratio | Avg Fn Ratio | With Shims |\n")
+	strings.write_string(&report, "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n")
 
 	for s in summaries {
 		avg_size_ratio := 0.0
@@ -414,15 +409,17 @@ main :: proc() {
 
 		strings.write_string(
 			&report,
-			fmt.tprintf(
-				"| %s->%s | %d | %d/%d | %d/%d | %d/%d | %d/%d | %.3f | %.3f | %d |\n",
-				dialect_name(s.key.from),
-				dialect_name(s.key.to),
-				s.total_cases,
+				fmt.tprintf(
+					"| %s->%s | %d | %d/%d | %d/%d | %d/%d | %d/%d | %d | %d | %.3f | %.3f | %d |\n",
+					dialect_name(s.key.from),
+					dialect_name(s.key.to),
+					s.total_cases,
 				s.translate_success, s.total_cases,
 				s.parse_success, s.total_cases,
 				s.plugin_success, s.plugin_cases,
 				s.theme_success, s.theme_cases,
+				s.parse_warnings,
+				s.compat_warnings,
 				avg_size_ratio,
 				avg_fn_ratio,
 				s.with_shims,
@@ -438,7 +435,7 @@ main :: proc() {
 		strings.write_string(
 			&report,
 			fmt.tprintf(
-				"- [FAIL] %s (%s) %s->%s translate=%v parse=%v err=%v warnings=%d shims=%d src_fn=%d out_fn=%d msg=%s path=%s\n",
+				"- [FAIL] %s (%s) %s->%s translate=%v parse=%v err=%v warnings=%d(parse=%d compat=%d) shims=%d src_fn=%d out_fn=%d msg=%s path=%s\n",
 				outcome.case_.name,
 				outcome.case_.kind,
 				dialect_name(outcome.case_.from),
@@ -447,6 +444,8 @@ main :: proc() {
 				outcome.parse_success,
 				outcome.error_code,
 				outcome.warning_count,
+				outcome.parse_warning_count,
+				outcome.compat_warning_count,
 				outcome.shim_count,
 				outcome.source_functions,
 				outcome.target_functions,
@@ -464,11 +463,13 @@ main :: proc() {
 		strings.write_string(
 			&report,
 			fmt.tprintf(
-				"- [WARN] %s %s->%s warnings=%d shims=%d src_fn=%d out_fn=%d path=%s\n",
+				"- [WARN] %s %s->%s warnings=%d(parse=%d compat=%d) shims=%d src_fn=%d out_fn=%d path=%s\n",
 				outcome.case_.name,
 				dialect_name(outcome.case_.from),
 				dialect_name(outcome.to),
 				outcome.warning_count,
+				outcome.parse_warning_count,
+				outcome.compat_warning_count,
 				outcome.shim_count,
 				outcome.source_functions,
 				outcome.target_functions,

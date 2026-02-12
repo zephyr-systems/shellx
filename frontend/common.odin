@@ -92,32 +92,42 @@ collect_parse_diagnostics :: proc(
 	}
 
 	root := root_node(tree)
+	seen := make(map[u64]bool, allocator)
+	defer delete(seen)
 
 	walk :: proc(
 		node: ts.Node,
 		source: string,
 		source_name: string,
 		diagnostics: ^[dynamic]ParseDiagnostic,
+		seen: ^map[u64]bool,
 		allocator: mem.Allocator,
 	) {
 		if node_type(node) == "ERROR" {
-			loc := node_location(node, source)
-			loc.file = source_name
-			append(
-				diagnostics,
-				ParseDiagnostic{
-					message = "Syntax error",
-					location = loc,
-					suggestion = "Check shell syntax near this location",
-				},
-			)
+			parent := ts.ts_node_parent(node)
+			if node_type(parent) != "ERROR" {
+				loc := node_location(node, source)
+				loc.file = source_name
+				key := (u64(u32(loc.line)) << 32) | u64(u32(loc.column))
+				if !seen^[key] {
+					seen^[key] = true
+					append(
+						diagnostics,
+						ParseDiagnostic{
+							message = "Syntax error",
+							location = loc,
+							suggestion = "Check shell syntax near this location",
+						},
+					)
+				}
+			}
 		}
 		for i in 0 ..< child_count(node) {
-			walk(child(node, i), source, source_name, diagnostics, allocator)
+			walk(child(node, i), source, source_name, diagnostics, seen, allocator)
 		}
 	}
 
-	walk(root, source, source_name, &diagnostics, allocator)
+	walk(root, source, source_name, &diagnostics, &seen, allocator)
 
 	if len(diagnostics) == 0 && has_error(root) {
 		loc := node_location(root, source)
