@@ -206,8 +206,10 @@ Statement :: struct {
 
 // ValidatorError represents an error during the IR validation process.
 ValidatorError :: struct {
-	error:   ValidatorErrorType,
-	message: string,
+	error:    ValidatorErrorType,
+	message:  string,
+	rule:     string,
+	location: SourceLocation,
 }
 
 // ValidatorErrorType defines the types of errors that can occur during validation.

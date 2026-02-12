@@ -166,12 +166,16 @@ translate :: proc(
 
 	validation_err := ir.validate_program(program)
 	if validation_err.error != .None {
+		loc := validation_err.location
+		if loc.file == "" {
+			loc.file = source_name
+		}
 		result.success = false
 		add_error_context(
 			&result,
 			validator_error_code(validation_err.error),
 			validation_err.message,
-			ir.SourceLocation{file = source_name},
+			loc,
 			"Fix validation errors and retry",
 		)
 		return result
@@ -396,17 +400,39 @@ has_required_shim :: proc(required_shims: []string, name: string) -> bool {
 }
 
 is_string_match_call :: proc(call: ^ir.Call) -> bool {
-	if call == nil || call.function == nil {
+	if call == nil {
 		return false
 	}
-	if call.function.name != "string" {
-		return false
+
+	if call.function != nil && call.function.name == "string" {
+		if len(call.arguments) == 0 {
+			return false
+		}
+		first := strings.trim_space(ir.expr_to_string(call.arguments[0]))
+		return first == "match"
 	}
-	if len(call.arguments) == 0 {
-		return false
+
+	if call.function != nil && strings.trim_space(call.function.name) == "" && len(call.arguments) >= 2 {
+		first := strings.trim_space(ir.expr_to_string(call.arguments[0]))
+		second := strings.trim_space(ir.expr_to_string(call.arguments[1]))
+		return first == "string" && second == "match"
 	}
-	first := strings.trim_space(ir.expr_to_string(call.arguments[0]))
-	return first == "match"
+
+	return false
+}
+
+drop_call_arguments :: proc(call: ^ir.Call, n: int) {
+	if call == nil || n <= 0 {
+		return
+	}
+	if len(call.arguments) <= n {
+		resize(&call.arguments, 0)
+		return
+	}
+	for i in n ..< len(call.arguments) {
+		call.arguments[i-n] = call.arguments[i]
+	}
+	resize(&call.arguments, len(call.arguments)-n)
 }
 
 rewrite_condition_command_text_for_shim :: proc(expr: ^ir.TestCondition) {
@@ -490,11 +516,16 @@ rewrite_call_for_shims :: proc(
 
 	if has_required_shim(required_shims, "condition_semantics") && from == .Fish && to != .Fish && is_string_match_call(call) {
 		call.function.name = "__shellx_match"
-		if len(call.arguments) > 0 {
-			for i in 1 ..< len(call.arguments) {
-				call.arguments[i-1] = call.arguments[i]
+		if len(call.arguments) >= 2 {
+			first := strings.trim_space(ir.expr_to_string(call.arguments[0]))
+			second := strings.trim_space(ir.expr_to_string(call.arguments[1]))
+			if first == "string" && second == "match" {
+				drop_call_arguments(call, 2)
+			} else {
+				drop_call_arguments(call, 1)
 			}
-			resize(&call.arguments, len(call.arguments)-1)
+		} else if len(call.arguments) == 1 {
+			drop_call_arguments(call, 1)
 		}
 	}
 
