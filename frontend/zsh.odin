@@ -125,8 +125,14 @@ convert_zsh_statement :: proc(
 
 	switch node_type_str {
 	case "command":
-		stmt := convert_zsh_command_to_statement(arena, node, source)
-		append(body, stmt)
+		// Check if this is a typeset/local/export command
+		if is_zsh_var_declaration(node) {
+			stmt := convert_zsh_typeset_to_statement(arena, node, source)
+			append(body, stmt)
+		} else {
+			stmt := convert_zsh_command_to_statement(arena, node, source)
+			append(body, stmt)
+		}
 	case "variable_assignment":
 		stmt := convert_zsh_assignment_to_statement(arena, node, source)
 		append(body, stmt)
@@ -143,6 +149,66 @@ convert_zsh_statement :: proc(
 		stmt := convert_zsh_return_to_statement(arena, node, source)
 		append(body, stmt)
 	}
+}
+
+// Check if command is typeset, local, or export
+is_zsh_var_declaration :: proc(node: ts.Node) -> bool {
+	for i in 0 ..< child_count(node) {
+		child_node := child(node, i)
+		child_type := node_type(child_node)
+
+		if child_type == "command_name" {
+			for j in 0 ..< child_count(child_node) {
+				name_child := ts.ts_node_child(child_node, u32(j))
+				if node_type(name_child) == "word" {
+					cmd_name := node_text(context.temp_allocator, name_child, "")
+					if cmd_name == "typeset" || cmd_name == "local" || cmd_name == "export" {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+// Convert typeset/local/export to assignment statement
+convert_zsh_typeset_to_statement :: proc(
+	arena: ^ir.Arena_IR,
+	node: ts.Node,
+	source: string,
+) -> ir.Statement {
+	location := node_location(node, source)
+	variable_name := ""
+	value := ""
+
+	for i in 0 ..< child_count(node) {
+		child := child(node, i)
+		child_type := node_type(child)
+
+		if child_type == "word" {
+			text := node_text(mem.arena_allocator(&arena.arena), child, source)
+			// Skip flags like -i, -r, -x
+			if strings.has_prefix(text, "-") {
+				continue
+			}
+			// First non-flag word is variable name
+			if variable_name == "" {
+				variable_name = text
+			} else if value == "" {
+				// Second non-flag word is value
+				value = text
+			}
+		}
+	}
+
+	assign := ir.Assign {
+		variable = variable_name,
+		value    = value,
+		location = location,
+	}
+
+	return ir.Statement{type = .Assign, assign = assign, location = location}
 }
 
 convert_zsh_command :: proc(
