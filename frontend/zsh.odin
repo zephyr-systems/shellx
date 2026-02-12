@@ -109,6 +109,11 @@ convert_zsh_function :: proc(
 	node: ts.Node,
 	source: string,
 ) {
+	if has_error(node) {
+		append_zsh_raw_statements(arena, &program.statements, node, source)
+		return
+	}
+
 	location := node_location(node, source)
 	func_name := ""
 
@@ -120,6 +125,28 @@ convert_zsh_function :: proc(
 		if child_type == "word" && func_name == "" {
 			func_name = intern_node_text(arena, child, source)
 		}
+	}
+	func_name = strings.trim_space(func_name)
+	if strings.has_suffix(func_name, "()") && len(func_name) > 2 {
+		func_name = strings.trim_space(func_name[:len(func_name)-2])
+	}
+	is_valid_fn_name := false
+	if len(func_name) > 0 {
+		first := func_name[0]
+		if (first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z') || first == '_' {
+			is_valid_fn_name = true
+			for i in 1 ..< len(func_name) {
+				c := func_name[i]
+				if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') {
+					is_valid_fn_name = false
+					break
+				}
+			}
+		}
+	}
+	if !is_valid_fn_name {
+		append_zsh_raw_statements(arena, &program.statements, node, source)
+		return
 	}
 
 	func := ir.create_function(arena, func_name, location)
@@ -158,6 +185,13 @@ convert_zsh_statement :: proc(
 	source: string,
 ) {
 	node_type_str := node_type(node)
+	if has_error(node) {
+		switch node_type_str {
+		case "if_statement", "for_statement", "while_statement", "case_statement", "function_definition":
+			append_zsh_raw_statements(arena, body, node, source)
+			return
+		}
+	}
 	if zsh_node_has_error_child(node) {
 		switch node_type_str {
 		case "if_statement", "for_statement", "while_statement", "case_statement":
@@ -789,6 +823,9 @@ convert_zsh_if_to_statement :: proc(
 	node: ts.Node,
 	source: string,
 ) -> ir.Statement {
+	if has_error(node) {
+		return make_zsh_raw_statement(arena, node, source)
+	}
 	location := node_location(node, source)
 	condition := ir.Expression(nil)
 	then_body := make([dynamic]ir.Statement, 0, 4, mem.arena_allocator(&arena.arena))

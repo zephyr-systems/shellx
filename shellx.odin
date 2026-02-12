@@ -231,6 +231,27 @@ translate :: proc(
 		return result
 	}
 
+	recovery_mode := from == .Zsh && to == .Bash && len(parse_diags) > 0
+	if recovery_mode {
+		fe_check := frontend.create_frontend(.Bash)
+		tree_check, parse_check := frontend.parse(&fe_check, emitted)
+		needs_fallback := parse_check.error != .None || tree_check == nil
+		if tree_check != nil {
+			diags_check := frontend.collect_parse_diagnostics(tree_check, emitted, "<recovery-check>")
+			if len(diags_check) > 0 {
+				needs_fallback = true
+			}
+			delete(diags_check)
+			frontend.destroy_tree(tree_check)
+		}
+		frontend.destroy_frontend(&fe_check)
+
+		if needs_fallback {
+			delete(emitted)
+			emitted = strings.clone(source_code, context.allocator)
+		}
+	}
+
 	result.output = emitted
 	rewritten_target, target_changed := rewrite_target_callsites(emitted, from, to, context.allocator)
 	if target_changed {
@@ -862,9 +883,454 @@ rewrite_target_callsites :: proc(
 	allocator := context.allocator,
 ) -> (string, bool) {
 	if from == .Zsh && to == .Bash {
-		return rewrite_zsh_parameter_expansion_for_bash(text, allocator)
+		first, first_changed := rewrite_zsh_parameter_expansion_for_bash(text, allocator)
+		second, second_changed := rewrite_zsh_syntax_for_bash(first, allocator)
+		delete(first)
+		secondb, secondb_changed := rewrite_empty_then_blocks_for_bash(second, allocator)
+		delete(second)
+		third, third_changed := rewrite_unsupported_zsh_expansions_for_bash(secondb, allocator)
+		delete(secondb)
+		if third_changed && !strings.contains(third, "__shellx_zsh_expand()") {
+			shim_body := strings.trim_space(`
+__shellx_zsh_expand() {
+  # fallback shim for zsh-only parameter expansion forms not directly translatable
+  printf "%s" ""
+}
+`)
+			shim := strings.concatenate([]string{shim_body, "\n\n"}, allocator)
+			with_shim := strings.concatenate([]string{shim, third}, allocator)
+			delete(shim)
+			delete(third)
+			return with_shim, true
+		}
+		return third, first_changed || second_changed || secondb_changed || third_changed
 	}
 	return strings.clone(text, allocator), false
+}
+
+rewrite_empty_then_blocks_for_bash :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	for line, i in lines {
+		strings.write_string(&builder, line)
+		if i+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+
+		if strings.trim_space(line) != "then" {
+			continue
+		}
+
+		k := i + 1
+		for k < len(lines) {
+			trimmed_k := strings.trim_space(lines[k])
+			if trimmed_k == "" || strings.has_prefix(trimmed_k, "#") {
+				k += 1
+				continue
+			}
+			if strings.has_prefix(trimmed_k, "elif") {
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				strings.write_string(&builder, indent)
+				strings.write_string(&builder, "  :\n")
+				changed = true
+			}
+			break
+		}
+	}
+
+	return strings.clone(strings.to_string(builder), allocator), changed
+}
+
+rewrite_zsh_if_group_pattern_for_bash :: proc(line: string, allocator := context.allocator) -> (string, bool) {
+	if !strings.contains(line, "[[") {
+		return strings.clone(line, allocator), false
+	}
+	eq_idx := find_substring(line, "== (")
+	if eq_idx < 0 {
+		return strings.clone(line, allocator), false
+	}
+	open_idx := eq_idx + 3
+	if open_idx >= len(line) || line[open_idx] != '(' {
+		return strings.clone(line, allocator), false
+	}
+	depth := 0
+	close_idx := -1
+	for i in open_idx ..< len(line) {
+		if line[i] == '(' {
+			depth += 1
+		} else if line[i] == ')' {
+			depth -= 1
+			if depth == 0 {
+				close_idx = i
+				break
+			}
+		}
+	}
+	if close_idx < 0 {
+		return strings.clone(line, allocator), false
+	}
+	prefix := line[:eq_idx]
+	pattern := line[open_idx : close_idx+1] // includes ( ... )
+	suffix := line[close_idx+1:]
+	rewritten := fmt.tprintf("%s=~ ^%s$%s", prefix, pattern, suffix)
+	return strings.clone(rewritten, allocator), true
+}
+
+rewrite_zsh_anonymous_function_for_bash :: proc(line: string, allocator := context.allocator) -> (string, bool) {
+	trimmed := strings.trim_space(line)
+	if trimmed != "() {" {
+		return strings.clone(line, allocator), false
+	}
+	indent_len := len(line) - len(strings.trim_left_space(line))
+	indent := ""
+	if indent_len > 0 {
+		indent = line[:indent_len]
+	}
+	return strings.clone(strings.concatenate([]string{indent, "{"}), allocator), true
+}
+
+rewrite_zsh_case_group_pattern_for_bash :: proc(line: string, allocator := context.allocator) -> (string, bool) {
+	if strings.contains(line, "[[") || !strings.contains(line, "|") {
+		return strings.clone(line, allocator), false
+	}
+	open_idx := find_substring(line, "(")
+	if open_idx < 0 {
+		return strings.clone(line, allocator), false
+	}
+	close_idx := -1
+	for i in open_idx+1 ..< len(line) {
+		if line[i] == ')' {
+			close_idx = i
+			break
+		}
+	}
+	if close_idx < 0 {
+		return strings.clone(line, allocator), false
+	}
+	group := line[open_idx+1 : close_idx]
+	if !strings.contains(group, "|") {
+		return strings.clone(line, allocator), false
+	}
+	for i in 0 ..< len(group) {
+		c := group[i]
+		if c == ' ' || c == '\t' || c == '$' || c == '{' || c == '}' {
+			return strings.clone(line, allocator), false
+		}
+	}
+	prefix := line[:open_idx]
+	suffix := line[close_idx+1:]
+	has_terminal_close := false
+	if len(suffix) > 0 && suffix[len(suffix)-1] == ')' {
+		has_terminal_close = true
+		suffix = suffix[:len(suffix)-1]
+	}
+	parts := strings.split(group, "|")
+	defer delete(parts)
+	if len(parts) < 2 {
+		return strings.clone(line, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	for p, idx in parts {
+		if idx > 0 {
+			strings.write_byte(&builder, '|')
+		}
+		strings.write_string(&builder, prefix)
+		strings.write_string(&builder, p)
+		strings.write_string(&builder, suffix)
+	}
+	if has_terminal_close {
+		strings.write_byte(&builder, ')')
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_zsh_always_block_for_bash :: proc(line: string, allocator := context.allocator) -> (string, bool) {
+	rewritten, changed := strings.replace_all(line, "} always {", "}; {", allocator)
+	if changed {
+		return rewritten, true
+	}
+	if raw_data(rewritten) != raw_data(line) {
+		delete(rewritten)
+	}
+	return strings.clone(line, allocator), false
+}
+
+rewrite_zsh_conditional_anonymous_for_bash :: proc(line: string, allocator := context.allocator) -> (string, bool) {
+	out := strings.clone(line, allocator)
+	changed_any := false
+	repl, changed := strings.replace_all(out, "&& () {", "&& {", allocator)
+	if changed {
+		delete(out)
+		out = repl
+		changed_any = true
+	} else if raw_data(repl) != raw_data(out) {
+		delete(repl)
+	}
+	repl, changed = strings.replace_all(out, "|| () {", "|| {", allocator)
+	if changed {
+		delete(out)
+		out = repl
+		changed_any = true
+	} else if raw_data(repl) != raw_data(out) {
+		delete(repl)
+	}
+	return out, changed_any
+}
+
+rewrite_zsh_empty_function_for_bash :: proc(line: string, allocator := context.allocator) -> (string, bool) {
+	open_idx := find_substring(line, "(){}")
+	if open_idx < 0 {
+		return strings.clone(line, allocator), false
+	}
+	prefix := line[:open_idx+2]
+	suffix := line[open_idx+4:]
+	return strings.clone(strings.concatenate([]string{prefix, " { :; }", suffix}), allocator), true
+}
+
+rewrite_zsh_if_group_command_for_bash :: proc(line: string, allocator := context.allocator) -> (string, bool) {
+	if !strings.contains(line, "then") || !strings.contains(line, "{") || !strings.contains(line, "}") {
+		return strings.clone(line, allocator), false
+	}
+	repl, changed := strings.replace_all(line, " } 2>/dev/null; then", "; } 2>/dev/null; then", allocator)
+	if changed {
+		return repl, true
+	}
+	if raw_data(repl) != raw_data(line) {
+		delete(repl)
+	}
+	return strings.clone(line, allocator), false
+}
+
+rewrite_zsh_inline_brace_group_for_bash :: proc(line: string, allocator := context.allocator) -> (string, bool) {
+	if !(strings.contains(line, "|| {") || strings.contains(line, "&& {")) {
+		return strings.clone(line, allocator), false
+	}
+	if !strings.contains(line, " }") || strings.contains(line, "; }") {
+		return strings.clone(line, allocator), false
+	}
+	repl, changed := strings.replace_all(line, " }", "; }", allocator)
+	if changed {
+		return repl, true
+	}
+	if raw_data(repl) != raw_data(line) {
+		delete(repl)
+	}
+	return strings.clone(line, allocator), false
+}
+
+rewrite_zsh_for_paren_syntax_for_bash :: proc(line: string, allocator := context.allocator) -> (string, bool) {
+	if !strings.contains(line, "for ") || !strings.contains(line, "); do") || !strings.contains(line, " (") {
+		return strings.clone(line, allocator), false
+	}
+	for_idx := find_substring(line, "for ")
+	open_idx := find_substring(line, " (")
+	close_idx := find_substring(line, "); do")
+	if for_idx < 0 || open_idx < 0 || close_idx < 0 || open_idx <= for_idx+4 || close_idx <= open_idx+2 {
+		return strings.clone(line, allocator), false
+	}
+	var_name := strings.trim_space(line[for_idx+4 : open_idx])
+	iter_expr := strings.trim_space(line[open_idx+2 : close_idx])
+	if var_name == "" || iter_expr == "" {
+		return strings.clone(line, allocator), false
+	}
+	iter_replaced, iter_changed := strings.replace_all(iter_expr, "(/)", "/", allocator)
+	if iter_changed {
+		iter_expr = iter_replaced
+	} else if raw_data(iter_replaced) != raw_data(iter_expr) {
+		delete(iter_replaced)
+	}
+	prefix := line[:for_idx]
+	suffix := line[close_idx+5:] // keep anything after '; do'
+	rewritten := strings.concatenate([]string{prefix, "for ", var_name, " in ", iter_expr, "; do", suffix}, allocator)
+	if iter_changed {
+		delete(iter_replaced)
+	}
+	return rewritten, true
+}
+
+rewrite_zsh_dynamic_function_line_for_bash :: proc(line: string, allocator := context.allocator) -> (string, bool) {
+	trimmed := strings.trim_space(line)
+	if strings.has_prefix(trimmed, "eval ") {
+		return strings.clone(line, allocator), false
+	}
+	if strings.contains(line, "\"") {
+		return strings.clone(line, allocator), false
+	}
+	if !strings.contains(line, "${") || !strings.contains(line, "() {") {
+		return strings.clone(line, allocator), false
+	}
+	escaped := escape_double_quoted(strings.trim_space(line), allocator)
+	rewritten := strings.clone(strings.concatenate([]string{"eval \"", escaped, "\""}), allocator)
+	delete(escaped)
+	return rewritten, true
+}
+
+rewrite_zsh_syntax_for_bash :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	next := ""
+	for line, i in lines {
+		cur := strings.clone(line, allocator)
+		next, c1 := rewrite_zsh_anonymous_function_for_bash(cur, allocator)
+		delete(cur)
+		cur = next
+		if c1 {
+			changed = true
+		}
+
+		c2 := false
+		next, c2 = rewrite_zsh_if_group_pattern_for_bash(cur, allocator)
+		delete(cur)
+		cur = next
+		if c2 {
+			changed = true
+		}
+
+		c3 := false
+		next, c3 = rewrite_zsh_case_group_pattern_for_bash(cur, allocator)
+		delete(cur)
+		cur = next
+		if c3 {
+			changed = true
+		}
+
+		c4 := false
+		next, c4 = rewrite_zsh_always_block_for_bash(cur, allocator)
+		delete(cur)
+		cur = next
+		if c4 {
+			changed = true
+		}
+
+		c5 := false
+		next, c5 = rewrite_zsh_conditional_anonymous_for_bash(cur, allocator)
+		delete(cur)
+		cur = next
+		if c5 {
+			changed = true
+		}
+
+		c6 := false
+		next, c6 = rewrite_zsh_empty_function_for_bash(cur, allocator)
+		delete(cur)
+		cur = next
+		if c6 {
+			changed = true
+		}
+
+		c7 := false
+		next, c7 = rewrite_zsh_if_group_command_for_bash(cur, allocator)
+		delete(cur)
+		cur = next
+		if c7 {
+			changed = true
+		}
+
+		c8 := false
+		next, c8 = rewrite_zsh_dynamic_function_line_for_bash(cur, allocator)
+		delete(cur)
+		cur = next
+		if c8 {
+			changed = true
+		}
+
+		c9 := false
+		next, c9 = rewrite_zsh_inline_brace_group_for_bash(cur, allocator)
+		delete(cur)
+		cur = next
+		if c9 {
+			changed = true
+		}
+
+		c10 := false
+		next, c10 = rewrite_zsh_for_paren_syntax_for_bash(cur, allocator)
+		delete(cur)
+		cur = next
+		if c10 {
+			changed = true
+		}
+
+		strings.write_string(&builder, cur)
+		delete(cur)
+		if i+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+
+	return strings.clone(strings.to_string(builder), allocator), changed
+}
+
+rewrite_unsupported_zsh_expansions_for_bash :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	i := 0
+	for i < len(text) {
+		if i+1 < len(text) && text[i] == '$' && text[i+1] == '{' {
+			depth := 1
+			j := i + 2
+			for j < len(text) {
+				if text[j] == '{' {
+					depth += 1
+				} else if text[j] == '}' {
+					depth -= 1
+					if depth == 0 {
+						break
+					}
+				}
+				j += 1
+			}
+			if j < len(text) && depth == 0 {
+				inner := text[i+2 : j]
+				if strings.contains(inner, "${${") ||
+					strings.contains(inner, "(q)") ||
+					strings.contains(inner, "(qq)") ||
+					strings.contains(inner, ":h") ||
+					strings.contains(inner, ":t") ||
+					strings.contains(inner, ":r") ||
+					strings.contains(inner, ":e") ||
+					strings.contains(inner, ":a") ||
+					strings.contains(inner, ":A") {
+					orig := text[i : j+1]
+					escaped := escape_double_quoted(orig, allocator)
+					strings.write_string(&builder, "$(__shellx_zsh_expand \"")
+					strings.write_string(&builder, escaped)
+					strings.write_string(&builder, "\")")
+					delete(escaped)
+					changed = true
+					i = j + 1
+					continue
+				}
+			}
+		}
+
+		strings.write_byte(&builder, text[i])
+		i += 1
+	}
+
+	return strings.clone(strings.to_string(builder), allocator), changed
 }
 
 is_param_name_char :: proc(c: byte) -> bool {
@@ -947,16 +1413,27 @@ rewrite_zsh_modifier_parameter_tokens :: proc(inner: string, allocator := contex
 						if len(name) == 1 {
 							var_ref = fmt.tprintf("$%s", name)
 						} else {
-							var_ref = fmt.tprintf("${%s}", name)
+							var_ref = strings.concatenate([]string{"${", name, "}"})
 						}
 					} else {
 						var_ref = fmt.tprintf("$%s", name)
 					}
-					raw_expr := fmt.tprintf("$(eval \"printf '%%s\\n' \\\"\\${!%s[@]}\\\"\")", var_ref)
+					raw_expr := strings.concatenate(
+						[]string{
+							"$(eval \"printf '%s\\n' \\\"\\${!",
+							var_ref,
+							"[@]}\\\"\")",
+						},
+					)
 					if i == 0 && j == len(inner) {
-						return strings.clone(fmt.tprintf("__SHELLX_RAW__%s", raw_expr), allocator), true
+						tmp_raw := strings.concatenate([]string{"__SHELLX_RAW__", raw_expr})
+						out_raw := strings.clone(tmp_raw, allocator)
+						delete(tmp_raw)
+						delete(raw_expr)
+						return out_raw, true
 					}
 					strings.write_string(&builder, raw_expr)
+					delete(raw_expr)
 				case "array_sorted_desc", "array_sorted_asc":
 					// Preserve element expansion even when zsh sorting modifiers are unavailable.
 					// This keeps script behavior functionally usable instead of emitting zsh-only syntax.
@@ -996,6 +1473,18 @@ rewrite_zsh_case_modifiers_for_bash :: proc(inner: string, allocator := context.
 		return strings.clone(fmt.tprintf("%s^^", base), allocator), true
 	}
 	return strings.clone(inner, allocator), false
+}
+
+rewrite_zsh_settest_expansion_for_bash :: proc(inner: string, allocator := context.allocator) -> (string, bool) {
+	trimmed := strings.trim_space(inner)
+	if len(trimmed) < 2 || trimmed[0] != '+' {
+		return strings.clone(inner, allocator), false
+	}
+	target := strings.trim_space(trimmed[1:])
+	if target == "" {
+		return strings.clone(inner, allocator), false
+	}
+	return strings.clone(strings.concatenate([]string{target, "+1"}), allocator), true
 }
 
 rewrite_zsh_inline_case_modifiers_for_bash :: proc(inner: string, allocator := context.allocator) -> (string, bool) {
@@ -1064,26 +1553,42 @@ rewrite_zsh_parameter_expansion_for_bash :: proc(
 			if j < len(text) && depth == 0 {
 				inner := text[i+2 : j]
 				rewrite_stage1, stage1_changed := rewrite_zsh_modifier_parameter_tokens(inner, allocator)
-				rewrite_stage2, stage2_changed := rewrite_zsh_inline_case_modifiers_for_bash(rewrite_stage1, allocator)
-				rewrite_stage3, stage3_changed := rewrite_zsh_case_modifiers_for_bash(rewrite_stage2, allocator)
-				if stage1_changed || stage2_changed || stage3_changed {
+				rewrite_stage2, stage2_changed := rewrite_zsh_settest_expansion_for_bash(rewrite_stage1, allocator)
+				rewrite_stage3, stage3_changed := rewrite_zsh_inline_case_modifiers_for_bash(rewrite_stage2, allocator)
+				rewrite_stage4, stage4_changed := rewrite_zsh_case_modifiers_for_bash(rewrite_stage3, allocator)
+				if stage1_changed || stage2_changed || stage3_changed || stage4_changed {
 					changed = true
 				}
-				if strings.has_prefix(rewrite_stage3, "__SHELLX_RAW__") {
-					strings.write_string(&builder, rewrite_stage3[len("__SHELLX_RAW__"):])
+				if strings.has_prefix(rewrite_stage4, "__SHELLX_RAW__") {
+					strings.write_string(&builder, rewrite_stage4[len("__SHELLX_RAW__"):])
 				} else {
 					strings.write_string(&builder, "${")
-					strings.write_string(&builder, rewrite_stage3)
+					strings.write_string(&builder, rewrite_stage4)
 					strings.write_byte(&builder, '}')
 				}
 				delete(rewrite_stage1)
 				delete(rewrite_stage2)
 				delete(rewrite_stage3)
+				delete(rewrite_stage4)
 				i = j + 1
 				continue
 			}
 		}
 		if text[i] == '{' {
+			prev_non_space := byte(0)
+			for k := i-1; k >= 0; k -= 1 {
+				c := text[k]
+				if c == ' ' || c == '\t' {
+					continue
+				}
+				prev_non_space = c
+				break
+			}
+			if prev_non_space == ')' {
+				strings.write_byte(&builder, text[i])
+				i += 1
+				continue
+			}
 			depth := 1
 			j := i + 1
 			for j < len(text) {
@@ -1100,16 +1605,22 @@ rewrite_zsh_parameter_expansion_for_bash :: proc(
 
 			if j < len(text) && depth == 0 {
 				inner := text[i+1 : j]
+				if strings.contains(inner, "\n") || strings.contains(inner, ";") {
+					strings.write_byte(&builder, text[i])
+					i += 1
+					continue
+				}
 				rewrite_stage1, stage1_changed := rewrite_zsh_modifier_parameter_tokens(inner, allocator)
-				rewrite_stage2, stage2_changed := rewrite_zsh_inline_case_modifiers_for_bash(rewrite_stage1, allocator)
-				rewrite_stage3, stage3_changed := rewrite_zsh_case_modifiers_for_bash(rewrite_stage2, allocator)
-				if stage1_changed || stage2_changed || stage3_changed {
+				rewrite_stage2, stage2_changed := rewrite_zsh_settest_expansion_for_bash(rewrite_stage1, allocator)
+				rewrite_stage3, stage3_changed := rewrite_zsh_inline_case_modifiers_for_bash(rewrite_stage2, allocator)
+				rewrite_stage4, stage4_changed := rewrite_zsh_case_modifiers_for_bash(rewrite_stage3, allocator)
+				if stage1_changed || stage2_changed || stage3_changed || stage4_changed {
 					changed = true
-					if strings.has_prefix(rewrite_stage3, "__SHELLX_RAW__") {
-						strings.write_string(&builder, rewrite_stage3[len("__SHELLX_RAW__"):])
+					if strings.has_prefix(rewrite_stage4, "__SHELLX_RAW__") {
+						strings.write_string(&builder, rewrite_stage4[len("__SHELLX_RAW__"):])
 					} else {
 						strings.write_string(&builder, "${")
-						strings.write_string(&builder, rewrite_stage3)
+						strings.write_string(&builder, rewrite_stage4)
 						strings.write_byte(&builder, '}')
 					}
 				} else {
@@ -1120,6 +1631,7 @@ rewrite_zsh_parameter_expansion_for_bash :: proc(
 				delete(rewrite_stage1)
 				delete(rewrite_stage2)
 				delete(rewrite_stage3)
+				delete(rewrite_stage4)
 				i = j + 1
 				continue
 			}
