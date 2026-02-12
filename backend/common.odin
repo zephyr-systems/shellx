@@ -5,17 +5,13 @@ import "core:strings"
 
 Backend :: struct {
 	dialect:      ir.ShellDialect,
-	builder:       strings.Builder,
-	indent_level:  int,
+	builder:      strings.Builder,
+	indent_level: int,
 }
 
 create_backend :: proc(dialect: ir.ShellDialect) -> Backend {
 	builder := strings.builder_make()
-	return Backend{
-		dialect = dialect,
-		builder = builder,
-		indent_level = 0,
-	}
+	return Backend{dialect = dialect, builder = builder, indent_level = 0}
 }
 
 destroy_backend :: proc(b: ^Backend) {
@@ -35,7 +31,9 @@ emit :: proc(b: ^Backend, program: ^ir.Program) -> string {
 		strings.write_byte(&b.builder, '\n')
 	}
 
-	return strings.to_string(b.builder)
+	// Create a copy of the string to ensure it's valid after the builder is destroyed
+	result := strings.to_string(b.builder)
+	return strings.clone(result)
 }
 
 emit_function :: proc(b: ^Backend, func: ir.Function) {
@@ -86,7 +84,7 @@ emit_call :: proc(b: ^Backend, call: ir.Call) {
 
 	if len(call.arguments) > 0 {
 		strings.write_byte(&b.builder, ' ')
-		for idx in 0..<len(call.arguments) {
+		for idx in 0 ..< len(call.arguments) {
 			if idx > 0 {
 				strings.write_byte(&b.builder, ' ')
 			}
@@ -153,7 +151,7 @@ emit_loop :: proc(b: ^Backend, loop: ir.Loop) {
 }
 
 emit_pipeline :: proc(b: ^Backend, pipeline: ir.Pipeline) {
-	for idx in 0..<len(pipeline.commands) {
+	for idx in 0 ..< len(pipeline.commands) {
 		if idx > 0 {
 			strings.write_string(&b.builder, " | ")
 		}
@@ -162,7 +160,7 @@ emit_pipeline :: proc(b: ^Backend, pipeline: ir.Pipeline) {
 }
 
 write_indent :: proc(b: ^Backend) {
-	for _ in 0..<b.indent_level {
+	for _ in 0 ..< b.indent_level {
 		strings.write_byte(&b.builder, '\t')
 	}
 }

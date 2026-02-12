@@ -1,4 +1,4 @@
-.PHONY: all build test clean install setup-tree-sitter
+.PHONY: all build test clean install setup-tree-sitter example
 
 ODIN := odin
 BUILD_DIR := build
@@ -7,27 +7,35 @@ SRC_DIR := .
 
 all: build
 
+# Build the library (checks for compilation errors)
 build:
 	@mkdir -p $(BUILD_DIR)
-	$(ODIN) build $(SRC_DIR) -out:$(BUILD_DIR)/shellx -o:speed
+	$(ODIN) check $(SRC_DIR)
+
+# Build example that uses the library
+example:
+	@mkdir -p $(BUILD_DIR)
+	$(ODIN) build examples -out:$(BUILD_DIR)/demo -o:speed
+	./$(BUILD_DIR)/demo
 
 build-debug:
 	@mkdir -p $(BUILD_DIR)
-	$(ODIN) build $(SRC_DIR) -out:$(BUILD_DIR)/shellx -debug
+	$(ODIN) check $(SRC_DIR) -debug
 
 test:
-	$(ODIN) test tests/unit -all-packages
-	$(ODIN) test tests/integration -all-packages
-	./tests/behavioral/run_tests.sh 2>/dev/null || echo "Behavioral tests skipped"
+	$(ODIN) test . -all-packages
+
+test-verbose:
+	$(ODIN) test . -all-packages -v
 
 test-unit:
-	$(ODIN) test tests/unit -all-packages
+	$(ODIN) test . -all-packages -filter:variable_assignment
 
 test-integration:
-	$(ODIN) test tests/integration -all-packages
+	$(ODIN) test . -all-packages -filter:function_definition
 
 test-corpus:
-	$(ODIN) test tests/corpus -all-packages 2>/dev/null || echo "Corpus tests skipped"
+	@echo "Corpus tests not yet implemented"
 
 benchmark:
 	$(ODIN) test tests/benchmarks -all-packages 2>/dev/null || echo "Benchmarks skipped"

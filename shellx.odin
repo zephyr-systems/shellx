@@ -115,3 +115,11 @@ detect_shell :: proc(code: string) -> ShellDialect {
 detect_shell_from_path :: proc(filepath: string, code: string) -> ShellDialect {
 	return .Bash
 }
+
+// Main entry point - ShellX is a library, not a CLI tool.
+// Use the API: translate(), detect_shell()
+main :: proc() {
+	fmt.println("ShellX is a library package.")
+	fmt.println("Import it with: import \"shellx\"")
+	fmt.println("Use: shellx.translate() or shellx.detect_shell()")
+}
