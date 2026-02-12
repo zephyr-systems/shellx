@@ -63,3 +63,32 @@ test_options_optimization_level_integration :: proc(t: ^testing.T) {
 	defer shellx.destroy_translation_result(&result)
 	testing.expect(t, result.success, "Aggressive optimization path should run")
 }
+
+@(test)
+test_options_insert_shims_fish_string_match_to_bash :: proc(t: ^testing.T) {
+	if !should_run_local_test("test_options_insert_shims_fish_string_match_to_bash") { return }
+
+	opts := shellx.DEFAULT_TRANSLATION_OPTIONS
+	opts.insert_shims = true
+
+	src := "if string match -q 'foo*' $x\n\techo ok\nend"
+	result := shellx.translate(src, .Fish, .Bash, opts)
+	defer shellx.destroy_translation_result(&result)
+	testing.expect(t, result.success, "Fish string match condition should translate with shims")
+	testing.expect(t, strings.contains(result.output, "__shellx_match"), "String match should be rewritten to __shellx_match")
+	testing.expect(t, !strings.contains(result.output, "if string match"), "Raw fish string match should not remain in bash condition")
+}
+
+@(test)
+test_options_insert_shims_fish_string_match_to_zsh :: proc(t: ^testing.T) {
+	if !should_run_local_test("test_options_insert_shims_fish_string_match_to_zsh") { return }
+
+	opts := shellx.DEFAULT_TRANSLATION_OPTIONS
+	opts.insert_shims = true
+
+	src := "if string match -q 'foo*' $x\n\techo ok\nend"
+	result := shellx.translate(src, .Fish, .Zsh, opts)
+	defer shellx.destroy_translation_result(&result)
+	testing.expect(t, result.success, "Fish string match condition should translate to zsh with shims")
+	testing.expect(t, strings.contains(result.output, "__shellx_match"), "String match should be rewritten to __shellx_match")
+}

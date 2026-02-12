@@ -395,6 +395,37 @@ has_required_shim :: proc(required_shims: []string, name: string) -> bool {
 	return false
 }
 
+is_string_match_call :: proc(call: ^ir.Call) -> bool {
+	if call == nil || call.function == nil {
+		return false
+	}
+	if call.function.name != "string" {
+		return false
+	}
+	if len(call.arguments) == 0 {
+		return false
+	}
+	first := strings.trim_space(ir.expr_to_string(call.arguments[0]))
+	return first == "match"
+}
+
+rewrite_condition_command_text_for_shim :: proc(expr: ^ir.TestCondition) {
+	if expr == nil {
+		return
+	}
+	trimmed := strings.trim_space(expr.text)
+	if !strings.has_prefix(trimmed, "string match") {
+		return
+	}
+	rest := strings.trim_space(trimmed[len("string match"):])
+	if rest == "" {
+		expr.text = "__shellx_match"
+	} else {
+		expr.text = strings.concatenate([]string{"__shellx_match ", rest}, context.allocator)
+	}
+	expr.syntax = .Command
+}
+
 rewrite_expr_for_shims :: proc(
 	expr: ir.Expression,
 	required_shims: []string,
@@ -414,6 +445,11 @@ rewrite_expr_for_shims :: proc(
 						e.text = strings.concatenate([]string{"__shellx_test ", cond_text}, context.allocator)
 					}
 					e.syntax = .Command
+				}
+			} else if from == .Fish && to != .Fish {
+				rewrite_condition_command_text_for_shim(e)
+				if e.syntax == .FishTest {
+					e.syntax = .TestBuiltin
 				}
 			} else if to == .POSIX && e.syntax == .DoubleBracket {
 				e.syntax = .TestBuiltin
@@ -450,6 +486,16 @@ rewrite_call_for_shims :: proc(
 
 	if has_required_shim(required_shims, "hooks_events") && call.function.name == "add-zsh-hook" {
 		call.function.name = "__shellx_register_hook"
+	}
+
+	if has_required_shim(required_shims, "condition_semantics") && from == .Fish && to != .Fish && is_string_match_call(call) {
+		call.function.name = "__shellx_match"
+		if len(call.arguments) > 0 {
+			for i in 1 ..< len(call.arguments) {
+				call.arguments[i-1] = call.arguments[i]
+			}
+			resize(&call.arguments, len(call.arguments)-1)
+		}
 	}
 
 	for arg in call.arguments {
@@ -534,12 +580,6 @@ apply_shim_callsite_rewrites :: proc(
 	if has_required_shim(required_shims, "hooks_events") {
 		out, changed_any = replace_with_flag(out, "add-zsh-hook precmd ", "__shellx_register_precmd ", changed_any, allocator)
 		out, changed_any = replace_with_flag(out, "add-zsh-hook preexec ", "__shellx_register_preexec ", changed_any, allocator)
-	}
-
-	if has_required_shim(required_shims, "condition_semantics") {
-		if from == .Fish && (to == .Bash || to == .Zsh || to == .POSIX) {
-			out, changed_any = replace_with_flag(out, "string match ", "__shellx_test ", changed_any, allocator)
-		}
 	}
 
 	if has_required_shim(required_shims, "arrays_lists") {

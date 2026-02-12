@@ -348,6 +348,73 @@ test_translate_insert_shims_option_api :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_translate_insert_shims_fish_string_match_api :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_insert_shims_fish_string_match_api") { return }
+
+	options := DEFAULT_TRANSLATION_OPTIONS
+	options.insert_shims = true
+
+	src := "if string match -q 'foo*' $x\n\techo ok\nend\n"
+	result := translate(src, .Fish, .Bash, options)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, result.success, "Fish string match condition should translate with shims")
+	testing.expect(t, strings.contains(result.output, "__shellx_match"), "Output should use __shellx_match shim")
+	testing.expect(t, !strings.contains(result.output, "if string match"), "Output should not contain raw fish string match in condition")
+}
+
+@(test)
+test_translate_corpus_fisher_to_bash_api :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_corpus_fisher_to_bash_api") { return }
+
+	path := "tests/corpus/repos/fish/fisher/functions/fisher.fish"
+	if !os.is_file(path) {
+		return
+	}
+	data, ok := os.read_entire_file(path)
+	testing.expect(t, ok, "Should read fisher corpus plugin")
+	if !ok {
+		return
+	}
+	defer delete(data)
+
+	options := DEFAULT_TRANSLATION_OPTIONS
+	options.insert_shims = true
+
+	result := translate(string(data), .Fish, .Bash, options)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, result.success, "Fisher corpus plugin should translate to bash")
+	testing.expect(t, len(result.output) > 0, "Translated output should not be empty")
+	testing.expect(t, strings.contains(result.output, "__shellx_match"), "Fisher translation should include string-match shim usage")
+}
+
+@(test)
+test_translate_corpus_bashit_theme_to_fish_api :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_corpus_bashit_theme_to_fish_api") { return }
+
+	path := "tests/corpus/repos/bash/bash-it/themes/bobby/bobby.theme.bash"
+	if !os.is_file(path) {
+		return
+	}
+	data, ok := os.read_entire_file(path)
+	testing.expect(t, ok, "Should read bash-it theme corpus file")
+	if !ok {
+		return
+	}
+	defer delete(data)
+
+	options := DEFAULT_TRANSLATION_OPTIONS
+	options.insert_shims = true
+
+	result := translate(string(data), .Bash, .Fish, options)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, result.success, "Bash-it theme should translate to fish")
+	testing.expect(t, len(result.output) > 0, "Theme translation output should not be empty")
+}
+
+@(test)
 test_translate_preserve_comments_option_api :: proc(t: ^testing.T) {
 	if !should_run_test("test_translate_preserve_comments_option_api") { return }
 

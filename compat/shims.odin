@@ -202,6 +202,39 @@ end
 __shellx_test() {
   test "$@"
 }
+
+__shellx_match() {
+  _quiet=0 _regex=0 _invert=0 _pattern=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -q|--quiet) _quiet=1; shift ;;
+      -r|--regex) _regex=1; shift ;;
+      -v|--invert) _invert=1; shift ;;
+      --entire|--all|--ignore-case|-i|--) shift ;;
+      -*) shift ;;
+      *) _pattern="$1"; shift; break ;;
+    esac
+  done
+  [ -n "$_pattern" ] || return 1
+  [ "$#" -gt 0 ] || set -- ""
+  for _arg in "$@"; do
+    if [ "$_regex" -eq 1 ]; then
+      printf "%s\n" "$_arg" | grep -E -- "$_pattern" >/dev/null 2>&1
+    else
+      case "$_arg" in
+        $_pattern) true ;;
+        *) false ;;
+      esac
+    fi
+    _matched="$?"
+    if [ "$_invert" -eq 1 ]; then
+      [ "$_matched" -ne 0 ] && return 0
+    else
+      [ "$_matched" -eq 0 ] && return 0
+    fi
+  done
+  return 1
+}
 `)
 	}
 	return ""
