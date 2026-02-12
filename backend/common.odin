@@ -210,6 +210,8 @@ emit_statement :: proc(b: ^Backend, stmt: ir.Statement) {
 		emit_assign(b, stmt.assign)
 	case .Call:
 		emit_call(b, stmt.call)
+	case .Logical:
+		emit_logical(b, stmt.logical)
 	case .Return:
 		emit_return(b, stmt.return_)
 	case .Branch:
@@ -218,6 +220,23 @@ emit_statement :: proc(b: ^Backend, stmt: ir.Statement) {
 		emit_loop(b, stmt.loop)
 	case .Pipeline:
 		emit_pipeline(b, stmt.pipeline)
+	}
+}
+
+emit_logical :: proc(b: ^Backend, logical: ir.LogicalChain) {
+	for idx in 0 ..< len(logical.segments) {
+		if idx > 0 {
+			if logical.operators[idx-1] == .And {
+				strings.write_string(&b.builder, " && ")
+			} else {
+				strings.write_string(&b.builder, " || ")
+			}
+		}
+		segment := logical.segments[idx]
+		if segment.negated {
+			strings.write_string(&b.builder, "! ")
+		}
+		emit_call(b, segment.call)
 	}
 }
 

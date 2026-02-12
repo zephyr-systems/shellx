@@ -151,6 +151,69 @@ test_zsh_error_fragment_preserved :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_zsh_logical_chain :: proc(t: ^testing.T) {
+	if !should_run_test("test_zsh_logical_chain") { return }
+	code := "foo && bar || baz"
+	arena := ir.create_arena(2048)
+	defer ir.destroy_arena(&arena)
+
+	fe := frontend.create_frontend(.Zsh)
+	defer frontend.destroy_frontend(&fe)
+
+	tree, parse_err := frontend.parse(&fe, code)
+	testing.expect(t, parse_err.error == .None, "Should parse successfully")
+	if parse_err.error != .None {
+		return
+	}
+	defer frontend.destroy_tree(tree)
+
+	program, conv_err := frontend.zsh_to_ir(&arena, tree, code)
+	testing.expect(t, conv_err.error == .None, "Should convert to IR")
+	testing.expect(t, len(program.statements) == 1, "Should emit one logical statement")
+	if len(program.statements) != 1 {
+		return
+	}
+
+	stmt := program.statements[0]
+	testing.expect(t, stmt.type == .Logical, "Should convert to Logical statement")
+	if stmt.type == .Logical {
+		testing.expect(t, len(stmt.logical.segments) == 3, "Should have 3 logical segments")
+		testing.expect(t, len(stmt.logical.operators) == 2, "Should have 2 logical operators")
+	}
+}
+
+@(test)
+test_zsh_logical_negation :: proc(t: ^testing.T) {
+	if !should_run_test("test_zsh_logical_negation") { return }
+	code := "foo && ! bar"
+	arena := ir.create_arena(2048)
+	defer ir.destroy_arena(&arena)
+
+	fe := frontend.create_frontend(.Zsh)
+	defer frontend.destroy_frontend(&fe)
+
+	tree, parse_err := frontend.parse(&fe, code)
+	testing.expect(t, parse_err.error == .None, "Should parse successfully")
+	if parse_err.error != .None {
+		return
+	}
+	defer frontend.destroy_tree(tree)
+
+	program, conv_err := frontend.zsh_to_ir(&arena, tree, code)
+	testing.expect(t, conv_err.error == .None, "Should convert to IR")
+	testing.expect(t, len(program.statements) == 1, "Should emit one logical statement")
+	if len(program.statements) != 1 {
+		return
+	}
+
+	stmt := program.statements[0]
+	testing.expect(t, stmt.type == .Logical, "Should convert to Logical statement")
+	if stmt.type == .Logical && len(stmt.logical.segments) == 2 {
+		testing.expect(t, stmt.logical.segments[1].negated, "Second segment should be negated")
+	}
+}
+
+@(test)
 test_zsh_function :: proc(t: ^testing.T) {
 	if !should_run_test("test_zsh_function") { return }
 	code := "function hello() {\n\techo \"Hello\"\n}"

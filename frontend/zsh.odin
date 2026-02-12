@@ -45,10 +45,17 @@ convert_zsh_node :: proc(
 	case "variable_assignment":
 		convert_zsh_assignment(arena, program, node, source)
 		return
+	case "list":
+		stmt, ok := convert_zsh_list_to_logical_statement(arena, node, source)
+		if ok {
+			ir.add_statement(program, stmt)
+			return
+		}
+		// Fall back to child traversal for non-logical lists.
 	case "ERROR":
 		append_zsh_raw_statements(arena, &program.statements, node, source)
 		return
-	case "negated_command", "binary_expression", "unary_expression", "subshell", "list":
+	case "negated_command", "binary_expression", "unary_expression", "subshell":
 		append_zsh_raw_statements(arena, &program.statements, node, source)
 		return
 	}
@@ -160,10 +167,22 @@ convert_zsh_statement :: proc(
 	case "return_statement":
 		stmt := convert_zsh_return_to_statement(arena, node, source)
 		append(body, stmt)
+	case "list":
+		stmt, ok := convert_zsh_list_to_logical_statement(arena, node, source)
+		if ok {
+			append(body, stmt)
+		} else {
+			for i in 0 ..< child_count(node) {
+				child_node := child(node, i)
+				if is_named(child_node) {
+					convert_zsh_statement(arena, body, child_node, source)
+				}
+			}
+		}
 	case "ERROR":
 		// Preserve parse-recovery fragments as raw command lines.
 		append_zsh_raw_statements(arena, body, node, source)
-	case "negated_command", "binary_expression", "unary_expression", "subshell", "list":
+	case "negated_command", "binary_expression", "unary_expression", "subshell":
 		// Preserve higher-level shell forms that we do not structurally model yet.
 		append_zsh_raw_statements(arena, body, node, source)
 	case:
@@ -186,6 +205,116 @@ convert_zsh_declaration_or_command_to_statement :: proc(
 		return convert_zsh_typeset_to_statement(arena, node, source)
 	}
 	return convert_zsh_command_to_statement(arena, node, source)
+}
+
+list_operator_from_text :: proc(text: string) -> (ir.LogicalOperator, bool) {
+	trimmed := strings.trim_space(text)
+	switch trimmed {
+	case "&&":
+		return .And, true
+	case "||":
+		return .Or, true
+	}
+	return .And, false
+}
+
+convert_zsh_list_to_logical_statement :: proc(
+	arena: ^ir.Arena_IR,
+	node: ts.Node,
+	source: string,
+) -> (ir.Statement, bool) {
+	location := node_location(node, source)
+	segments := make([dynamic]ir.LogicalSegment, 0, 2, mem.arena_allocator(&arena.arena))
+	operators := make([dynamic]ir.LogicalOperator, 0, 2, mem.arena_allocator(&arena.arena))
+
+	push_command_node :: proc(
+		arena: ^ir.Arena_IR,
+		n: ts.Node,
+		source: string,
+		segments: ^[dynamic]ir.LogicalSegment,
+		operators: ^[dynamic]ir.LogicalOperator,
+	) -> bool {
+		switch node_type(n) {
+		case "list":
+			nested_stmt, ok := convert_zsh_list_to_logical_statement(arena, n, source)
+			if !ok || nested_stmt.type != .Logical {
+				return false
+			}
+			for seg in nested_stmt.logical.segments {
+				append(segments, seg)
+			}
+			for op in nested_stmt.logical.operators {
+				append(operators, op)
+			}
+			return true
+		case "command":
+			stmt := convert_zsh_command_to_statement(arena, n, source)
+			if stmt.type != .Call {
+				return false
+			}
+			append(segments, ir.LogicalSegment{call = stmt.call})
+			return true
+		case "declaration_command":
+			stmt := convert_zsh_declaration_or_command_to_statement(arena, n, source)
+			if stmt.type != .Call {
+				return false
+			}
+			append(segments, ir.LogicalSegment{call = stmt.call})
+			return true
+		case "negated_command":
+			for i in 0 ..< child_count(n) {
+				child_node := child(n, i)
+				if !is_named(child_node) {
+					continue
+				}
+				switch node_type(child_node) {
+				case "command":
+					stmt := convert_zsh_command_to_statement(arena, child_node, source)
+					if stmt.type != .Call {
+						return false
+					}
+					append(segments, ir.LogicalSegment{call = stmt.call, negated = true})
+					return true
+				case "declaration_command":
+					stmt := convert_zsh_declaration_or_command_to_statement(arena, child_node, source)
+					if stmt.type != .Call {
+						return false
+					}
+					append(segments, ir.LogicalSegment{call = stmt.call, negated = true})
+					return true
+				}
+			}
+		}
+		return false
+	}
+
+	for i in 0 ..< child_count(node) {
+		child_node := child(node, i)
+		if is_named(child_node) {
+			if !push_command_node(arena, child_node, source, &segments, &operators) {
+				return ir.Statement{}, false
+			}
+		} else {
+			token := node_text(context.temp_allocator, child_node, source)
+			if op, ok := list_operator_from_text(token); ok {
+				append(&operators, op)
+			}
+		}
+	}
+
+	if len(segments) < 2 || len(operators) == 0 {
+		return ir.Statement{}, false
+	}
+	if len(operators) != len(segments)-1 {
+		return ir.Statement{}, false
+	}
+
+	logical := ir.LogicalChain{
+		segments = segments,
+		operators = operators,
+		location = location,
+	}
+	return ir.Statement{type = .Logical, logical = logical, location = location}, true
 }
 
 is_zsh_argument_node :: proc(child_type: string) -> bool {

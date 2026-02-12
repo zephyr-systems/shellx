@@ -68,6 +68,8 @@ emit_fish_statement :: proc(be: ^FishBackend, stmt: ir.Statement) {
 		emit_fish_assign(be, stmt.assign)
 	case .Call:
 		emit_fish_call(be, stmt.call)
+	case .Logical:
+		emit_fish_logical(be, stmt.logical)
 	case .Return:
 		emit_fish_return(be, stmt.return_)
 	case .Branch:
@@ -76,6 +78,23 @@ emit_fish_statement :: proc(be: ^FishBackend, stmt: ir.Statement) {
 		emit_fish_loop(be, stmt.loop)
 	case .Pipeline:
 		emit_fish_pipeline(be, stmt.pipeline)
+	}
+}
+
+emit_fish_logical :: proc(be: ^FishBackend, logical: ir.LogicalChain) {
+	for idx in 0 ..< len(logical.segments) {
+		segment := logical.segments[idx]
+		if idx > 0 {
+			if logical.operators[idx-1] == .And {
+				strings.write_string(&be.builder, "; and ")
+			} else {
+				strings.write_string(&be.builder, "; or ")
+			}
+		}
+		if segment.negated {
+			strings.write_string(&be.builder, "not ")
+		}
+		emit_fish_call(be, segment.call)
 	}
 }
 

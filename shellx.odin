@@ -376,6 +376,11 @@ propagate_program_file :: proc(program: ^ir.Program, file: string) {
 			set_location_file_if_empty(&stmt.assign.location, file)
 		case .Call:
 			set_location_file_if_empty(&stmt.call.location, file)
+		case .Logical:
+			set_location_file_if_empty(&stmt.logical.location, file)
+			for &segment in stmt.logical.segments {
+				set_location_file_if_empty(&segment.call.location, file)
+			}
 		case .Return:
 			set_location_file_if_empty(&stmt.return_.location, file)
 		case .Branch:

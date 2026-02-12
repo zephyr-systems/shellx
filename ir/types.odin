@@ -96,6 +96,7 @@ RawExpression :: struct {
 StatementType :: enum {
 	Assign,
 	Call,
+	Logical,
 	Return,
 	Branch,
 	Loop,
@@ -111,6 +112,22 @@ Assign :: struct {
 Call :: struct {
 	function:  ^Variable,
 	arguments: [dynamic]Expression,
+	location:  SourceLocation,
+}
+
+LogicalOperator :: enum {
+	And,
+	Or,
+}
+
+LogicalSegment :: struct {
+	call:    Call,
+	negated: bool,
+}
+
+LogicalChain :: struct {
+	segments:  [dynamic]LogicalSegment,
+	operators: [dynamic]LogicalOperator,
 	location:  SourceLocation,
 }
 
@@ -151,6 +168,7 @@ Statement :: struct {
 	type:      StatementType,
 	assign:    Assign,
 	call:      Call,
+	logical:   LogicalChain,
 	return_:   Return,
 	branch:    Branch,
 	loop:      Loop,

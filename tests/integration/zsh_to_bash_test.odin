@@ -2,6 +2,7 @@ package integration_tests
 
 import "backend"
 import "core:testing"
+import "core:strings"
 import "frontend"
 import "ir"
 
@@ -53,4 +54,16 @@ test_zsh_to_bash_typeset :: proc(t: ^testing.T) {
 	defer delete(result)
 
 	testing.expect(t, len(result) > 0, "Should produce output")
+}
+
+@(test)
+test_zsh_to_bash_logical_chain :: proc(t: ^testing.T) {
+	if !should_run_test("test_zsh_to_bash_logical_chain") { return }
+	zsh_code := "foo && ! bar || baz"
+	result := translate_code(zsh_code, .Zsh, .Bash)
+	defer delete(result)
+
+	testing.expect(t, strings.contains(result, "&&"), "Should preserve AND operator")
+	testing.expect(t, strings.contains(result, "||"), "Should preserve OR operator")
+	testing.expect(t, strings.contains(result, "! bar"), "Should preserve negation")
 }
