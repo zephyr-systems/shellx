@@ -11,19 +11,50 @@ Cross-dialect runs executed: 126
 | bash->fish | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 0 | 1.779 | 8.563 | 15 |
 | bash->posix | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 0 | 1.375 | 6.952 | 12 |
 | bash->zsh | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 0 | 0.346 | 0.945 | 0 |
-| fish->bash | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 0 | 0 | 1.069 | 7.971 | 11 |
-| fish->posix | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 0 | 0 | 1.328 | 9.561 | 11 |
-| fish->zsh | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 0 | 0 | 1.180 | 6.259 | 11 |
-| zsh->bash | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 0 | 0.830 | 2.658 | 4 |
+| fish->bash | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 0 | 0 | 1.368 | 8.363 | 11 |
+| fish->posix | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 0 | 0 | 1.628 | 9.953 | 11 |
+| fish->zsh | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 0 | 0 | 1.450 | 6.598 | 11 |
+| zsh->bash | 15 | 15/15 | 15/15 | 12/15 | 0 | 10/10 | 5/5 | 0 | 0 | 2.039 | 5.768 | 11 |
 | zsh->fish | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 0 | 2.101 | 10.386 | 15 |
-| zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 0 | 2.146 | 10.049 | 14 |
+| zsh->posix | 15 | 15/15 | 15/15 | 12/15 | 0 | 10/10 | 5/5 | 0 | 0 | 3.347 | 13.076 | 14 |
 
 ## Failures
 
+- [FAIL] ohmyzsh-sudo (plugin) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=0 src_fn=2 out_fn=0 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-sudo_16.bash: line 19: unexpected EOF while looking for matching `}'
+ path=tests/corpus/repos/zsh/ohmyzsh/plugins/sudo/sudo.plugin.zsh
+- [FAIL] ohmyzsh-sudo (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=1 src_fn=2 out_fn=19 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-sudo_18.sh: line 217: unexpected EOF while looking for matching `}'
+ path=tests/corpus/repos/zsh/ohmyzsh/plugins/sudo/sudo.plugin.zsh
+- [FAIL] zsh-powerlevel10k (theme) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=1 src_fn=1 out_fn=11 msg= parser_msg=tests/corpus/.parser_check_zsh-powerlevel10k_91.bash: line 236: syntax error near unexpected token `('
+tests/corpus/.parser_check_zsh-powerlevel10k_91.bash: line 236: `  typeset -gr __p9k_intro_locale='[[ $langinfo[CODESET] != (utf|UTF)(-|)8 ]] && _p9k_init_locale && { [[ -n $LC_ALL ]] && local LC_ALL=$__p9k_locale || local LC_CTYPE=$__p9k_locale; }''
+ path=tests/corpus/repos/zsh/powerlevel10k/powerlevel10k.zsh-theme
+- [FAIL] zsh-powerlevel10k (theme) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=3 src_fn=1 out_fn=29 msg= parser_msg=tests/corpus/.parser_check_zsh-powerlevel10k_93.sh: line 442: syntax error near unexpected token `('
+tests/corpus/.parser_check_zsh-powerlevel10k_93.sh: line 442: `  typeset -gr __p9k_intro_locale='[[ $langinfo[CODESET] != (utf|UTF)(-|)8 ]] && _p9k_init_locale && { [[ -n $LC_ALL ]] && local LC_ALL=$__p9k_locale || local LC_CTYPE=$__p9k_locale; }''
+ path=tests/corpus/repos/zsh/powerlevel10k/powerlevel10k.zsh-theme
+- [FAIL] zsh-gnzh (theme) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=0 src_fn=0 out_fn=0 msg= parser_msg=tests/corpus/.parser_check_zsh-gnzh_103.bash: line 32: syntax error near unexpected token `('
+tests/corpus/.parser_check_zsh-gnzh_103.bash: line 32: `ZSH_THEME_VIRTUALENV_PREFIX="%F{red}("'
+ path=tests/corpus/repos/zsh/ohmyzsh/themes/gnzh.zsh-theme
+- [FAIL] zsh-gnzh (theme) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=1 src_fn=0 out_fn=19 msg= parser_msg=tests/corpus/.parser_check_zsh-gnzh_105.sh: line 247: syntax error near unexpected token `('
+tests/corpus/.parser_check_zsh-gnzh_105.sh: line 247: `ZSH_THEME_VIRTUALENV_PREFIX="%F{red}("'
+ path=tests/corpus/repos/zsh/ohmyzsh/themes/gnzh.zsh-theme
 
 ## Parser Validation Failures
 
-- No parser validation failures.
+- [PARSER-FAIL] ohmyzsh-sudo (plugin) zsh->bash command=`bash -n tests/corpus/.parser_check_ohmyzsh-sudo_16.bash` exit=2 message=tests/corpus/.parser_check_ohmyzsh-sudo_16.bash: line 19: unexpected EOF while looking for matching `}'
+ path=tests/corpus/repos/zsh/ohmyzsh/plugins/sudo/sudo.plugin.zsh
+- [PARSER-FAIL] ohmyzsh-sudo (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-sudo_18.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-sudo_18.sh: line 217: unexpected EOF while looking for matching `}'
+ path=tests/corpus/repos/zsh/ohmyzsh/plugins/sudo/sudo.plugin.zsh
+- [PARSER-FAIL] zsh-powerlevel10k (theme) zsh->bash command=`bash -n tests/corpus/.parser_check_zsh-powerlevel10k_91.bash` exit=2 message=tests/corpus/.parser_check_zsh-powerlevel10k_91.bash: line 236: syntax error near unexpected token `('
+tests/corpus/.parser_check_zsh-powerlevel10k_91.bash: line 236: `  typeset -gr __p9k_intro_locale='[[ $langinfo[CODESET] != (utf|UTF)(-|)8 ]] && _p9k_init_locale && { [[ -n $LC_ALL ]] && local LC_ALL=$__p9k_locale || local LC_CTYPE=$__p9k_locale; }''
+ path=tests/corpus/repos/zsh/powerlevel10k/powerlevel10k.zsh-theme
+- [PARSER-FAIL] zsh-powerlevel10k (theme) zsh->posix command=`bash -n tests/corpus/.parser_check_zsh-powerlevel10k_93.sh` exit=2 message=tests/corpus/.parser_check_zsh-powerlevel10k_93.sh: line 442: syntax error near unexpected token `('
+tests/corpus/.parser_check_zsh-powerlevel10k_93.sh: line 442: `  typeset -gr __p9k_intro_locale='[[ $langinfo[CODESET] != (utf|UTF)(-|)8 ]] && _p9k_init_locale && { [[ -n $LC_ALL ]] && local LC_ALL=$__p9k_locale || local LC_CTYPE=$__p9k_locale; }''
+ path=tests/corpus/repos/zsh/powerlevel10k/powerlevel10k.zsh-theme
+- [PARSER-FAIL] zsh-gnzh (theme) zsh->bash command=`bash -n tests/corpus/.parser_check_zsh-gnzh_103.bash` exit=2 message=tests/corpus/.parser_check_zsh-gnzh_103.bash: line 32: syntax error near unexpected token `('
+tests/corpus/.parser_check_zsh-gnzh_103.bash: line 32: `ZSH_THEME_VIRTUALENV_PREFIX="%F{red}("'
+ path=tests/corpus/repos/zsh/ohmyzsh/themes/gnzh.zsh-theme
+- [PARSER-FAIL] zsh-gnzh (theme) zsh->posix command=`bash -n tests/corpus/.parser_check_zsh-gnzh_105.sh` exit=2 message=tests/corpus/.parser_check_zsh-gnzh_105.sh: line 247: syntax error near unexpected token `('
+tests/corpus/.parser_check_zsh-gnzh_105.sh: line 247: `ZSH_THEME_VIRTUALENV_PREFIX="%F{red}("'
+ path=tests/corpus/repos/zsh/ohmyzsh/themes/gnzh.zsh-theme
 - No parser validation skips.
 
 ## High Warning Runs
@@ -53,13 +84,13 @@ Cross-dialect runs executed: 126
 
 ## Semantic Differential Checks
 
-Cases: 22, Passed: 19, Skipped: 0
+Cases: 22, Passed: 20, Skipped: 0
 
 ### Semantic Pair Summary
 
 | Pair | Cases | Passed | Failed | Skipped |
 |---|---:|---:|---:|---:|
-| fish->bash | 4 | 3 | 1 | 0 |
+| fish->bash | 4 | 4 | 0 | 0 |
 | fish->posix | 1 | 1 | 0 | 0 |
 | fish->zsh | 1 | 1 | 0 | 0 |
 | zsh->fish | 4 | 4 | 0 | 0 |
@@ -91,6 +122,6 @@ Cases: 22, Passed: 19, Skipped: 0
 - [PASS] posix_if_fish posix->fish exit=0 out="one"
 - [PASS] posix_default_zsh posix->zsh exit=0 out="alt"
 - [PASS] posix_case_bash posix->bash exit=0 out="match"
-- [FAIL] plugin_ohmyzsh_z_zsh_to_bash zsh->bash src_exit=0 dst_exit=0 src_out="HAVE_z" dst_out="" src_err="" dst_err="tests/corpus/.semantic_module_plugin_ohmyzsh_z_zsh_to_bash_dst.bash: line 260: zsh/system: division by 0 (error token is \"system\")"
+- [FAIL] plugin_ohmyzsh_z_zsh_to_bash zsh->bash src_exit=0 dst_exit=0 src_out="HAVE_z" dst_out="" src_err="" dst_err="tests/corpus/.semantic_module_plugin_ohmyzsh_z_zsh_to_bash_dst.bash: line 1298: ${=ZSHZ[FUNCTIONS]}: bad substitution"
 - [FAIL] plugin_bashit_aliases_bash_to_posix bash->posix src_exit=0 dst_exit=0 src_out="HAVE_ALIAS_COMPLETION_CB" dst_out="" src_err="tests/corpus/.semantic_module_plugin_bashit_aliases_bash_to_posix_src.bash: line 2: about-plugin: command not found" dst_err=""
-- [FAIL] plugin_fish_autopair_fish_to_bash fish->bash src_exit=0 dst_exit=0 src_out="" dst_out="HAVE_AUTOPAIR_BIND\nHAVE_AUTOPAIR_UNINSTALL" src_err="" dst_err=""
+- [PASS] plugin_fish_autopair_fish_to_bash fish->bash exit=0 out=""

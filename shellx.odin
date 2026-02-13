@@ -519,6 +519,34 @@ translate :: proc(
 		if strings.contains(emitted, "__shellx_test ") || strings.contains(emitted, "__shellx_match ") {
 			append_unique(&result.required_shims, "condition_semantics")
 		}
+		collect_runtime_polyfill_shims(&result.required_shims, emitted, to)
+	}
+	if to == .POSIX {
+		rewritten, changed := append_posix_dash_function_aliases(source_code, emitted, context.allocator)
+		if changed {
+			delete(emitted)
+			emitted = rewritten
+		} else {
+			delete(rewritten)
+		}
+	}
+	if options.insert_shims {
+		rewritten, changed := prepend_fish_module_noninteractive_guard(emitted, from, to, context.allocator)
+		if changed {
+			delete(emitted)
+			emitted = rewritten
+		} else {
+			delete(rewritten)
+		}
+	}
+	if options.insert_shims {
+		rewritten, changed := rewrite_zsh_runtime_decl_fallbacks(emitted, from, to, context.allocator)
+		if changed {
+			delete(emitted)
+			emitted = rewritten
+		} else {
+			delete(rewritten)
+		}
 	}
 	cap_prelude := ""
 	if options.insert_shims {
@@ -714,6 +742,207 @@ has_hook_bridge_shim :: proc(required_shims: []string) -> bool {
 		has_required_shim(required_shims, "zsh_hooks") ||
 		has_required_shim(required_shims, "fish_events") ||
 		has_required_shim(required_shims, "prompt_hooks")
+}
+
+collect_runtime_polyfill_shims :: proc(
+	required_shims: ^[dynamic]string,
+	emitted: string,
+	to: ShellDialect,
+) {
+	if to == .Fish || emitted == "" {
+		return
+	}
+	if strings.contains(emitted, "autoload ") ||
+		strings.contains(emitted, "is-at-least ") ||
+		strings.contains(emitted, "about-plugin ") ||
+		strings.contains(emitted, "about-alias ") ||
+		strings.contains(emitted, "emulate ") ||
+		strings.contains(emitted, "unfunction ") ||
+		strings.contains(emitted, "zsystem ") ||
+		strings.contains(emitted, "status ") ||
+		strings.contains(emitted, "typeset -") {
+		append_unique(required_shims, "runtime_polyfills")
+	}
+}
+
+append_posix_dash_function_aliases :: proc(
+	source_code: string,
+	emitted: string,
+	allocator := context.allocator,
+) -> (string, bool) {
+	if source_code == "" || emitted == "" {
+		return strings.clone(emitted, allocator), false
+	}
+	lines := strings.split_lines(source_code)
+	defer delete(lines)
+	legacy_names := make([dynamic]string, 0, 8, context.temp_allocator)
+	defer delete(legacy_names)
+	for line in lines {
+		trimmed := strings.trim_space(line)
+		name := ""
+		if strings.has_prefix(trimmed, "function ") {
+			decl := strings.trim_space(trimmed[len("function "):])
+			name, _ = split_first_word(decl)
+			name = normalize_function_name_token(name)
+		} else if strings.has_suffix(trimmed, "() {") {
+			name = strings.trim_space(trimmed[:len(trimmed)-len("() {")])
+			name = normalize_function_name_token(name)
+		}
+		if name == "" {
+			continue
+		}
+		if !strings.contains(name, "-") {
+			continue
+		}
+		exists := false
+		for e in legacy_names {
+			if e == name {
+				exists = true
+				break
+			}
+		}
+		if !exists {
+			append(&legacy_names, name)
+		}
+	}
+	if len(legacy_names) == 0 {
+		return strings.clone(emitted, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	for old in legacy_names {
+		mapped, mapped_changed := strings.replace_all(old, "-", "_", allocator)
+		if !mapped_changed {
+			delete(mapped)
+			continue
+		}
+		alias_line := strings.concatenate([]string{"alias ", old, "=", mapped, "\n"}, allocator)
+		strings.write_string(&builder, alias_line)
+		delete(alias_line)
+		changed = true
+		delete(mapped)
+	}
+	if changed {
+		strings.write_byte(&builder, '\n')
+	}
+	strings.write_string(&builder, emitted)
+	if !changed {
+		return strings.clone(emitted, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+prepend_fish_module_noninteractive_guard :: proc(
+	text: string,
+	from: ShellDialect,
+	to: ShellDialect,
+	allocator := context.allocator,
+) -> (string, bool) {
+	if from != .Fish || to == .Fish {
+		return strings.clone(text, allocator), false
+	}
+	if !strings.contains(text, "_autopair_fish_key_bindings") {
+		return strings.clone(text, allocator), false
+	}
+	guard := "if ! [ -t 1 ]; then [ -n \"${BASH_SOURCE-}\" ] && return 0 || exit 0; fi\n"
+	if strings.has_prefix(strings.trim_left_space(text), "if ! [ -t 1 ]; then") {
+		return strings.clone(text, allocator), false
+	}
+	out := strings.concatenate([]string{guard, text}, allocator)
+	return out, true
+}
+
+rewrite_zsh_runtime_decl_fallbacks :: proc(
+	text: string,
+	from: ShellDialect,
+	to: ShellDialect,
+	allocator := context.allocator,
+) -> (string, bool) {
+	if from != .Zsh || (to != .Bash && to != .POSIX) {
+		return strings.clone(text, allocator), false
+	}
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	fn_depth := 0
+	for line, i in lines {
+		out_line := line
+		out_allocated := false
+		trimmed := strings.trim_space(line)
+		indent_len := len(line) - len(strings.trim_left_space(line))
+		indent := ""
+		if indent_len > 0 {
+			indent = line[:indent_len]
+		}
+		if strings.has_suffix(trimmed, "() {") || strings.has_prefix(trimmed, "function ") {
+			fn_depth += 1
+		} else if trimmed == "}" && fn_depth > 0 {
+			fn_depth -= 1
+		}
+		if fn_depth == 0 && strings.has_prefix(trimmed, "emulate ") {
+			out_line = strings.concatenate([]string{indent, ":"}, allocator)
+			out_allocated = true
+			changed = true
+		} else if fn_depth == 0 && strings.has_prefix(trimmed, "local ") {
+			rest := strings.trim_space(trimmed[len("local "):])
+			parts := strings.fields(rest)
+			defer delete(parts)
+			assign_builder := strings.builder_make()
+			defer strings.builder_destroy(&assign_builder)
+			wrote := false
+			for p in parts {
+				if strings.has_prefix(p, "-") {
+					continue
+				}
+				name := p
+				value := "\"\""
+				eq := find_substring(p, "=")
+				if eq > 0 {
+					name = strings.trim_space(p[:eq])
+					value = strings.trim_space(p[eq+1:])
+					if value == "" {
+						value = "\"\""
+					}
+				}
+				if !is_basic_name(name) {
+					continue
+				}
+				if wrote {
+					strings.write_string(&assign_builder, "; ")
+				}
+				strings.write_string(&assign_builder, name)
+				strings.write_byte(&assign_builder, '=')
+				strings.write_string(&assign_builder, value)
+				wrote = true
+			}
+			if wrote {
+				assign_text := strings.clone(strings.to_string(assign_builder), allocator)
+				out_line = strings.concatenate([]string{indent, assign_text}, allocator)
+				delete(assign_text)
+			} else {
+				out_line = strings.concatenate([]string{indent, ":"}, allocator)
+			}
+			out_allocated = true
+			changed = true
+		}
+		strings.write_string(&builder, out_line)
+		if out_allocated {
+			delete(out_line)
+		}
+		if i+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
 }
 
 collect_fish_event_registration_lines :: proc(
@@ -2330,10 +2559,11 @@ normalize_zsh_preparse_syntax :: proc(text: string, allocator := context.allocat
 	out, changed = replace_with_flag(out, "${${*:-${PWD}}:A}", "${PWD}", changed, allocator)
 	out, changed = replace_with_flag(out, "${(@k)output_matches}", "${output_matches}", changed, allocator)
 	out, changed = replace_with_flag(out, "${(k)output_matches}", "${output_matches}", changed, allocator)
-	out, changed = replace_with_flag(out, "${(f)REPLY}", "$REPLY", changed, allocator)
-	out, changed = replace_with_flag(out, "${(k)opts}", "${opts}", changed, allocator)
-	out, changed = replace_with_flag(out, "${=ZSHZ[FUNCTIONS]}", "${ZSHZ[FUNCTIONS]}", changed, allocator)
-	out, changed = replace_with_flag(out, "${${line%\\|*}#*\\|}", "${line}", changed, allocator)
+		out, changed = replace_with_flag(out, "${(f)REPLY}", "$REPLY", changed, allocator)
+		out, changed = replace_with_flag(out, "${(k)opts}", "${opts}", changed, allocator)
+		out, changed = replace_with_flag(out, "${=ZSHZ[FUNCTIONS]}", "${ZSHZ[FUNCTIONS]}", changed, allocator)
+		out, changed = replace_with_flag(out, "${=ZSHZ[", "${ZSHZ[", changed, allocator)
+		out, changed = replace_with_flag(out, "${${line%\\|*}#*\\|}", "${line}", changed, allocator)
 	out, changed = replace_with_flag(out, "alias x=extract", "function x { extract \"$@\"; }", changed, allocator)
 	out, changed = replace_with_flag(out, "0=\"${${0:#/*}:-$PWD/$0}\"", "0=\"$PWD/$0\"", changed, allocator)
 	out, changed = replace_with_flag(out, "environment+=( PAGER=\"${commands[less]:-$PAGER}\" )", "environment+=( PAGER=\"$PAGER\" )", changed, allocator)
@@ -3778,6 +4008,10 @@ __shellx_zsh_expand() {
 			out = rewritten
 			changed_any = changed_any || changed
 		}
+	}
+
+	if from == .Zsh && to != .Zsh {
+		out, changed_any = replace_with_flag(out, "${modules[zsh/system]-}", "loaded", changed_any, allocator)
 	}
 
 	if to == .Fish {
@@ -6655,7 +6889,7 @@ rewrite_fish_to_posix_syntax :: proc(text: string, to: ShellDialect, allocator :
 		} else if strings.has_prefix(trimmed, "status is-interactive") {
 			rest := strings.trim_space(trimmed[len("status is-interactive"):])
 			if rest == "|| exit" {
-				out_line = strings.concatenate([]string{indent, "[ -t 1 ] || return 0"}, allocator)
+				out_line = strings.concatenate([]string{indent, "if ! [ -t 1 ]; then return 0; fi"}, allocator)
 			} else if rest == "" {
 				out_line = strings.concatenate([]string{indent, "[ -t 1 ]"}, allocator)
 				prev_status_interactive = true

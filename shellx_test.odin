@@ -1027,7 +1027,7 @@ test_rewrite_fish_to_posix_syntax_rewrites_status_is_interactive :: proc(t: ^tes
 	defer delete(output)
 
 	testing.expect(t, changed, "Fish status is-interactive should be rewritten for sh-like targets")
-	testing.expect(t, strings.contains(output, "[ -t 1 ] || return 0"), "status is-interactive should become sourced-safe interactive-tty check")
+	testing.expect(t, strings.contains(output, "if ! [ -t 1 ]; then return 0; fi"), "status is-interactive should become sourced-safe interactive-tty check")
 	testing.expect(t, !strings.contains(output, "status is-interactive"), "Fish status builtin should not leak into bash/posix output")
 }
 
@@ -1040,7 +1040,7 @@ test_rewrite_fish_to_posix_syntax_status_interactive_exit_to_return :: proc(t: ^
 	defer delete(output)
 
 	testing.expect(t, changed, "Fish interactive guard should be rewritten for sourced plugin semantics")
-	testing.expect(t, strings.contains(output, "[ -t 1 ] || return 0"), "status interactive exit guard should become non-fatal return for sourced sh code")
+	testing.expect(t, strings.contains(output, "if ! [ -t 1 ]; then return 0; fi"), "status interactive exit guard should become non-fatal return for sourced sh code")
 }
 
 @(test)
