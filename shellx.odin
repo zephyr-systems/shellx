@@ -235,6 +235,7 @@ translate :: proc(
 					strings.has_prefix(line_text, "|| fzf_setup") ||
 					strings.has_prefix(line_text, "unset -f -m ") ||
 					strings.has_prefix(line_text, "zle -N sudo_") ||
+					strings.has_prefix(line_text, "zle -N sudo-command-line") ||
 					strings.has_prefix(line_text, "bindkey -M emacs ") ||
 					strings.has_prefix(line_text, "bindkey -M vicmd ") ||
 					strings.has_prefix(line_text, "bindkey -M viins ") ||
@@ -242,6 +243,7 @@ translate :: proc(
 					strings.has_prefix(line_text, "(( $+functions[_p9k_setup] )) && _p9k_setup") ||
 					strings.has_prefix(line_text, "CURRENT_BG='NONE'") ||
 					strings.has_prefix(line_text, "echo ${(%):-\"%B$1%b copied to clipboard.\"}") ||
+					strings.contains(line_text, "${${(M)0:#/*}:-$PWD/$0}") ||
 					strings.contains(line_text, "${(%):-%") ||
 					strings.has_prefix(line_text, "spaceship::deprecated ") ||
 					strings.has_prefix(line_text, "git_version=\"${${(As: :)$(git version 2>/dev/null)}[3]}\"") ||

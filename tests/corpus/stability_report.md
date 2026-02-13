@@ -14,9 +14,9 @@ Cross-dialect runs executed: 126
 | fish->bash | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 19 | 1.012 | 7.679 | 11 |
 | fish->posix | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 18 | 0.954 | 7.225 | 11 |
 | fish->zsh | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 19 | 1.100 | 5.528 | 11 |
-| zsh->bash | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 4 | 4 | 0.816 | 1.949 | 4 |
+| zsh->bash | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 4 | 0.816 | 1.949 | 4 |
 | zsh->fish | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 0 | 2.101 | 10.386 | 15 |
-| zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 4 | 22 | 1.257 | 6.342 | 14 |
+| zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 22 | 1.257 | 6.342 | 14 |
 
 ## Failures
 
@@ -113,11 +113,6 @@ Cross-dialect runs executed: 126
   - zsh-syntax-highlighting (plugin) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
   - ohmyzsh-z (plugin) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
   - zsh-spaceship (theme) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
-- `parse_recovery/parse_diagnostic`: 4
-  - ohmyzsh-sudo (plugin) Parse diagnostic at <input>:103:6: Syntax error
-  - ohmyzsh-sudo (plugin) Parse diagnostic at <input>:0:0: 8 additional diagnostics suppressed
-  - ohmyzsh-colored-man-pages (plugin) Parse diagnostic at <input>:22:6: Syntax error
-  - ohmyzsh-colored-man-pages (plugin) Parse diagnostic at <input>:0:0: 3 additional diagnostics suppressed
 
 ### zsh->posix
 
@@ -137,11 +132,6 @@ Cross-dialect runs executed: 126
   - zsh-syntax-highlighting (plugin) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
   - ohmyzsh-z (plugin) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
   - zsh-spaceship (theme) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
-- `parse_recovery/parse_diagnostic`: 4
-  - ohmyzsh-sudo (plugin) Parse diagnostic at <input>:103:6: Syntax error
-  - ohmyzsh-sudo (plugin) Parse diagnostic at <input>:0:0: 8 additional diagnostics suppressed
-  - ohmyzsh-colored-man-pages (plugin) Parse diagnostic at <input>:22:6: Syntax error
-  - ohmyzsh-colored-man-pages (plugin) Parse diagnostic at <input>:0:0: 3 additional diagnostics suppressed
 
 ## Semantic Parity Matrix
 
