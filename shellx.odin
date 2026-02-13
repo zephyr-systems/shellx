@@ -602,12 +602,21 @@ is_compat_warning_resolved :: proc(
 		return has_required_shim(result.required_shims[:], "parameter_expansion") &&
 			strings.contains(out, "function __shellx_param_default") &&
 			!strings.contains(out, "${(")
+	case "condition_semantics":
+		return has_required_shim(result.required_shims[:], "condition_semantics") &&
+			(strings.contains(out, "__shellx_test") || strings.contains(out, "__shellx_match")) &&
+			!strings.contains(out, "[[")
 	case "indexed_arrays", "assoc_arrays", "fish_list_indexing":
 		return (has_required_shim(result.required_shims[:], "indexed_arrays") ||
 			has_required_shim(result.required_shims[:], "assoc_arrays") ||
 			has_required_shim(result.required_shims[:], "arrays_lists") ||
 			has_required_shim(result.required_shims[:], "fish_list_indexing")) &&
 			strings.contains(out, "function __shellx_array_get")
+	case "process_substitution":
+		return has_required_shim(result.required_shims[:], "process_substitution") &&
+			(strings.contains(out, "__shellx_psub_in") || strings.contains(out, "__shellx_psub_out")) &&
+			!strings.contains(out, "<(") &&
+			!strings.contains(out, ">(")
 	case "zsh_hooks", "prompt_hooks":
 		return from == .Zsh &&
 			has_hook_bridge_shim(result.required_shims[:]) &&

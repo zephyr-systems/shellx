@@ -8,14 +8,14 @@ Cross-dialect runs executed: 126
 
 | Pair | Cases | Translate | Parse | Parser Matrix | Parser Skipped | Plugin Parse | Theme Parse | Parse Warn | Compat Warn | Avg Size Ratio | Avg Fn Ratio | With Shims |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| bash->fish | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 1 | 16 | 1.781 | 8.563 | 15 |
+| bash->fish | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 1 | 0 | 1.781 | 8.563 | 15 |
 | bash->posix | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 12 | 0.713 | 4.659 | 12 |
 | bash->zsh | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 0 | 0.346 | 0.945 | 0 |
 | fish->bash | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 19 | 1.012 | 7.679 | 11 |
 | fish->posix | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 18 | 0.954 | 7.225 | 11 |
 | fish->zsh | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 19 | 1.100 | 5.528 | 11 |
 | zsh->bash | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 39 | 4 | 0.816 | 1.949 | 4 |
-| zsh->fish | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 39 | 16 | 2.119 | 10.303 | 15 |
+| zsh->fish | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 39 | 0 | 2.119 | 10.303 | 15 |
 | zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 39 | 22 | 1.257 | 6.342 | 14 |
 
 ## Failures
@@ -34,19 +34,8 @@ Cross-dialect runs executed: 126
 
 ### bash->fish
 
-- `condition_test/condition_semantics`: 12
-  - bashit-git (plugin) Compat[condition_semantics]: Condition/test semantics may differ in Fish
-  - bashit-aliases (plugin) Compat[condition_semantics]: Condition/test semantics may differ in Fish
-  - bashit-completion (plugin) Compat[condition_semantics]: Condition/test semantics may differ in Fish
-  - bashit-base (plugin) Compat[condition_semantics]: Condition/test semantics may differ in Fish
-  - bashit-fzf (plugin) Compat[condition_semantics]: Condition/test semantics may differ in Fish
 - `parse_recovery/parse_diagnostic`: 1
   - bashit-aliases (plugin) Parse diagnostic at <input>:20:54: Syntax error
-- `process_substitution/process_substitution`: 4
-  - bashit-aliases (plugin) Compat[process_substitution]: Process substitution is not supported in Fish
-  - bashit-completion (plugin) Compat[process_substitution]: Process substitution is not supported in Fish
-  - bashit-fzf (plugin) Compat[process_substitution]: Process substitution is not supported in Fish
-  - bashit-docker (plugin) Compat[process_substitution]: Process substitution is not supported in Fish
 
 ### bash->posix
 
@@ -133,20 +122,12 @@ Cross-dialect runs executed: 126
 
 ### zsh->fish
 
-- `condition_test/condition_semantics`: 15
-  - zsh-autosuggestions (plugin) Compat[condition_semantics]: Condition/test semantics may differ in Fish
-  - zsh-syntax-highlighting (plugin) Compat[condition_semantics]: Condition/test semantics may differ in Fish
-  - ohmyzsh-git (plugin) Compat[condition_semantics]: Condition/test semantics may differ in Fish
-  - ohmyzsh-z (plugin) Compat[condition_semantics]: Condition/test semantics may differ in Fish
-  - ohmyzsh-fzf (plugin) Compat[condition_semantics]: Condition/test semantics may differ in Fish
 - `parse_recovery/parse_diagnostic`: 39
   - zsh-autosuggestions (plugin) Parse diagnostic at <input>:853:1: Syntax error
   - zsh-autosuggestions (plugin) Parse diagnostic at <input>:856:11: Syntax error
   - zsh-autosuggestions (plugin) Parse diagnostic at <input>:863:11: Syntax error
   - zsh-autosuggestions (plugin) Parse diagnostic at <input>:0:0: 1 additional diagnostics suppressed
   - zsh-syntax-highlighting (plugin) Parse diagnostic at <input>:478:21: Syntax error
-- `process_substitution/process_substitution`: 1
-  - zsh-autosuggestions (plugin) Compat[process_substitution]: Process substitution is not supported in Fish
 
 ### zsh->posix
 
