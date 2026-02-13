@@ -8516,6 +8516,74 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 			delete(repl_q)
 		}
 		if to != .Zsh {
+			if strings.contains(trimmed, "${@s/") {
+				if strings.has_prefix(trimmed, "for ") && strings.contains(trimmed, "; do") {
+					out_line = "for entry in \"$line\"; do"
+				} else {
+					out_line = ":"
+				}
+				changed = true
+			}
+			if strings.contains(trimmed, "do|") {
+				pipe_idx := find_substring(out_line, "|")
+				if pipe_idx > 0 {
+					left := strings.trim_right_space(out_line[:pipe_idx])
+					if left != "" {
+						out_line = left
+						changed = true
+					}
+				}
+			}
+			if strings.contains(trimmed, "*(N)") {
+				repl_n, c_n := strings.replace_all(out_line, "*(N)", "*", context.temp_allocator)
+				if c_n {
+					out_line = repl_n
+					changed = true
+				} else if raw_data(repl_n) != raw_data(out_line) {
+					delete(repl_n)
+				}
+			}
+			// Normalize common fish command-substitution forms that leak into shell targets.
+			fish_cmd_patterns := []string{
+				" (string ",
+				" (uname ",
+				" (count ",
+				" (contains ",
+				" (fish_",
+				" (command ",
+			}
+			for pat in fish_cmd_patterns {
+				if strings.contains(out_line, pat) {
+					repl_pat := strings.concatenate([]string{" $", pat[1:]}, context.temp_allocator)
+					repl_f, c_f := strings.replace_all(out_line, pat, repl_pat, context.temp_allocator)
+					delete(repl_pat)
+					if c_f {
+						out_line = repl_f
+						changed = true
+					} else if raw_data(repl_f) != raw_data(out_line) {
+						delete(repl_f)
+					}
+				}
+			}
+			// Remove one unmatched trailing ')' from malformed fish-to-shell lines.
+			if strings.has_suffix(strings.trim_space(out_line), ")") {
+				open_parens := 0
+				close_parens := 0
+				for ch in out_line {
+					if ch == '(' {
+						open_parens += 1
+					} else if ch == ')' {
+						close_parens += 1
+					}
+				}
+				if close_parens > open_parens {
+					trimmed_out := strings.trim_right_space(out_line)
+					if strings.has_suffix(trimmed_out, ")") {
+						out_line = trimmed_out[:len(trimmed_out)-1]
+						changed = true
+					}
+				}
+			}
 			// zle completion-widget eval lines are zsh-specific and frequently become
 			// syntactically invalid after cross-shell rewrites; drop them for parse safety.
 			if strings.contains(trimmed, "zle -C ") ||
@@ -9002,6 +9070,15 @@ rewrite_fish_parse_hardening :: proc(text: string, allocator := context.allocato
 				strings.contains(trimmed, ";;")) {
 			out_line = "end"
 			changed = true
+		} else if heredoc_delim == "" && strings.has_prefix(trimmed, "done |") {
+			rest := strings.trim_space(trimmed[len("done"):])
+			if rest == "" {
+				out_line = "end"
+			} else {
+				out_line = strings.concatenate([]string{"end ", rest}, allocator)
+				out_allocated = true
+			}
+			changed = true
 		} else if heredoc_delim == "" && strings.contains(trimmed, "always") && strings.contains(trimmed, "{") {
 			out_line = ":"
 			changed = true
@@ -9218,6 +9295,59 @@ rewrite_fish_parse_hardening :: proc(text: string, allocator := context.allocato
 		}
 		if heredoc_delim == "" {
 			out_trimmed_pre := strings.trim_space(out_line)
+			if strings.has_prefix(out_trimmed_pre, "set ") && strings.contains(out_trimmed_pre, " (") {
+				open_parens := 0
+				close_parens := 0
+				for ch in out_trimmed_pre {
+					if ch == '(' {
+						open_parens += 1
+					} else if ch == ')' {
+						close_parens += 1
+					}
+				}
+				if open_parens > close_parens {
+					missing := open_parens - close_parens
+					extra := ""
+					for i in 0 ..< missing {
+						extra = strings.concatenate([]string{extra, ")"}, allocator)
+					}
+					repaired := strings.concatenate([]string{out_line, extra}, allocator)
+					delete(extra)
+					if out_allocated {
+						delete(out_line)
+					}
+					out_line = repaired
+					out_allocated = true
+					changed = true
+					out_trimmed_pre = strings.trim_space(out_line)
+				}
+			}
+			if strings.has_prefix(out_trimmed_pre, "set ") && strings.contains(out_trimmed_pre, "(__shellx_array_get;") {
+				eq_idx := find_substring(out_trimmed_pre, " ")
+				if eq_idx >= 0 {
+					indent_len := len(out_line) - len(strings.trim_left_space(out_line))
+					indent := ""
+					if indent_len > 0 {
+						indent = out_line[:indent_len]
+					}
+					rest := strings.trim_space(out_trimmed_pre[len("set "):])
+					name := ""
+					if strings.has_prefix(rest, "-l ") {
+						rest = strings.trim_space(rest[len("-l "):])
+						name, _ = split_first_word_raw(rest)
+						if is_basic_name(name) {
+							repl := strings.concatenate([]string{indent, "set -l ", name, " \"\""}, allocator)
+							if out_allocated {
+								delete(out_line)
+							}
+							out_line = repl
+							out_allocated = true
+							changed = true
+							out_trimmed_pre = strings.trim_space(out_line)
+						}
+					}
+				}
+			}
 			if strings.contains(out_trimmed_pre, "\"\"\"") {
 				repl, c := strings.replace_all(out_line, "\"\"\"", "\"\"", allocator)
 				if c {

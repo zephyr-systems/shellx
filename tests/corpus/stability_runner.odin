@@ -540,6 +540,12 @@ main :: proc() {
 		{"ohmyzsh-colored-man-pages", "plugin", "tests/corpus/repos/zsh/ohmyzsh/plugins/colored-man-pages/colored-man-pages.plugin.zsh", .Zsh},
 		{"ohmyzsh-web-search", "plugin", "tests/corpus/repos/zsh/ohmyzsh/plugins/web-search/web-search.plugin.zsh", .Zsh},
 		{"ohmyzsh-copyfile", "plugin", "tests/corpus/repos/zsh/ohmyzsh/plugins/copyfile/copyfile.plugin.zsh", .Zsh},
+		{"zsh-abbr", "plugin", "tests/corpus/repos/zsh/zsh-abbr/zsh-abbr.plugin.zsh", .Zsh},
+		{"zsh-history-substring-search", "plugin", "tests/corpus/repos/zsh/zsh-history-substring-search/zsh-history-substring-search.plugin.zsh", .Zsh},
+		{"zsh-you-should-use", "plugin", "tests/corpus/repos/zsh/zsh-you-should-use/you-should-use.plugin.zsh", .Zsh},
+		{"zsh-nvm", "plugin", "tests/corpus/repos/zsh/zsh-nvm/zsh-nvm.plugin.zsh", .Zsh},
+		{"zsh-pyenv", "plugin", "tests/corpus/repos/zsh/zsh-pyenv/zsh-pyenv.plugin.zsh", .Zsh},
+		{"zsh-completions", "plugin", "tests/corpus/repos/zsh/zsh-completions/zsh-completions.plugin.zsh", .Zsh},
 
 		// Bash-it plugins
 		{"bashit-git", "plugin", "tests/corpus/repos/bash/bash-it/plugins/available/git.plugin.bash", .Bash},
@@ -552,6 +558,10 @@ main :: proc() {
 		{"bashit-ssh", "plugin", "tests/corpus/repos/bash/bash-it/plugins/available/ssh.plugin.bash", .Bash},
 		{"bashit-docker", "plugin", "tests/corpus/repos/bash/bash-it/plugins/available/docker.plugin.bash", .Bash},
 		{"bashit-general", "plugin", "tests/corpus/repos/bash/bash-it/aliases/available/general.aliases.bash", .Bash},
+		{"bashit-proxy", "plugin", "tests/corpus/repos/bash/bash-it/plugins/available/proxy.plugin.bash", .Bash},
+		{"bashit-nvm-completion", "plugin", "tests/corpus/repos/bash/bash-it/completion/available/nvm.completion.bash", .Bash},
+		{"bashit-trap", "plugin", "tests/corpus/repos/bash/bash-it/plugins/available/trap.plugin.bash", .Bash},
+		{"bashit-backup", "plugin", "tests/corpus/repos/bash/bash-it/plugins/available/backup.plugin.bash", .Bash},
 
 		// Fish plugins
 		{"fish-z", "plugin", "tests/corpus/repos/fish/z/conf.d/z.fish", .Fish},
@@ -564,6 +574,9 @@ main :: proc() {
 		{"fish-colored-man-pages", "plugin", "tests/corpus/repos/fish/colored_man_pages.fish/functions/man.fish", .Fish},
 		{"fish-gitnow", "plugin", "tests/corpus/repos/fish/gitnow/conf.d/gitnow.fish", .Fish},
 		{"fish-fisher", "plugin", "tests/corpus/repos/fish/fisher/functions/fisher.fish", .Fish},
+		{"fish-async-prompt", "plugin", "tests/corpus/repos/fish/fish-async-prompt/conf.d/__async_prompt.fish", .Fish},
+		{"fish-ssh-agent", "plugin", "tests/corpus/repos/fish/fish-ssh-agent/conf.d/halostatue_fish_ssh_agent.fish", .Fish},
+		{"fish-completion-sync", "plugin", "tests/corpus/repos/fish/fish-completion-sync/init.fish", .Fish},
 
 		// Themes
 		{"zsh-powerlevel10k", "theme", "tests/corpus/repos/zsh/powerlevel10k/powerlevel10k.zsh-theme", .Zsh},
