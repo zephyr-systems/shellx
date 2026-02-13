@@ -877,6 +877,215 @@ normalize_case_body_connectors :: proc(body: string, allocator := context.alloca
 	return strings.clone(strings.to_string(builder), allocator)
 }
 
+normalize_zsh_recovered_fish_text :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	in_switch := false
+	function_depth := 0
+	control_depth := 0
+
+	for line, idx in lines {
+		trimmed := strings.trim_space(line)
+		indent_len := len(line) - len(strings.trim_left_space(line))
+		indent := ""
+		if indent_len > 0 {
+			indent = line[:indent_len]
+		}
+		out_line := line
+		out_allocated := false
+
+		if strings.has_prefix(trimmed, "function ") && function_depth > 0 {
+			for control_depth > 0 {
+				strings.write_string(&builder, "end\n")
+				control_depth -= 1
+				changed = true
+			}
+			strings.write_string(&builder, "end\n")
+			function_depth -= 1
+			changed = true
+		}
+
+		if strings.has_prefix(trimmed, "switch ") {
+			in_switch = true
+		} else if trimmed == "end" {
+			in_switch = false
+		}
+
+		if strings.has_suffix(trimmed, "()") && is_basic_name(strings.trim_space(trimmed[:len(trimmed)-2])) {
+			name := strings.trim_space(trimmed[:len(trimmed)-2])
+			out_line = strings.concatenate([]string{indent, "function ", name}, allocator)
+			out_allocated = true
+			changed = true
+		} else if strings.has_prefix(trimmed, "function eval ") {
+			out_line = strings.concatenate([]string{indent, ":"}, allocator)
+			out_allocated = true
+			changed = true
+		} else if strings.contains(trimmed, ";&") {
+			repl, c := strings.replace_all(trimmed, ";&", "", allocator)
+			if c {
+				out_line = strings.concatenate([]string{indent, strings.trim_space(repl)}, allocator)
+				out_allocated = true
+				delete(repl)
+				changed = true
+			} else if raw_data(repl) != raw_data(trimmed) {
+				delete(repl)
+			}
+		}
+		if strings.has_prefix(strings.trim_space(out_line), "eval ") && count_unescaped_double_quotes(strings.trim_space(out_line))%2 == 1 {
+			if out_allocated {
+				delete(out_line)
+			}
+			out_line = strings.concatenate([]string{indent, ":"}, allocator)
+			out_allocated = true
+			changed = true
+		}
+
+		current := strings.trim_space(out_line)
+		if strings.contains(current, "\"\"\"") {
+			repl, c := strings.replace_all(out_line, "\"\"\"", "\"\"", allocator)
+			if c {
+				if out_allocated {
+					delete(out_line)
+				}
+				out_line = repl
+				out_allocated = true
+				changed = true
+			} else if raw_data(repl) != raw_data(out_line) {
+				delete(repl)
+			}
+			current = strings.trim_space(out_line)
+		}
+
+		if strings.has_prefix(current, "for ") && strings.contains(current, " in \"\"\"") {
+			repl, c := strings.replace_all(current, " in \"\"\"", " in \"\"", allocator)
+			if c {
+				if out_allocated {
+					delete(out_line)
+				}
+				out_line = strings.concatenate([]string{indent, repl}, allocator)
+				out_allocated = true
+				delete(repl)
+				changed = true
+			} else if raw_data(repl) != raw_data(current) {
+				delete(repl)
+			}
+			current = strings.trim_space(out_line)
+		}
+
+		if in_switch && strings.has_prefix(current, "(") {
+			arm := strings.trim_space(current[1:])
+			close_idx := find_substring(arm, ")")
+			if close_idx > 0 {
+				pat := strings.trim_space(arm[:close_idx])
+				if pat != "" {
+					if out_allocated {
+						delete(out_line)
+					}
+					out_line = strings.concatenate([]string{indent, "case ", pat}, allocator)
+					out_allocated = true
+					changed = true
+					current = strings.trim_space(out_line)
+				}
+			}
+		}
+		if !strings.has_prefix(current, "case ") &&
+			!strings.has_prefix(current, "if ") &&
+			!strings.has_prefix(current, "for ") &&
+			strings.contains(current, "*)") {
+			close_idx := find_substring(current, "*)")
+			if close_idx >= 0 {
+				pat := strings.trim_space(current[:close_idx+1])
+				body := strings.trim_space(current[close_idx+2:])
+				if pat != "" {
+					if out_allocated {
+						delete(out_line)
+					}
+					if body == "" {
+						out_line = strings.concatenate([]string{indent, "case ", pat}, allocator)
+					} else {
+						out_line = strings.concatenate([]string{indent, "case ", pat, "\n", indent, "  ", body}, allocator)
+					}
+					out_allocated = true
+					changed = true
+					current = strings.trim_space(out_line)
+				}
+			}
+		}
+		if !strings.has_prefix(current, "case ") &&
+			!strings.has_prefix(current, "if ") &&
+			!strings.has_prefix(current, "for ") &&
+			!strings.has_prefix(current, "function ") &&
+			!strings.has_prefix(current, "(") {
+			close_idx := find_substring(current, ")")
+			if close_idx > 0 {
+				pat := strings.trim_space(current[:close_idx])
+				body := strings.trim_space(current[close_idx+1:])
+				pat_ok := pat != "" && !strings.contains(pat, " ") && !strings.contains(pat, "\t")
+				if pat_ok && body != "" {
+					if out_allocated {
+						delete(out_line)
+					}
+					out_line = strings.concatenate([]string{indent, "case ", pat, "\n", indent, "  ", body}, allocator)
+					out_allocated = true
+					changed = true
+					current = strings.trim_space(out_line)
+				}
+			}
+		}
+
+		if strings.has_prefix(current, "case #") {
+			if out_allocated {
+				delete(out_line)
+			}
+			out_line = strings.concatenate([]string{indent, ":"}, allocator)
+			out_allocated = true
+			changed = true
+		}
+		current = strings.trim_space(out_line)
+		if current != "" && !strings.has_prefix(current, "#") && count_unescaped_double_quotes(current)%2 == 1 {
+			if out_allocated {
+				delete(out_line)
+			}
+			out_line = strings.concatenate([]string{indent, ":"}, allocator)
+			out_allocated = true
+			changed = true
+		}
+
+		strings.write_string(&builder, out_line)
+		final_trimmed := strings.trim_space(out_line)
+		if strings.has_prefix(final_trimmed, "function ") {
+			function_depth += 1
+		} else if strings.has_prefix(final_trimmed, "if ") ||
+			strings.has_prefix(final_trimmed, "for ") ||
+			strings.has_prefix(final_trimmed, "while ") ||
+			strings.has_prefix(final_trimmed, "switch ") ||
+			final_trimmed == "begin" {
+			control_depth += 1
+		} else if final_trimmed == "end" {
+			if control_depth > 0 {
+				control_depth -= 1
+			} else if function_depth > 0 {
+				function_depth -= 1
+			}
+		}
+		if out_allocated {
+			delete(out_line)
+		}
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+
+	return strings.clone(strings.to_string(builder), allocator), changed
+}
+
 rewrite_zsh_canonicalize_for_fish :: proc(text: string, allocator := context.allocator) -> (string, bool) {
 	lines := strings.split_lines(text)
 	defer delete(lines)
@@ -1406,6 +1615,11 @@ __shellx_zsh_expand() {
 		out = rewritten
 		changed_any = changed_any || changed
 
+		rewritten, changed = normalize_zsh_recovered_fish_text(out, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
+
 		rewritten, changed = rewrite_zsh_multiline_for_paren_syntax_for_bash(out, allocator)
 		delete(out)
 		out = rewritten
@@ -1476,6 +1690,13 @@ __shellx_zsh_expand() {
 		delete(out)
 		out = rewritten
 		changed_any = changed_any || changed
+
+		if from == .Zsh {
+			rewritten, changed = normalize_zsh_recovered_fish_text(out, allocator)
+			delete(out)
+			out = rewritten
+			changed_any = changed_any || changed
+		}
 
 		rewritten, changed = ensure_fish_block_balance(out, allocator)
 		delete(out)
@@ -2056,6 +2277,8 @@ normalize_fish_artifacts :: proc(text: string, allocator := context.allocator) -
 	defer strings.builder_destroy(&builder)
 	changed := false
 	in_print_pipe_quote_block := false
+	in_switch := false
+	in_set_list := false
 	for line, idx in lines {
 		out := strings.clone(line, allocator)
 		trimmed := strings.trim_space(out)
@@ -2071,6 +2294,25 @@ normalize_fish_artifacts :: proc(text: string, allocator := context.allocator) -
 			changed = true
 			if count_unescaped_double_quotes(line)%2 == 1 {
 				in_print_pipe_quote_block = false
+			}
+			strings.write_string(&builder, out)
+			delete(out)
+			if idx+1 < len(lines) {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
+		if in_set_list {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			delete(out)
+			out = strings.concatenate([]string{indent, ":"}, allocator)
+			changed = true
+			if trimmed == ")" {
+				in_set_list = false
 			}
 			strings.write_string(&builder, out)
 			delete(out)
@@ -2115,6 +2357,144 @@ normalize_fish_artifacts :: proc(text: string, allocator := context.allocator) -
 			out = strings.concatenate([]string{indent, ":"}, allocator)
 			changed = true
 		}
+		if strings.has_prefix(trimmed, "(") && strings.has_suffix(trimmed, ")") && len(trimmed) > 2 {
+			inner := strings.trim_space(trimmed[1 : len(trimmed)-1])
+			if inner != "" && !strings.has_prefix(inner, "count ") {
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				inner_copy := strings.clone(inner, allocator)
+				delete(out)
+				out = strings.concatenate([]string{indent, inner_copy}, allocator)
+				delete(inner_copy)
+				changed = true
+				trimmed = strings.trim_space(out)
+			}
+		}
+		if strings.has_prefix(trimmed, "set ") && strings.has_suffix(trimmed, "(") {
+			rest := strings.trim_space(trimmed[len("set "):len(trimmed)-1])
+			name, _ := split_first_word_raw(rest)
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			name_copy := strings.clone(name, allocator)
+			delete(out)
+			if is_basic_name(name_copy) {
+				out = strings.concatenate([]string{indent, "set ", name_copy, " \"\""}, allocator)
+			} else {
+				out = strings.concatenate([]string{indent, ":"}, allocator)
+			}
+			delete(name_copy)
+			in_set_list = true
+			changed = true
+			trimmed = strings.trim_space(out)
+		}
+		if strings.contains(trimmed, "; for ") && strings.has_suffix(trimmed, "; do") {
+			for_idx := find_substring(trimmed, "; for ")
+			if for_idx >= 0 {
+				prefix := strings.trim_space(trimmed[:for_idx])
+				loop_part := strings.trim_space(trimmed[for_idx+2 : len(trimmed)-len("; do")])
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				prefix_copy := strings.clone(prefix, allocator)
+				loop_copy := strings.clone(loop_part, allocator)
+				delete(out)
+				out = strings.concatenate([]string{indent, prefix_copy, "\n", indent, loop_copy}, allocator)
+				delete(prefix_copy)
+				delete(loop_copy)
+				changed = true
+				trimmed = strings.trim_space(out)
+			}
+		}
+		if strings.has_prefix(trimmed, "for ") && strings.has_suffix(trimmed, "; do") {
+			header := strings.trim_space(trimmed[:len(trimmed)-len("; do")])
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			header_copy := strings.clone(header, allocator)
+			delete(out)
+			out = strings.concatenate([]string{indent, header_copy}, allocator)
+			delete(header_copy)
+			changed = true
+			trimmed = strings.trim_space(out)
+		}
+		if strings.has_prefix(trimmed, "for ") && !strings.contains(trimmed, " in ") {
+			rest := strings.trim_space(trimmed[len("for "):])
+			if is_basic_name(rest) {
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				rest_copy := strings.clone(rest, allocator)
+				delete(out)
+				out = strings.concatenate([]string{indent, "for ", rest_copy, " in \"\""}, allocator)
+				delete(rest_copy)
+				changed = true
+				trimmed = strings.trim_space(out)
+			}
+		}
+		if trimmed == ")" {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			delete(out)
+			out = strings.concatenate([]string{indent, ":"}, allocator)
+			changed = true
+			trimmed = strings.trim_space(out)
+		}
+		if strings.has_prefix(trimmed, "for ") && !strings.contains(trimmed, " in ") && strings.contains(trimmed, " (") && strings.has_suffix(trimmed, ")") {
+			rest := strings.trim_space(trimmed[len("for "):])
+			var_name, after_var := split_first_word_raw(rest)
+			if is_basic_name(var_name) && strings.has_prefix(after_var, "(") && strings.has_suffix(after_var, ")") && len(after_var) > 2 {
+				expr := strings.trim_space(after_var[1 : len(after_var)-1])
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				delete(out)
+				out = strings.concatenate([]string{indent, "for ", var_name, " in ", expr}, allocator)
+				changed = true
+				trimmed = strings.trim_space(out)
+			}
+		}
+		if in_switch && !strings.has_prefix(trimmed, "case ") && strings.contains(trimmed, "*)") {
+			close_idx := find_substring(trimmed, "*)")
+			if close_idx >= 0 {
+				pat := strings.trim_space(trimmed[:close_idx+1])
+				body := strings.trim_space(trimmed[close_idx+2:])
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				pat_copy := strings.clone(pat, allocator)
+				body_copy := strings.clone(body, allocator)
+				if body == "" {
+					delete(out)
+					out = strings.concatenate([]string{indent, "case ", pat_copy}, allocator)
+				} else {
+					delete(out)
+					out = strings.concatenate([]string{indent, "case ", pat_copy, "\n", indent, "  ", body_copy}, allocator)
+				}
+				delete(pat_copy)
+				delete(body_copy)
+				changed = true
+				trimmed = strings.trim_space(out)
+			}
+		}
 		if strings.has_prefix(trimmed, "function ") && (strings.has_suffix(trimmed, " &&") || strings.has_suffix(trimmed, " ||")) {
 			conn_idx := find_substring(trimmed, " &&")
 			if conn_idx < 0 {
@@ -2127,9 +2507,64 @@ normalize_fish_artifacts :: proc(text: string, allocator := context.allocator) -
 					indent = out[:indent_len]
 				}
 				head := strings.trim_space(trimmed[:conn_idx])
+				head_copy := strings.clone(head, allocator)
 				delete(out)
-				out = strings.concatenate([]string{indent, head}, allocator)
+				out = strings.concatenate([]string{indent, head_copy}, allocator)
+				delete(head_copy)
 				changed = true
+			}
+			trimmed = strings.trim_space(out)
+		}
+		if strings.has_suffix(trimmed, "()") {
+			name := strings.trim_space(trimmed[:len(trimmed)-2])
+			if is_basic_name(name) {
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				delete(out)
+				out = strings.concatenate([]string{indent, "function ", name}, allocator)
+				changed = true
+				trimmed = strings.trim_space(out)
+			}
+		}
+		if strings.has_prefix(trimmed, "function eval ") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			delete(out)
+			out = strings.concatenate([]string{indent, ":"}, allocator)
+			changed = true
+			trimmed = strings.trim_space(out)
+		}
+		if strings.contains(trimmed, "\"\"\"") {
+			repl_q, c_q := strings.replace_all(out, "\"\"\"", "\"\"", allocator)
+			if c_q {
+				delete(out)
+				out = repl_q
+				changed = true
+			} else if raw_data(repl_q) != raw_data(out) {
+				delete(repl_q)
+			}
+			trimmed = strings.trim_space(out)
+		}
+		if strings.has_prefix(trimmed, "for ") && strings.contains(trimmed, " in \"\"\"") {
+			repl_q, c_q := strings.replace_all(trimmed, " in \"\"\"", " in \"\"", allocator)
+			if c_q {
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				delete(out)
+				out = strings.concatenate([]string{indent, repl_q}, allocator)
+				delete(repl_q)
+				changed = true
+			} else if raw_data(repl_q) != raw_data(trimmed) {
+				delete(repl_q)
 			}
 			trimmed = strings.trim_space(out)
 		}
@@ -2203,6 +2638,14 @@ normalize_fish_artifacts :: proc(text: string, allocator := context.allocator) -
 		} else if raw_data(repl) != raw_data(out) {
 			delete(repl)
 		}
+		repl, c = strings.replace_all(out, "$'", "'", allocator)
+		if c {
+			delete(out)
+			out = repl
+			changed = true
+		} else if raw_data(repl) != raw_data(out) {
+			delete(repl)
+		}
 		repl, c = strings.replace_all(out, "&&", "; and", allocator)
 		if c {
 			delete(out)
@@ -2250,6 +2693,12 @@ normalize_fish_artifacts :: proc(text: string, allocator := context.allocator) -
 			out = out[:len(out)-2]
 			changed = true
 		}
+		trimmed = strings.trim_space(out)
+		if strings.has_prefix(trimmed, "switch ") {
+			in_switch = true
+		} else if trimmed == "end" {
+			in_switch = false
+		}
 		strings.write_string(&builder, out)
 		delete(out)
 		if idx+1 < len(lines) {
@@ -2266,37 +2715,62 @@ ensure_fish_block_balance :: proc(text: string, allocator := context.allocator) 
 		return strings.clone(text, allocator), false
 	}
 
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
 	depth := 0
-	for line in lines {
+	changed := false
+	for line, idx in lines {
 		trimmed := strings.trim_space(line)
-		if trimmed == "" || strings.has_prefix(trimmed, "#") {
-			continue
+		out := line
+		out_allocated := false
+
+		if strings.has_prefix(trimmed, "function ") && depth > 0 {
+			for depth > 0 {
+				strings.write_string(&builder, "end\n")
+				depth -= 1
+				changed = true
+			}
 		}
+
 		if trimmed == "end" {
 			if depth > 0 {
 				depth -= 1
+			} else {
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				out = strings.concatenate([]string{indent, ":"}, allocator)
+				out_allocated = true
+				changed = true
 			}
-			continue
+		} else if trimmed != "" && !strings.has_prefix(trimmed, "#") {
+			if strings.has_prefix(trimmed, "function ") ||
+				strings.has_prefix(trimmed, "if ") ||
+				strings.has_prefix(trimmed, "while ") ||
+				strings.has_prefix(trimmed, "for ") ||
+				strings.has_prefix(trimmed, "switch ") ||
+				trimmed == "begin" {
+				depth += 1
+			}
 		}
-		if strings.has_prefix(trimmed, "function ") ||
-			strings.has_prefix(trimmed, "if ") ||
-			strings.has_prefix(trimmed, "while ") ||
-			strings.has_prefix(trimmed, "for ") ||
-			strings.has_prefix(trimmed, "switch ") ||
-			trimmed == "begin" {
-			depth += 1
+
+		strings.write_string(&builder, out)
+		if out_allocated {
+			delete(out)
+		}
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
 		}
 	}
 
-	if depth <= 0 {
-		return strings.clone(text, allocator), false
-	}
-
-	builder := strings.builder_make()
-	defer strings.builder_destroy(&builder)
-	strings.write_string(&builder, text)
 	for i := 0; i < depth; i += 1 {
 		strings.write_string(&builder, "\nend")
+		changed = true
+	}
+	if !changed {
+		return strings.clone(text, allocator), false
 	}
 	return strings.clone(strings.to_string(builder), allocator), true
 }
