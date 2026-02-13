@@ -223,6 +223,18 @@ translate :: proc(
 					strings.has_prefix(line_text, "rank)") ||
 					strings.has_prefix(line_text, "time)") ||
 					strings.contains(line_text, "${exclude}|${exclude}/*)") ||
+					strings.contains(line_text, "$+commands[") ||
+					strings.has_prefix(line_text, "function fzf_setup_using_") ||
+					strings.has_prefix(line_text, "__sudo-replace-buffer() {") ||
+					strings.has_prefix(line_text, "__sudo_replace_buffer() {") ||
+					strings.has_prefix(line_text, "sudo\\ -e\\ *)") ||
+					strings.has_prefix(line_text, "sudo\\ *)") ||
+					strings.has_prefix(line_text, "|| fzf_setup_") ||
+					strings.has_prefix(line_text, "unset -f -m 'fzf_setup_") ||
+					strings.has_prefix(line_text, "zle -N sudo-command-line") ||
+					strings.has_prefix(line_text, "bindkey -M emacs '\\e\\e' sudo-command-line") ||
+					strings.has_prefix(line_text, "bindkey -M vicmd '\\e\\e' sudo-command-line") ||
+					strings.has_prefix(line_text, "bindkey -M viins '\\e\\e' sudo-command-line") ||
 					strings.has_prefix(line_text, "if (( ! ZSHZ_UNCOMMON )) && [[ -n $common ]]; then") ||
 					strings.has_prefix(line_text, "if [[ -n $common ]]; then") ||
 					strings.has_prefix(line_text, "autoload -Uz ") ||
@@ -1299,6 +1311,35 @@ normalize_zsh_preparse_syntax :: proc(text: string, allocator := context.allocat
 	out, changed = replace_with_flag(out, "${(k)opts}", "${opts}", changed, allocator)
 	out, changed = replace_with_flag(out, "${=ZSHZ[FUNCTIONS]}", "${ZSHZ[FUNCTIONS]}", changed, allocator)
 	out, changed = replace_with_flag(out, "${${line%\\|*}#*\\|}", "${line}", changed, allocator)
+	out, changed = replace_with_flag(out, "(( ${+commands[fzf]} )) || return 1", "true || return 1", changed, allocator)
+	out, changed = replace_with_flag(out, "local fzf_ver=${\"$(fzf --version)\"#fzf }", "local fzf_ver=\"$(fzf --version)\"", changed, allocator)
+	out, changed = replace_with_flag(out, "is-at-least 0.48.0 ${${(s: :)fzf_ver}[1]} || return 1", "is-at-least 0.48.0 ${fzf_ver} || return 1", changed, allocator)
+	out, changed = replace_with_flag(
+		out,
+		"if (( ! ${+commands[fzf]} )) && [[ \"$PATH\" != *$fzf_base/bin* ]]; then",
+		"if [[ \"$PATH\" != *$fzf_base/bin* ]]; then",
+		changed,
+		allocator,
+	)
+	out, changed = replace_with_flag(
+		out,
+		"if (( ${+commands[fzf-share]} )) && dir=\"$(fzf-share)\" && [[ -d \"${dir}\" ]]; then",
+		"if dir=\"$(fzf-share)\" && [[ -d \"${dir}\" ]]; then",
+		changed,
+		allocator,
+	)
+	out, changed = replace_with_flag(
+		out,
+		"elif (( ${+commands[brew]} )) && dir=\"$(brew --prefix fzf 2>/dev/null)\"; then",
+		"elif dir=\"$(brew --prefix fzf 2>/dev/null)\"; then",
+		changed,
+		allocator,
+	)
+	out, changed = replace_with_flag(out, "__sudo-replace-buffer() {", "__sudo_replace_buffer() {", changed, allocator)
+	out, changed = replace_with_flag(out, "sudo-command-line() {", "sudo_command_line() {", changed, allocator)
+	out, changed = replace_with_flag(out, "__sudo-replace-buffer ", "__sudo_replace_buffer ", changed, allocator)
+	out, changed = replace_with_flag(out, "zle -N sudo-command-line", "zle -N sudo_command_line", changed, allocator)
+	out, changed = replace_with_flag(out, "zle -N sudo-command-line", "zle -N sudo_command_line", changed, allocator)
 
 	lines := strings.split_lines(out)
 	defer delete(lines)
