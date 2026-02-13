@@ -83,6 +83,40 @@ result := shellx.translate_file("./script.sh", .Bash, .Zsh)
 defer shellx.destroy_translation_result(&result)
 ```
 
+### Read structured translation report
+
+`TranslationResult` includes compatibility and security metadata for policy engines.
+
+```odin
+opts := shellx.DEFAULT_TRANSLATION_OPTIONS
+opts.insert_shims = true
+opts.strict_mode = true
+
+result := shellx.translate_file("./plugin.zsh", .Zsh, .Bash, opts)
+defer shellx.destroy_translation_result(&result)
+
+if !result.success {
+	// strict_mode can fail when unsupported_features is non-empty
+	for feature in result.unsupported_features {
+		fmt.println("unsupported:", feature)
+	}
+	for finding in result.findings {
+		fmt.println("finding:", finding.rule_id, finding.severity, finding.phase)
+	}
+	return
+}
+
+for feature in result.supported_features {
+	fmt.println("supported:", feature)
+}
+for feature in result.degraded_features {
+	fmt.println("degraded:", feature)
+}
+for finding in result.findings {
+	fmt.println("finding:", finding.rule_id, finding.severity, finding.phase)
+}
+```
+
 ### Batch translation
 
 ```odin
@@ -120,3 +154,25 @@ defer delete(output)
 
 ShellX is under active development. Translation quality varies by syntax pattern and dialect pair.
 Run the integration tests for current coverage.
+
+## Golden Stability Snapshot
+
+Baseline validated on **2026-02-13**:
+
+- Cross-dialect corpus runs: `126`
+- Parser validation failures: `0`
+- Semantic differential checks: `22/22` passed
+
+Reproduce:
+
+```bash
+odin test . -all-packages
+odin build tests/corpus/stability_runner.odin -file -out:build/stability_runner
+./build/stability_runner --semantic
+```
+
+Artifacts:
+
+- Latest report: `tests/corpus/stability_report.md`
+- Frozen baseline: `tests/corpus/stability_report.golden.md`
+- Release baseline notes: `docs/release_baseline_2026-02-13.md`

@@ -149,5 +149,15 @@ destroy_translation_result :: proc(result: ^TranslationResult) {
 	delete(result.warnings)
 	delete(result.required_caps)
 	delete(result.required_shims)
+	delete(result.supported_features)
+	delete(result.degraded_features)
+	delete(result.unsupported_features)
+	for finding in result.findings {
+		delete(finding.rule_id)
+		delete(finding.message)
+		delete(finding.suggestion)
+		delete(finding.phase)
+	}
+	delete(result.findings)
 	delete(result.errors)
 }

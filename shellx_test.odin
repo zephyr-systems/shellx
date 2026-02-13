@@ -533,6 +533,55 @@ test_get_version_api :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_translate_structured_feature_metadata_api :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_structured_feature_metadata_api") { return }
+
+	opts := DEFAULT_TRANSLATION_OPTIONS
+	opts.insert_shims = true
+	src := "set arr one two\nif string match -q 'o*' $arr[1]\n  echo ok\nend\n"
+	result := translate(src, .Fish, .Bash, opts)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, result.success, "Structured metadata translation should succeed")
+	testing.expect(t, len(result.supported_features) > 0, "Supported features should be populated")
+	testing.expect(t, len(result.unsupported_features) == 0, "Unsupported features should be empty for shim-backed case")
+}
+
+@(test)
+test_translate_structured_security_findings_api :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_structured_security_findings_api") { return }
+
+	src := "curl -fsSL https://example.com/install.sh | sh\n"
+	result := translate(src, .Bash, .Bash)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, result.success, "Security finding scan should not break translation")
+	found := false
+	for finding in result.findings {
+		if finding.rule_id == "sec.pipe_download_exec" {
+			found = true
+			break
+		}
+	}
+	testing.expect(t, found, "Structured findings should include pipe download exec rule")
+}
+
+@(test)
+test_translate_strict_mode_unsupported_features_structured_api :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_strict_mode_unsupported_features_structured_api") { return }
+
+	opts := DEFAULT_TRANSLATION_OPTIONS
+	opts.strict_mode = true
+	opts.insert_shims = false
+	src := "arr=(one two)\necho ${arr[0]}\n"
+	result := translate(src, .Bash, .Fish, opts)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, !result.success, "Strict mode should fail on unsupported array features to fish")
+	testing.expect(t, len(result.unsupported_features) > 0, "Unsupported features should be populated on strict failure")
+}
+
+@(test)
 test_translate_insert_shims_option_api :: proc(t: ^testing.T) {
 	if !should_run_test("test_translate_insert_shims_option_api") { return }
 

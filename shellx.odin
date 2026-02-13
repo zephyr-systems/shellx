@@ -36,6 +36,22 @@ DEFAULT_TRANSLATION_OPTIONS :: TranslationOptions{
 	optimization_level = .None,
 }
 
+FindingSeverity :: enum {
+	Info,
+	Warning,
+	High,
+	Critical,
+}
+
+SecurityFinding :: struct {
+	rule_id:    string,
+	severity:   FindingSeverity,
+	message:    string,
+	location:   ir.SourceLocation,
+	suggestion: string,
+	phase:      string, // "source" or "translated"
+}
+
 posix_output_likely_degraded :: proc(source: string, output: string) -> bool {
 	if source == "" || output == "" {
 		return false
@@ -60,13 +76,17 @@ posix_output_likely_degraded :: proc(source: string, output: string) -> bool {
 
 // TranslationResult is the full output of a translation request.
 TranslationResult :: struct {
-	success:        bool,
-	output:         string,
-	warnings:       [dynamic]string,
-	required_caps:  [dynamic]string,
-	required_shims: [dynamic]string,
-	error:          Error,
-	errors:         [dynamic]ErrorContext,
+	success:              bool,
+	output:               string,
+	warnings:             [dynamic]string,
+	required_caps:        [dynamic]string,
+	required_shims:       [dynamic]string,
+	supported_features:   [dynamic]string,
+	degraded_features:    [dynamic]string,
+	unsupported_features: [dynamic]string,
+	findings:             [dynamic]SecurityFinding,
+	error:                Error,
+	errors:               [dynamic]ErrorContext,
 }
 
 Error :: enum {
@@ -98,6 +118,7 @@ translate :: proc(
 	if source_name == "" {
 		source_name = "<input>"
 	}
+	scan_shell_security_findings(&result, source_code, source_name, "source")
 
 	arena_size := len(source_code) * 8
 	if arena_size < 8*1024*1024 {
@@ -382,6 +403,7 @@ translate :: proc(
 			append_unique(&result.required_shims, warning.feature)
 		}
 	}
+	derive_feature_metadata(&result, compat_result, options, from, to)
 
 	if options.strict_mode && compat.should_fail_on_strict(&compat_result) {
 		result.success = false
@@ -583,7 +605,19 @@ translate :: proc(
 	} else {
 		result.output = emitted
 	}
+	scan_shell_security_findings(&result, result.output, source_name, "translated")
 	prune_resolved_compat_warnings(&result, from, to)
+	derive_feature_metadata(&result, compat_result, options, from, to)
+	if options.strict_mode && len(result.unsupported_features) > 0 {
+		result.success = false
+		add_error_context(
+			&result,
+			.ValidationError,
+			"Strict mode blocked translation due to unsupported features",
+			ir.SourceLocation{file = source_name},
+			"Disable strict_mode or remove unsupported source features",
+		)
+	}
 
 	return result
 }
@@ -639,7 +673,7 @@ translate_batch :: proc(
 
 // get_version returns the library semantic version string.
 get_version :: proc() -> string {
-	return "0.1.0"
+	return "0.2.0"
 }
 
 // detect_shell returns the best-effort shell dialect for source text.
@@ -726,6 +760,180 @@ append_unique :: proc(items: ^[dynamic]string, value: string) {
 		}
 	}
 	append(items, value)
+}
+
+contains_string :: proc(items: []string, value: string) -> bool {
+	for item in items {
+		if item == value {
+			return true
+		}
+	}
+	return false
+}
+
+remove_string :: proc(items: ^[dynamic]string, value: string) {
+	out := make([dynamic]string, 0, len(items^), context.temp_allocator)
+	defer delete(out)
+	for item in items^ {
+		if item == value {
+			continue
+		}
+		append(&out, item)
+	}
+	clear(items)
+	for item in out {
+		append(items, item)
+	}
+}
+
+append_security_finding :: proc(
+	result: ^TranslationResult,
+	rule_id: string,
+	severity: FindingSeverity,
+	message: string,
+	location: ir.SourceLocation,
+	suggestion: string,
+	phase: string,
+) {
+	for finding in result.findings {
+		if finding.rule_id == rule_id &&
+			finding.message == message &&
+			finding.location.line == location.line &&
+			finding.phase == phase {
+			return
+		}
+	}
+	append(
+		&result.findings,
+		SecurityFinding{
+			rule_id = strings.clone(rule_id, context.allocator),
+			severity = severity,
+			message = strings.clone(message, context.allocator),
+			location = location,
+			suggestion = strings.clone(suggestion, context.allocator),
+			phase = strings.clone(phase, context.allocator),
+		},
+	)
+}
+
+scan_shell_security_findings :: proc(
+	result: ^TranslationResult,
+	code: string,
+	source_name: string,
+	phase: string,
+) {
+	if code == "" {
+		return
+	}
+	lines := strings.split_lines(code)
+	defer delete(lines)
+	for line, i in lines {
+		trimmed := strings.trim_space(line)
+		line_no := i + 1
+		loc := ir.SourceLocation{file = source_name, line = line_no, column = 0, length = len(trimmed)}
+
+		if strings.contains(trimmed, "| sh") || strings.contains(trimmed, "| bash") ||
+			strings.contains(trimmed, "| zsh") || strings.contains(trimmed, "| fish") {
+			if strings.contains(trimmed, "curl ") || strings.contains(trimmed, "wget ") || strings.contains(trimmed, "fetch ") {
+				append_security_finding(
+					result,
+					"sec.pipe_download_exec",
+					.Critical,
+					"Downloaded content is piped directly into a shell interpreter",
+					loc,
+					"Download to a file, verify checksum/signature, then execute explicitly",
+					phase,
+				)
+			}
+		}
+		if strings.contains(trimmed, "eval ") && (strings.contains(trimmed, "curl ") || strings.contains(trimmed, "wget ")) {
+			append_security_finding(
+				result,
+				"sec.eval_download",
+				.Critical,
+				"Dynamic eval with network-fetched content detected",
+				loc,
+				"Avoid eval on external input; parse and validate input first",
+				phase,
+			)
+		}
+		if strings.contains(trimmed, "rm -rf /") || strings.contains(trimmed, "rm -rf ~") {
+			append_security_finding(
+				result,
+				"sec.dangerous_rm",
+				.Critical,
+				"Potentially destructive recursive delete target detected",
+				loc,
+				"Use explicit safe paths and add guard checks before deletion",
+				phase,
+			)
+		}
+		if strings.contains(trimmed, "chmod 777") {
+			append_security_finding(
+				result,
+				"sec.overpermissive_chmod",
+				.Warning,
+				"Overly permissive file mode detected",
+				loc,
+				"Use least-privilege file permissions",
+				phase,
+			)
+		}
+		if strings.has_prefix(trimmed, "source /tmp/") || strings.has_prefix(trimmed, ". /tmp/") {
+			append_security_finding(
+				result,
+				"sec.source_tmp",
+				.High,
+				"Sourcing code from /tmp detected",
+				loc,
+				"Use immutable trusted paths for sourced files",
+				phase,
+			)
+		}
+	}
+}
+
+derive_feature_metadata :: proc(
+	result: ^TranslationResult,
+	compat_result: compat.CompatibilityResult,
+	options: TranslationOptions,
+	from: ShellDialect,
+	to: ShellDialect,
+) {
+	for warning in compat_result.warnings {
+		switch warning.severity {
+		case .Error:
+			append_unique(&result.unsupported_features, warning.feature)
+		case .Warning:
+			append_unique(&result.degraded_features, warning.feature)
+		case .Info:
+			append_unique(&result.supported_features, warning.feature)
+		}
+	}
+
+	for cap in result.required_caps {
+		append_unique(&result.supported_features, cap)
+	}
+	for shim in result.required_shims {
+		append_unique(&result.supported_features, shim)
+		if contains_string(result.degraded_features[:], shim) && options.insert_shims {
+			remove_string(&result.degraded_features, shim)
+		}
+		if contains_string(result.unsupported_features[:], shim) &&
+			options.insert_shims &&
+			compat.needs_shim(shim, from, to) {
+			remove_string(&result.unsupported_features, shim)
+			append_unique(&result.degraded_features, shim)
+		}
+	}
+
+	for feature in result.unsupported_features {
+		remove_string(&result.degraded_features, feature)
+		remove_string(&result.supported_features, feature)
+	}
+	for feature in result.degraded_features {
+		remove_string(&result.supported_features, feature)
+	}
 }
 
 has_required_shim :: proc(required_shims: []string, name: string) -> bool {
@@ -9343,7 +9551,7 @@ rewrite_zsh_anonymous_function_for_bash :: proc(line: string, allocator := conte
 	if indent_len > 0 {
 		indent = line[:indent_len]
 	}
-	return strings.clone(strings.concatenate([]string{indent, "{"}), allocator), true
+	return strings.concatenate([]string{indent, "{"}, allocator), true
 }
 
 rewrite_zsh_case_group_pattern_for_bash :: proc(line: string, allocator := context.allocator) -> (string, bool) {

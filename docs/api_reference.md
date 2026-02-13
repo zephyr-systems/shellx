@@ -4,7 +4,7 @@ This document describes the public `shellx` package API.
 
 ## Ownership Model
 
-`TranslationResult` contains heap-owned fields (`output`, `warnings`, `required_shims`, `errors`).
+`TranslationResult` contains heap-owned fields (`output`, `warnings`, `required_shims`, `supported_features`, `degraded_features`, `unsupported_features`, `findings`, `errors`).
 Call `destroy_translation_result(&result)` when done.
 
 For `translate_batch`, destroy each element, then `delete(batch)`.
@@ -64,8 +64,22 @@ Fields:
 - `output: string`
 - `warnings: [dynamic]string`
 - `required_shims: [dynamic]string`
+- `required_caps: [dynamic]string`
+- `supported_features: [dynamic]string`
+- `degraded_features: [dynamic]string`
+- `unsupported_features: [dynamic]string`
+- `findings: [dynamic]SecurityFinding`
 - `error: Error`
 - `errors: [dynamic]ErrorContext`
+
+### `SecurityFinding`
+
+- `rule_id: string`
+- `severity: FindingSeverity`
+- `message: string`
+- `location: SourceLocation`
+- `suggestion: string`
+- `phase: string` (`source` or `translated`)
 
 ## Functions
 
