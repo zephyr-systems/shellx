@@ -1385,8 +1385,136 @@ fi
 if command -v _autopair_uninstall >/dev/null 2>&1; then
   echo HAVE_AUTOPAIR_UNINSTALL
 fi
-`),
+				`),
 				required_probe_markers = []string{},
+			},
+			{
+				name = "plugin_ohmyzsh_z_arrays_cond_param_zsh_to_bash",
+				from = .Zsh,
+				to = .Bash,
+				source_path = "tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh",
+				module_mode = true,
+				probe_source = strings.trim_space(`
+arr=(a b c)
+[[ "${arr[2]}" = "b" ]] && echo ARR_OK
+needle="b"
+for x in "${arr[@]}"; do
+  [[ "$x" = "$needle" ]] && echo COND_OK && break
+done
+v=""
+[[ "${v:-fallback}" = "fallback" ]] && echo PARAM_OK
+`),
+				probe_target = strings.trim_space(`
+arr=(a b c)
+[[ "${arr[1]}" == "b" ]] && echo ARR_OK
+needle="b"
+for x in "${arr[@]}"; do
+  [[ "$x" == "$needle" ]] && echo COND_OK && break
+done
+v=""
+[[ "${v:-fallback}" == "fallback" ]] && echo PARAM_OK
+`),
+				required_probe_markers = []string{"ARR_OK", "COND_OK", "PARAM_OK"},
+			},
+			{
+				name = "plugin_ohmyzsh_sudo_condition_zsh_to_posix",
+				from = .Zsh,
+				to = .POSIX,
+				source_path = "tests/corpus/repos/zsh/ohmyzsh/plugins/sudo/sudo.plugin.zsh",
+				module_mode = true,
+				probe_source = strings.trim_space(`
+typed="sudo ls"
+[[ "$typed" = "sudo "* ]] && echo COND_OK
+command -v sudo-command-line >/dev/null 2>&1 && echo HAVE_SUDO_FN
+`),
+				probe_target = strings.trim_space(`
+typed="sudo ls"
+case "$typed" in
+  sudo\ *) echo COND_OK ;;
+esac
+command -v sudo-command-line >/dev/null 2>&1 && echo HAVE_SUDO_FN
+`),
+				required_probe_markers = []string{"COND_OK"},
+			},
+			{
+				name = "plugin_ohmyzsh_extract_condition_zsh_to_bash",
+				from = .Zsh,
+				to = .Bash,
+				source_path = "tests/corpus/repos/zsh/ohmyzsh/plugins/extract/extract.plugin.zsh",
+				module_mode = true,
+				probe = strings.trim_space(`
+x=""
+if [ -z "$x" ]; then
+  echo COND_OK
+fi
+command -v extract >/dev/null 2>&1 && echo HAVE_EXTRACT
+`),
+				required_probe_markers = []string{"COND_OK", "HAVE_EXTRACT"},
+			},
+			{
+				name = "plugin_ohmyzsh_colored_man_param_zsh_to_posix",
+				from = .Zsh,
+				to = .POSIX,
+				source_path = "tests/corpus/repos/zsh/ohmyzsh/plugins/colored-man-pages/colored-man-pages.plugin.zsh",
+				module_mode = true,
+				probe = strings.trim_space(`
+v=""
+[ "${v:-fallback}" = "fallback" ] && echo PARAM_OK
+echo COLOR_OK
+`),
+				required_probe_markers = []string{"PARAM_OK", "COLOR_OK"},
+			},
+			{
+				name = "plugin_ohmyzsh_copyfile_cond_param_zsh_to_bash",
+				from = .Zsh,
+				to = .Bash,
+				source_path = "tests/corpus/repos/zsh/ohmyzsh/plugins/copyfile/copyfile.plugin.zsh",
+				module_mode = true,
+				probe = strings.trim_space(`
+v=""
+[[ "${v:-x}" = "x" ]] && echo PARAM_OK
+[[ -n "abc" ]] && echo COND_OK
+command -v copyfile >/dev/null 2>&1 && echo HAVE_COPYFILE
+`),
+				required_probe_markers = []string{"PARAM_OK", "COND_OK", "HAVE_COPYFILE"},
+			},
+			{
+				name = "plugin_ysu_hooks_events_zsh_to_bash",
+				from = .Zsh,
+				to = .Bash,
+				source_path = "tests/corpus/repos/zsh/zsh-you-should-use/you-should-use.plugin.zsh",
+				module_mode = true,
+				probe_source = strings.trim_space(`
+command -v add-zsh-hook >/dev/null 2>&1 && command -v enable_you_should_use >/dev/null 2>&1 && {
+  enable_you_should_use >/dev/null 2>&1
+  echo HOOKS_OK
+}
+`),
+				probe_target = strings.trim_space(`
+command -v __shellx_register_preexec >/dev/null 2>&1 && command -v enable_you_should_use >/dev/null 2>&1 && {
+  enable_you_should_use >/dev/null 2>&1
+  echo HOOKS_OK
+}
+`),
+				required_probe_markers = []string{"HOOKS_OK"},
+			},
+			{
+				name = "plugin_zsh_nvm_param_zsh_to_posix",
+				from = .Zsh,
+				to = .POSIX,
+				source_path = "tests/corpus/repos/zsh/zsh-nvm/zsh-nvm.plugin.zsh",
+				module_mode = true,
+				probe_source = strings.trim_space(`
+unset NVM_DIR
+[[ "${NVM_DIR:-/tmp/nvm}" = "/tmp/nvm" ]] && echo PARAM_OK
+command -v _zsh_nvm_load >/dev/null 2>&1 && echo HAVE_NVM_LOAD
+`),
+				probe_target = strings.trim_space(`
+unset NVM_DIR
+[ "${NVM_DIR:-/tmp/nvm}" = "/tmp/nvm" ] && echo PARAM_OK
+command -v _zsh_nvm_load >/dev/null 2>&1 && echo HAVE_NVM_LOAD
+`),
+				required_probe_markers = []string{"PARAM_OK"},
 			},
 		}
 

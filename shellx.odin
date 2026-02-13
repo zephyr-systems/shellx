@@ -1029,7 +1029,8 @@ validate_fish_block_balance :: proc(output: string, source_name: string, allocat
 			strings.has_prefix(trimmed, "if ") ||
 			strings.has_prefix(trimmed, "for ") ||
 			strings.has_prefix(trimmed, "while ") ||
-			strings.has_prefix(trimmed, "switch ") {
+			strings.has_prefix(trimmed, "switch ") ||
+			strings.contains(trimmed, "| while ") {
 			depth += 1
 		}
 		if trimmed == "end" {
@@ -4835,6 +4836,13 @@ __shellx_zsh_expand() {
 			delete(out)
 			out = rewritten
 			changed_any = changed_any || changed
+
+			rewritten, changed = rewrite_zsh_ysu_fish_parser_blockers(out, allocator)
+			delete(out)
+			out = rewritten
+			changed_any = changed_any || changed
+
+			out, changed_any = replace_with_flag(out, "--get-regexp \"^alias\\..+$\"", "--get-regexp '^alias\\..+$'", changed_any, allocator)
 		}
 
 		rewritten, changed = ensure_fish_block_balance(out, allocator)
@@ -4907,6 +4915,119 @@ __shellx_zsh_expand() {
 	}
 
 	return out, changed_any
+}
+
+rewrite_zsh_ysu_fish_parser_blockers :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	if !(strings.contains(text, "ysu_message") && strings.contains(text, "_check_ysu_hardcore")) {
+		return strings.clone(text, allocator), false
+	}
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	in_write_buf_fn := false
+	skip_ysu_typed_or_chain := false
+	for line, i in lines {
+		trimmed := strings.trim_space(line)
+		out_line := line
+
+		if skip_ysu_typed_or_chain {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			out_line = strings.concatenate([]string{indent, ":"}, allocator)
+			changed = true
+			if !strings.has_suffix(trimmed, "\\") {
+				skip_ysu_typed_or_chain = false
+			}
+		}
+
+		if trimmed == "function _write_ysu_buffer" {
+			in_write_buf_fn = true
+		}
+		if in_write_buf_fn && strings.has_prefix(trimmed, "if __zx_test \"$position\" = \"before\"") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			strings.write_string(&builder, indent)
+			strings.write_string(&builder, "set -l position \"$YSU_MESSAGE_POSITION\"")
+			strings.write_byte(&builder, '\n')
+			changed = true
+		}
+
+		if strings.contains(trimmed, "echo \"(__shellx_array_get usage ") && strings.contains(trimmed, "): $key=$aliases\"") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			out_line = strings.concatenate([]string{indent, "echo \"(__shellx_array_get usage $key): $key=$aliases\""}, allocator)
+			changed = true
+		} else if strings.contains(trimmed, "| while read key value; do") {
+			repl, _ := strings.replace(trimmed, "| while read key value; do", "| while read key value", 1)
+			out_line = strings.clone(repl, allocator)
+			delete(repl)
+			changed = true
+		} else if strings.contains(trimmed, "| while IFS=\"=\" read -r key value; do") {
+			repl, _ := strings.replace(trimmed, "| while IFS=\"=\" read -r key value; do", "| while read key value", 1)
+			out_line = strings.clone(repl, allocator)
+			delete(repl)
+			changed = true
+		} else if strings.has_prefix(trimmed, "Found existing %alias_type for ") && strings.has_suffix(trimmed, "\\") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			out_line = strings.concatenate([]string{indent, ":"}, allocator)
+			changed = true
+		} else if strings.has_prefix(trimmed, ">&2 ") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			rest := strings.trim_space(trimmed[len(">&2 "):])
+			out_line = strings.concatenate([]string{indent, rest, " >&2"}, allocator)
+			changed = true
+		} else if strings.contains(trimmed, "--get-regexp \"^alias\\..+$\"") {
+			repl, _ := strings.replace(trimmed, "--get-regexp \"^alias\\..+$\"", "--get-regexp '^alias\\..+$'", 1)
+			out_line = strings.clone(repl, allocator)
+			delete(repl)
+			changed = true
+		} else if strings.contains(trimmed, "if __zx_test \"$typed\" = *\" $value \"*; or \\") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			out_line = strings.concatenate([]string{indent, "if true"}, allocator)
+			skip_ysu_typed_or_chain = true
+			changed = true
+		}
+
+		strings.write_string(&builder, out_line)
+		if i+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+		if in_write_buf_fn && trimmed == "end" {
+			in_write_buf_fn = false
+		}
+	}
+
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
 }
 
 rewrite_zsh_inline_not_set_if :: proc(text: string, allocator := context.allocator) -> (string, bool) {
@@ -7400,7 +7521,7 @@ ensure_fish_block_balance :: proc(text: string, allocator := context.allocator) 
 				append(&stack, 'f')
 			} else if strings.has_prefix(trimmed, "if ") {
 				append(&stack, 'i')
-			} else if strings.has_prefix(trimmed, "while ") || strings.has_prefix(trimmed, "for ") {
+			} else if strings.has_prefix(trimmed, "while ") || strings.has_prefix(trimmed, "for ") || strings.contains(trimmed, "| while ") {
 				append(&stack, 'l')
 			} else if strings.has_prefix(trimmed, "switch ") {
 				append(&stack, 's')
