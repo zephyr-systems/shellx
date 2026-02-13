@@ -851,6 +851,21 @@ test_normalize_zsh_preparse_local_cmdsubs :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_normalize_zsh_preparse_syntax :: proc(t: ^testing.T) {
+	if !should_run_test("test_normalize_zsh_preparse_syntax") { return }
+
+	input := "for x in ${(@Pk)1}; do :; done\nv=${(Pkv)match_array}\nif [[ -n ${(M)@:#-*} ]]; then :; fi\n(( ${+ZSHZ_DEBUG} )) && () { :; }\n"
+	output, changed := normalize_zsh_preparse_syntax(input)
+	defer delete(output)
+
+	testing.expect(t, changed, "zsh preparse syntax normalization should rewrite unsupported parser patterns")
+	testing.expect(t, !strings.contains(output, "(@Pk)"), "Should remove (@Pk) preparse token")
+	testing.expect(t, !strings.contains(output, "(Pkv)"), "Should remove (Pkv) preparse token")
+	testing.expect(t, !strings.contains(output, "(M)@:#"), "Should remove (M)@:# preparse token")
+	testing.expect(t, strings.contains(output, "&& {"), "Should normalize inline anonymous function opener")
+}
+
+@(test)
 test_repair_fish_split_echo_param_default :: proc(t: ^testing.T) {
 	if !should_run_test("test_repair_fish_split_echo_param_default") { return }
 

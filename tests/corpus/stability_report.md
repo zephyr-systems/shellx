@@ -15,7 +15,7 @@ Cross-dialect runs executed: 126
 | fish->posix | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 18 | 0.954 | 7.225 | 11 |
 | fish->zsh | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 19 | 1.100 | 5.528 | 11 |
 | zsh->bash | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 76 | 4 | 0.817 | 1.949 | 4 |
-| zsh->fish | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 76 | 58 | 1.854 | 9.812 | 15 |
+| zsh->fish | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 68 | 58 | 1.855 | 9.806 | 15 |
 | zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 76 | 22 | 1.257 | 6.342 | 14 |
 
 ## Failures
@@ -28,7 +28,6 @@ Cross-dialect runs executed: 126
 
 ## High Warning Runs
 
-- [WARN] ohmyzsh-z zsh->fish warnings=20(parse=14 compat=6) shims=6 src_fn=14 out_fn=36 rules=parse_diagnostic=14, indexed_arrays=1, assoc_arrays=1, condition_semantics=1, parameter_expansion=1, zsh_hooks=1, prompt_hooks=1 path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
 
 ## Warning Categories
 
@@ -182,7 +181,7 @@ Cross-dialect runs executed: 126
   - ohmyzsh-git (plugin) Compat[parameter_expansion]: Parameter expansion modifiers may not be compatible with Fish
   - ohmyzsh-z (plugin) Compat[parameter_expansion]: Parameter expansion modifiers may not be compatible with Fish
   - ohmyzsh-fzf (plugin) Compat[parameter_expansion]: Parameter expansion modifiers may not be compatible with Fish
-- `parse_recovery/parse_diagnostic`: 76
+- `parse_recovery/parse_diagnostic`: 68
   - zsh-autosuggestions (plugin) Parse diagnostic at <input>:1:1: Syntax error
   - zsh-autosuggestions (plugin) Parse diagnostic at <input>:853:1: Syntax error
   - zsh-autosuggestions (plugin) Parse diagnostic at <input>:856:11: Syntax error

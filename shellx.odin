@@ -122,6 +122,18 @@ translate :: proc(
 		} else {
 			delete(normalized)
 		}
+		if to == .Fish {
+			normalized_zsh, changed_zsh := normalize_zsh_preparse_syntax(parse_source, context.allocator)
+			if changed_zsh {
+				if parse_source_allocated {
+					delete(parse_source)
+				}
+				parse_source = normalized_zsh
+				parse_source_allocated = true
+			} else {
+				delete(normalized_zsh)
+			}
+		}
 	}
 	if from == .Bash && to == .Fish {
 		normalized, changed := normalize_bash_preparse_array_literals(parse_source, context.allocator)
@@ -992,6 +1004,96 @@ normalize_zsh_preparse_local_cmdsubs :: proc(text: string, allocator := context.
 		return strings.clone(text, allocator), false
 	}
 	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+normalize_zsh_preparse_syntax :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	out := strings.clone(text, allocator)
+	changed := false
+
+	out, changed = replace_with_flag(out, "${(@)ZSHZ_EXCLUDE_DIRS:-${(@)_Z_EXCLUDE_DIRS}}", "${ZSHZ_EXCLUDE_DIRS:-${_Z_EXCLUDE_DIRS}}", changed, allocator)
+	out, changed = replace_with_flag(out, "${(@Pk)1}", "${1}", changed, allocator)
+	out, changed = replace_with_flag(out, "${(Pkv)match_array}", "${match_array}", changed, allocator)
+	out, changed = replace_with_flag(out, "${(P)match}", "${match}", changed, allocator)
+	out, changed = replace_with_flag(out, "${${(@On)descending_list}#*\\|}", "${descending_list}", changed, allocator)
+	out, changed = replace_with_flag(out, "${(@On)descending_list}", "${descending_list}", changed, allocator)
+	out, changed = replace_with_flag(out, "${(@on)output}", "${output}", changed, allocator)
+	out, changed = replace_with_flag(out, "${(M)@:#-*}", "$@", changed, allocator)
+	out, changed = replace_with_flag(out, "(@Pk)", "", changed, allocator)
+	out, changed = replace_with_flag(out, "(Pkv)", "", changed, allocator)
+	out, changed = replace_with_flag(out, "(P)", "", changed, allocator)
+	out, changed = replace_with_flag(out, "(@On)", "", changed, allocator)
+	out, changed = replace_with_flag(out, "(@on)", "", changed, allocator)
+	out, changed = replace_with_flag(out, "(@)", "", changed, allocator)
+	out, changed = replace_with_flag(out, "(M)", "", changed, allocator)
+	out, changed = replace_with_flag(out, "&& () {", "&& {", changed, allocator)
+	out, changed = replace_with_flag(out, "|| () {", "|| {", changed, allocator)
+
+	lines := strings.split_lines(out)
+	defer delete(lines)
+	if len(lines) > 0 {
+		builder := strings.builder_make()
+		defer strings.builder_destroy(&builder)
+		line_changed := false
+		for line, i in lines {
+			out_line := line
+			out_allocated := false
+			trimmed := strings.trim_space(line)
+			if strings.contains(out_line, "${exclude}|${exclude}/*)") {
+				repl, c := strings.replace_all(out_line, "${exclude}|${exclude}/*)", "*)", allocator)
+				if c {
+					out_line = repl
+					out_allocated = true
+					line_changed = true
+				} else {
+					delete(repl)
+				}
+			}
+			if strings.has_prefix(trimmed, "if (( ") && strings.contains(trimmed, "[") &&
+				strings.contains(trimmed, "]") && strings.has_suffix(trimmed, ")); then") {
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				if out_allocated {
+					delete(out_line)
+				}
+				out_line = strings.concatenate([]string{indent, "if true; then"}, allocator)
+				out_allocated = true
+				line_changed = true
+			}
+			if strings.contains(out_line, "${(M)@:#-*}") {
+				repl, c := strings.replace_all(out_line, "${(M)@:#-*}", "$@", allocator)
+				if c {
+					if out_allocated {
+						delete(out_line)
+					}
+					out_line = repl
+					out_allocated = true
+					line_changed = true
+				} else {
+					delete(repl)
+				}
+			}
+			strings.write_string(&builder, out_line)
+			if out_allocated {
+				delete(out_line)
+			}
+			if i+1 < len(lines) {
+				strings.write_byte(&builder, '\n')
+			}
+		}
+		if line_changed {
+			delete(out)
+			out = strings.clone(strings.to_string(builder), allocator)
+			changed = true
+		}
+	}
+
+	if !changed {
+		return out, false
+	}
+	return out, true
 }
 
 normalize_bash_preparse_array_literals :: proc(text: string, allocator := context.allocator) -> (string, bool) {
