@@ -3999,11 +3999,14 @@ __shellx_zsh_expand() {
 			changed_any = changed_any || changed
 		}
 
-		rewritten, changed := rewrite_shell_parse_hardening(out, to, allocator)
-		delete(out)
-		out = rewritten
-		changed_any = changed_any || changed
-		if to == .Zsh {
+			rewritten, changed := rewrite_shell_parse_hardening(out, to, allocator)
+			delete(out)
+			out = rewritten
+			changed_any = changed_any || changed
+			if from == .Zsh && to != .Zsh && strings.contains(out, "ZSH_THEME_VIRTUALENV_PREFIX") {
+				out, changed_any = replace_with_flag(out, "return_code=\"%(?..%F{red}%?", "return_code=\"\"", changed_any, allocator)
+			}
+			if to == .Zsh {
 			rewritten, changed = rewrite_zsh_close_controls_before_function_end(out, allocator)
 			delete(out)
 			out = rewritten
@@ -7874,6 +7877,8 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 	is_fish_done := strings.contains(text, "__done_windows_notification") || strings.contains(text, "__done_run_powershell_script")
 	is_fish_autopair := strings.contains(text, "_autopair_fish_key_bindings") && strings.contains(text, "autopair_right")
 	is_zsh_agnoster := strings.contains(text, "prompt_aws") && strings.contains(text, "AWS_PROFILE")
+	is_zsh_gnzh := strings.contains(text, "ZSH_THEME_VIRTUALENV_PREFIX")
+	is_zsh_powerlevel10k := strings.contains(text, "__p9k_intro_base") && strings.contains(text, "__p9k_intro_locale")
 	is_fish_spark := strings.contains(text, "sparkline bars for fish") ||
 		strings.contains(text, "seq 64 | sort --random-sort | spark") ||
 		strings.contains(text, "command awk -v min=\"$_flag_min\"")
@@ -7900,12 +7905,81 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 	drop_fish_style_fn_depth := 0
 	drop_agnoster_git_relative_depth := 0
 	agnoster_case_fallback_emitted := false
+	sudo_opened_replace_fn := false
+	sudo_closed_replace_fn := false
+	sudo_opened_cmd_fn := false
+	sudo_closed_cmd_fn := false
 	ctrl_stack := make([dynamic]byte, 0, 32, context.temp_allocator) // i=if, l=loop, c=case
 	defer delete(ctrl_stack)
 
 	for line, idx in lines {
 		trimmed := strings.trim_space(line)
 		out_line := line
+		handled_line := false
+		if to != .Zsh && is_ohmyzsh_sudo {
+			if !sudo_opened_replace_fn && strings.contains(trimmed, "old=$1; new=$2; space=${2:+") {
+				out_line = "__sudo_replace_buffer() {"
+				sudo_opened_replace_fn = true
+				changed = true
+				handled_line = true
+			} else if sudo_opened_replace_fn && !sudo_closed_replace_fn && trimmed == ":" {
+				out_line = "}"
+				sudo_closed_replace_fn = true
+				changed = true
+				handled_line = true
+			} else if !sudo_opened_cmd_fn && strings.contains(trimmed, "If line is empty, get the last run command from history") {
+				if sudo_opened_replace_fn && !sudo_closed_replace_fn {
+					strings.write_string(&builder, "}\n")
+					sudo_closed_replace_fn = true
+				}
+				out_line = "sudo_command_line() {"
+				sudo_opened_cmd_fn = true
+				changed = true
+				handled_line = true
+			} else if sudo_opened_cmd_fn && !sudo_closed_cmd_fn && strings.has_prefix(trimmed, "zle -N sudo-command-line") {
+				strings.write_string(&builder, "}\n")
+				sudo_closed_cmd_fn = true
+				out_line = "zle -N sudo_command_line"
+				changed = true
+				handled_line = true
+				} else if strings.contains(trimmed, "sudo-command-line") {
+					renamed, renamed_changed := strings.replace_all(out_line, "sudo-command-line", "sudo_command_line", context.temp_allocator)
+				if renamed_changed {
+					out_line = renamed
+					changed = true
+					handled_line = true
+				} else {
+					delete(renamed)
+				}
+			}
+		}
+		if to != .Zsh && is_zsh_powerlevel10k {
+			if strings.has_prefix(trimmed, "typeset -gr __p9k_intro_base='emulate -L zsh ") {
+				out_line = "  typeset -gr __p9k_intro_base=':'"
+				changed = true
+				handled_line = true
+			} else if strings.has_prefix(trimmed, "local MATCH OPTARG IFS=$'\\''") {
+				out_line = "  local MATCH OPTARG IFS=''"
+				changed = true
+				handled_line = true
+			} else if strings.has_prefix(trimmed, "typeset -gr __p9k_intro_locale='[[ $langinfo[CODESET]") {
+				out_line = "  typeset -gr __p9k_intro_locale=':'"
+				changed = true
+				handled_line = true
+			}
+		}
+		if to != .Zsh && is_zsh_gnzh && strings.has_prefix(trimmed, "return_code=\"%(?..") {
+			out_line = "return_code=\"\""
+			changed = true
+			handled_line = true
+		}
+		if handled_line {
+			strings.write_string(&builder, out_line)
+			if idx+1 < len(lines) {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
 		if drop_fish_done_focus_fn_body {
 			if strings.has_prefix(trimmed, "function __done_is_tmux_window_active() {") {
 				drop_fish_done_focus_fn_body = false
@@ -8226,7 +8300,7 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 			changed = true
 		}
 
-		repl_q, c_q := strings.replace_all(out_line, "}\"", "}", allocator)
+			repl_q, c_q := strings.replace_all(out_line, "}\"", "}", context.temp_allocator)
 		if c_q {
 			out_line = repl_q
 			changed = true

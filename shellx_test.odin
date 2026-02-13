@@ -742,6 +742,78 @@ test_translate_corpus_bashit_theme_to_fish_api :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_translate_corpus_ohmyzsh_sudo_parse_safe_api :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_corpus_ohmyzsh_sudo_parse_safe_api") { return }
+
+	path := "tests/corpus/repos/zsh/ohmyzsh/plugins/sudo/sudo.plugin.zsh"
+	if !os.is_file(path) {
+		return
+	}
+	data, ok := os.read_entire_file(path)
+	testing.expect(t, ok, "Should read ohmyzsh sudo corpus plugin")
+	if !ok {
+		return
+	}
+	defer delete(data)
+
+	opts := DEFAULT_TRANSLATION_OPTIONS
+	opts.insert_shims = true
+	result := translate(string(data), .Zsh, .Bash, opts)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, result.success, "ohmyzsh sudo corpus plugin should translate to bash")
+	parser_check_snippet(t, result.output, .Bash, "corpus_ohmyzsh_sudo_zsh_to_bash")
+}
+
+@(test)
+test_translate_corpus_powerlevel10k_parse_safe_api :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_corpus_powerlevel10k_parse_safe_api") { return }
+
+	path := "tests/corpus/repos/zsh/powerlevel10k/powerlevel10k.zsh-theme"
+	if !os.is_file(path) {
+		return
+	}
+	data, ok := os.read_entire_file(path)
+	testing.expect(t, ok, "Should read powerlevel10k corpus theme")
+	if !ok {
+		return
+	}
+	defer delete(data)
+
+	opts := DEFAULT_TRANSLATION_OPTIONS
+	opts.insert_shims = true
+	result := translate(string(data), .Zsh, .Bash, opts)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, result.success, "powerlevel10k corpus theme should translate to bash")
+	parser_check_snippet(t, result.output, .Bash, "corpus_powerlevel10k_zsh_to_bash")
+}
+
+@(test)
+test_translate_corpus_gnzh_parse_safe_api :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_corpus_gnzh_parse_safe_api") { return }
+
+	path := "tests/corpus/repos/zsh/ohmyzsh/themes/gnzh.zsh-theme"
+	if !os.is_file(path) {
+		return
+	}
+	data, ok := os.read_entire_file(path)
+	testing.expect(t, ok, "Should read gnzh corpus theme")
+	if !ok {
+		return
+	}
+	defer delete(data)
+
+	opts := DEFAULT_TRANSLATION_OPTIONS
+	opts.insert_shims = true
+	result := translate(string(data), .Zsh, .Bash, opts)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, result.success, "gnzh corpus theme should translate to bash")
+	parser_check_snippet(t, result.output, .Bash, "corpus_gnzh_zsh_to_bash")
+}
+
+@(test)
 test_translate_preserve_comments_option_api :: proc(t: ^testing.T) {
 	if !should_run_test("test_translate_preserve_comments_option_api") { return }
 
