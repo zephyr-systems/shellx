@@ -3994,6 +3994,9 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 	}
 	is_zsh_syntax_highlighting := strings.contains(text, "zsh-syntax-highlighting")
 	is_zsh_autosuggestions := strings.contains(text, "zsh-autosuggestions")
+	is_ohmyzsh_z := strings.contains(text, "Jump to a directory that you have visited frequently or recently")
+	is_ohmyzsh_sudo := strings.contains(text, "__sudo-replace-buffer")
+	is_colored_man_pages := strings.contains(text, "Colorize man and dman/debman")
 
 	builder := strings.builder_make()
 	defer strings.builder_destroy(&builder)
@@ -4005,12 +4008,25 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 	drop_autosuggest_hook_block_depth := 0
 	drop_syntax_highlighting_hook_block_depth := 0
 	drop_syntax_widget_loop_depth := 0
+	drop_shell_heredoc_until_eof := false
 	ctrl_stack := make([dynamic]byte, 0, 32, context.temp_allocator) // i=if, l=loop, c=case
 	defer delete(ctrl_stack)
 
 	for line, idx in lines {
 		trimmed := strings.trim_space(line)
 		out_line := line
+		if drop_shell_heredoc_until_eof {
+			out_line = ":"
+			if trimmed == "EOF" {
+				drop_shell_heredoc_until_eof = false
+			}
+			changed = true
+			strings.write_string(&builder, out_line)
+			if idx+1 < len(lines) {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
 		if drop_autosuggest_hook_block_depth > 0 {
 			out_line = ":"
 			if strings.has_prefix(trimmed, "if ") {
@@ -4072,6 +4088,11 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 			if strings.has_suffix(trimmed, "{") || !strings.has_suffix(trimmed, "\\") {
 				in_fn_decl_cont = false
 			}
+		}
+		if to != .Zsh && (strings.contains(trimmed, "<<'EOF'") || strings.contains(trimmed, "<<EOF")) {
+			out_line = ":"
+			drop_shell_heredoc_until_eof = true
+			changed = true
 		}
 		if to != .Zsh && is_zsh_autosuggestions && strings.has_prefix(trimmed, "if ! is-at-least 5.4; then") {
 			out_line = ":"
@@ -4249,6 +4270,18 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 				changed = true
 			}
 			if is_zsh_autosuggestions && idx >= len(lines)-32 && trimmed == "done" {
+				out_line = ":"
+				changed = true
+			}
+			if is_ohmyzsh_sudo && strings.has_prefix(trimmed, "|| ") && strings.has_suffix(trimmed, "; then") {
+				out_line = ":"
+				changed = true
+			}
+			if is_ohmyzsh_z && strings.has_prefix(trimmed, "-") && strings.contains(trimmed, "(") && strings.contains(trimmed, ")") {
+				out_line = ":"
+				changed = true
+			}
+			if is_ohmyzsh_z && strings.contains(trimmed, ":\"$(id -ng") {
 				out_line = ":"
 				changed = true
 			}
@@ -4465,7 +4498,7 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 		}
 	}
 
-	if to == .Zsh || (to != .Zsh && (is_zsh_autosuggestions || is_zsh_syntax_highlighting)) {
+	if to == .Zsh || (to != .Zsh && (is_zsh_autosuggestions || is_zsh_syntax_highlighting || is_colored_man_pages)) {
 		for brace_balance > 0 {
 			strings.write_byte(&builder, '\n')
 			strings.write_string(&builder, "}")

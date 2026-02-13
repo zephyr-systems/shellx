@@ -14,31 +14,12 @@ Cross-dialect runs executed: 126
 | fish->bash | 11 | 11/11 | 11/11 | 7/11 | 0 | 10/10 | 1/1 | 1 | 19 | 0.994 | 7.077 | 11 |
 | fish->posix | 11 | 11/11 | 11/11 | 7/11 | 0 | 10/10 | 1/1 | 1 | 18 | 0.935 | 6.714 | 11 |
 | fish->zsh | 11 | 11/11 | 11/11 | 7/11 | 0 | 10/10 | 1/1 | 1 | 19 | 1.143 | 4.430 | 11 |
-| zsh->bash | 15 | 15/15 | 15/15 | 11/15 | 0 | 10/10 | 5/5 | 76 | 4 | 0.819 | 1.913 | 4 |
+| zsh->bash | 15 | 15/15 | 15/15 | 14/15 | 0 | 10/10 | 5/5 | 76 | 4 | 0.814 | 1.902 | 4 |
 | zsh->fish | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 76 | 58 | 1.791 | 9.812 | 15 |
-| zsh->posix | 15 | 15/15 | 15/15 | 10/15 | 0 | 10/10 | 5/5 | 76 | 22 | 1.156 | 5.498 | 14 |
+| zsh->posix | 15 | 15/15 | 15/15 | 14/15 | 0 | 10/10 | 5/5 | 76 | 22 | 1.152 | 5.474 | 14 |
 
 ## Failures
 
-- [FAIL] ohmyzsh-z (plugin) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=15(parse=14 compat=1) shims=1 src_fn=14 out_fn=18 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-z_10.bash: line 172: syntax error near unexpected token `('
-tests/corpus/.parser_check_ohmyzsh-z_10.bash: line 172: `  -x    Remove a directory from the database (by default, the current directory)'
- path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
-- [FAIL] ohmyzsh-z (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=17(parse=14 compat=3) shims=3 src_fn=14 out_fn=25 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-z_12.sh: line 142: syntax error near unexpected token `('
-tests/corpus/.parser_check_ohmyzsh-z_12.sh: line 142: `	  -x    Remove a directory from the database (by default, the current directory)'
- path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
-- [FAIL] ohmyzsh-fzf (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=15(parse=14 compat=1) shims=1 src_fn=9 out_fn=18 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-fzf_15.sh: line 297: warning: here-document at line 273 delimited by end-of-file (wanted `EOF')
-tests/corpus/.parser_check_ohmyzsh-fzf_15.sh: line 298: syntax error: unexpected end of file from `{' command on line 272
- path=tests/corpus/repos/zsh/ohmyzsh/plugins/fzf/fzf.plugin.zsh
-- [FAIL] ohmyzsh-sudo (plugin) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=9(parse=9 compat=0) shims=0 src_fn=2 out_fn=0 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-sudo_16.bash: line 81: syntax error near unexpected token `||'
-tests/corpus/.parser_check_ohmyzsh-sudo_16.bash: line 81: `      || builtin which -a "$realcmd" | command grep -Fx -q "$editorcmd"; then'
- path=tests/corpus/repos/zsh/ohmyzsh/plugins/sudo/sudo.plugin.zsh
-- [FAIL] ohmyzsh-sudo (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=10(parse=9 compat=1) shims=1 src_fn=2 out_fn=10 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-sudo_18.sh: line 131: syntax error near unexpected token `||'
-tests/corpus/.parser_check_ohmyzsh-sudo_18.sh: line 131: `	      || builtin which -a "$realcmd" | command grep -Fx -q "$editorcmd"; then'
- path=tests/corpus/repos/zsh/ohmyzsh/plugins/sudo/sudo.plugin.zsh
-- [FAIL] ohmyzsh-colored-man-pages (plugin) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=4(parse=4 compat=0) shims=0 src_fn=1 out_fn=3 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-colored-man-pages_22.bash: line 60: syntax error: unexpected end of file from `{' command on line 55
- path=tests/corpus/repos/zsh/ohmyzsh/plugins/colored-man-pages/colored-man-pages.plugin.zsh
-- [FAIL] ohmyzsh-colored-man-pages (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=5(parse=4 compat=1) shims=1 src_fn=1 out_fn=12 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-colored-man-pages_24.sh: line 120: syntax error: unexpected end of file from `{' command on line 115
- path=tests/corpus/repos/zsh/ohmyzsh/plugins/colored-man-pages/colored-man-pages.plugin.zsh
 - [FAIL] bashit-base (plugin) bash->fish translate=true parse=true parser=false/true exit=127 err=None warnings=3(parse=0 compat=3) shims=3 src_fn=15 out_fn=23 msg= parser_msg=tests/corpus/.parser_check_bashit-base_41.fish (line 195): Missing end to balance this function definition
 function mkcd
 ^~~~~~~^
@@ -84,25 +65,6 @@ tests/corpus/.parser_check_fish-tide-theme_123.sh: line 183: `}'
 
 ## Parser Validation Failures
 
-- [PARSER-FAIL] ohmyzsh-z (plugin) zsh->bash command=`bash -n tests/corpus/.parser_check_ohmyzsh-z_10.bash` exit=2 message=tests/corpus/.parser_check_ohmyzsh-z_10.bash: line 172: syntax error near unexpected token `('
-tests/corpus/.parser_check_ohmyzsh-z_10.bash: line 172: `  -x    Remove a directory from the database (by default, the current directory)'
- path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
-- [PARSER-FAIL] ohmyzsh-z (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-z_12.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-z_12.sh: line 142: syntax error near unexpected token `('
-tests/corpus/.parser_check_ohmyzsh-z_12.sh: line 142: `	  -x    Remove a directory from the database (by default, the current directory)'
- path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
-- [PARSER-FAIL] ohmyzsh-fzf (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-fzf_15.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-fzf_15.sh: line 297: warning: here-document at line 273 delimited by end-of-file (wanted `EOF')
-tests/corpus/.parser_check_ohmyzsh-fzf_15.sh: line 298: syntax error: unexpected end of file from `{' command on line 272
- path=tests/corpus/repos/zsh/ohmyzsh/plugins/fzf/fzf.plugin.zsh
-- [PARSER-FAIL] ohmyzsh-sudo (plugin) zsh->bash command=`bash -n tests/corpus/.parser_check_ohmyzsh-sudo_16.bash` exit=2 message=tests/corpus/.parser_check_ohmyzsh-sudo_16.bash: line 81: syntax error near unexpected token `||'
-tests/corpus/.parser_check_ohmyzsh-sudo_16.bash: line 81: `      || builtin which -a "$realcmd" | command grep -Fx -q "$editorcmd"; then'
- path=tests/corpus/repos/zsh/ohmyzsh/plugins/sudo/sudo.plugin.zsh
-- [PARSER-FAIL] ohmyzsh-sudo (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-sudo_18.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-sudo_18.sh: line 131: syntax error near unexpected token `||'
-tests/corpus/.parser_check_ohmyzsh-sudo_18.sh: line 131: `	      || builtin which -a "$realcmd" | command grep -Fx -q "$editorcmd"; then'
- path=tests/corpus/repos/zsh/ohmyzsh/plugins/sudo/sudo.plugin.zsh
-- [PARSER-FAIL] ohmyzsh-colored-man-pages (plugin) zsh->bash command=`bash -n tests/corpus/.parser_check_ohmyzsh-colored-man-pages_22.bash` exit=2 message=tests/corpus/.parser_check_ohmyzsh-colored-man-pages_22.bash: line 60: syntax error: unexpected end of file from `{' command on line 55
- path=tests/corpus/repos/zsh/ohmyzsh/plugins/colored-man-pages/colored-man-pages.plugin.zsh
-- [PARSER-FAIL] ohmyzsh-colored-man-pages (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-colored-man-pages_24.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-colored-man-pages_24.sh: line 120: syntax error: unexpected end of file from `{' command on line 115
- path=tests/corpus/repos/zsh/ohmyzsh/plugins/colored-man-pages/colored-man-pages.plugin.zsh
 - [PARSER-FAIL] bashit-base (plugin) bash->fish command=`fish --no-execute tests/corpus/.parser_check_bashit-base_41.fish` exit=127 message=tests/corpus/.parser_check_bashit-base_41.fish (line 195): Missing end to balance this function definition
 function mkcd
 ^~~~~~~^
