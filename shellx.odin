@@ -41,6 +41,7 @@ TranslationResult :: struct {
 	success:        bool,
 	output:         string,
 	warnings:       [dynamic]string,
+	required_caps:  [dynamic]string,
 	required_shims: [dynamic]string,
 	error:          Error,
 	errors:         [dynamic]ErrorContext,
@@ -188,6 +189,7 @@ translate :: proc(
 
 	for warning in compat_result.warnings {
 		append(&result.warnings, warning.message)
+		compat.append_capability_for_feature(&result.required_caps, warning.feature, from, to)
 		if options.insert_shims && compat.needs_shim(warning.feature, from, to) {
 			append_unique(&result.required_shims, warning.feature)
 		}
@@ -270,14 +272,33 @@ translate :: proc(
 			delete(rewritten)
 		}
 
-		shim_prelude := compat.build_shim_prelude(result.required_shims[:], from, to, context.allocator)
-		if shim_prelude != "" {
-			result.output = strings.concatenate([]string{shim_prelude, emitted}, context.allocator)
-			delete(shim_prelude)
-			delete(emitted)
-		} else {
-			result.output = emitted
-		}
+	}
+
+	cap_prelude := ""
+	if options.insert_shims {
+		compat.collect_caps_from_output(&result.required_caps, emitted, to)
+		cap_prelude = compat.build_capability_prelude(result.required_caps[:], to, context.allocator)
+	}
+	shim_prelude := ""
+	if options.insert_shims && len(result.required_shims) > 0 {
+		shim_prelude = compat.build_shim_prelude(result.required_shims[:], from, to, context.allocator)
+	}
+	if cap_prelude != "" && shim_prelude != "" {
+		combined := strings.concatenate([]string{cap_prelude, shim_prelude, emitted}, context.allocator)
+		delete(cap_prelude)
+		delete(shim_prelude)
+		delete(emitted)
+		result.output = combined
+	} else if cap_prelude != "" {
+		combined := strings.concatenate([]string{cap_prelude, emitted}, context.allocator)
+		delete(cap_prelude)
+		delete(emitted)
+		result.output = combined
+	} else if shim_prelude != "" {
+		combined := strings.concatenate([]string{shim_prelude, emitted}, context.allocator)
+		delete(shim_prelude)
+		delete(emitted)
+		result.output = combined
 	} else {
 		result.output = emitted
 	}
@@ -1366,6 +1387,11 @@ __shellx_zsh_expand() {
 		out = rewritten
 		changed_any = changed_any || changed
 
+		rewritten, changed = lower_fish_capability_callsites(out, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
+
 		rewritten, changed = normalize_fish_artifacts(out, allocator)
 		delete(out)
 		out = rewritten
@@ -1814,6 +1840,93 @@ normalize_fish_simple_assignments :: proc(text: string, allocator := context.all
 			strings.write_byte(&builder, '\n')
 		}
 	}
+	return strings.clone(strings.to_string(builder), allocator), changed
+}
+
+split_first_word_raw :: proc(s: string) -> (string, string) {
+	if s == "" {
+		return "", ""
+	}
+	i := 0
+	for i < len(s) && s[i] != ' ' && s[i] != '\t' {
+		i += 1
+	}
+	if i >= len(s) {
+		return s, ""
+	}
+	return s[:i], strings.trim_space(s[i+1:])
+}
+
+lower_fish_capability_callsites :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	for line, idx in lines {
+		indent_len := len(line) - len(strings.trim_left_space(line))
+		indent := ""
+		if indent_len > 0 {
+			indent = line[:indent_len]
+		}
+		trimmed := strings.trim_space(line)
+		out_line := line
+		out_allocated := false
+
+		if strings.has_prefix(trimmed, "if test ") {
+			cond := strings.trim_space(trimmed[len("if test "):])
+			out_line = strings.concatenate([]string{indent, "if __zx_test ", cond}, allocator)
+			out_allocated = true
+			changed = true
+		} else if strings.has_prefix(trimmed, "else if test ") {
+			cond := strings.trim_space(trimmed[len("else if test "):])
+			out_line = strings.concatenate([]string{indent, "else if __zx_test ", cond}, allocator)
+			out_allocated = true
+			changed = true
+		} else if strings.has_prefix(trimmed, "while test ") {
+			cond := strings.trim_space(trimmed[len("while test "):])
+			out_line = strings.concatenate([]string{indent, "while __zx_test ", cond}, allocator)
+			out_allocated = true
+			changed = true
+		} else if strings.has_prefix(trimmed, "test ") {
+			cond := strings.trim_space(trimmed[len("test "):])
+			out_line = strings.concatenate([]string{indent, "__zx_test ", cond}, allocator)
+			out_allocated = true
+			changed = true
+		} else if strings.has_prefix(trimmed, "source ") {
+			arg := strings.trim_space(trimmed[len("source "):])
+			out_line = strings.concatenate([]string{indent, "__zx_source ", arg}, allocator)
+			out_allocated = true
+			changed = true
+		} else if strings.has_prefix(trimmed, ". ") {
+			arg := strings.trim_space(trimmed[2:])
+			out_line = strings.concatenate([]string{indent, "__zx_source ", arg}, allocator)
+			out_allocated = true
+			changed = true
+		} else if strings.has_prefix(trimmed, "set ") {
+			rest := strings.trim_space(trimmed[len("set "):])
+			name, tail := split_first_word_raw(rest)
+			if is_basic_name(name) && tail != "" {
+				out_line = strings.concatenate([]string{indent, "__zx_set ", name, " ", tail, " default 0"}, allocator)
+				out_allocated = true
+				changed = true
+			}
+		}
+
+		strings.write_string(&builder, out_line)
+		if out_allocated {
+			delete(out_line)
+		}
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+
 	return strings.clone(strings.to_string(builder), allocator), changed
 }
 

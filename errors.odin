@@ -147,6 +147,7 @@ destroy_translation_result :: proc(result: ^TranslationResult) {
 		result.output = ""
 	}
 	delete(result.warnings)
+	delete(result.required_caps)
 	delete(result.required_shims)
 	delete(result.errors)
 }

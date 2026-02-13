@@ -394,6 +394,66 @@ test_translate_insert_shims_option_api :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_translate_capability_prelude_disabled_by_default :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_capability_prelude_disabled_by_default") { return }
+
+	src := "add-zsh-hook precmd my_precmd\n"
+	result := translate(src, .Zsh, .Bash, DEFAULT_TRANSLATION_OPTIONS)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, result.success, "Translation should succeed with default options")
+	testing.expect(t, !strings.contains(result.output, "__zx_warn"), "Capability prelude should not be emitted unless insert_shims=true")
+}
+
+@(test)
+test_translate_capability_prelude_with_insert_shims :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_capability_prelude_with_insert_shims") { return }
+
+	opts := DEFAULT_TRANSLATION_OPTIONS
+	opts.insert_shims = true
+
+	src := "add-zsh-hook precmd my_precmd\n"
+	result := translate(src, .Zsh, .Bash, opts)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, result.success, "Translation should succeed with insert_shims")
+	testing.expect(t, len(result.required_caps) > 0, "Capabilities should be collected for compatibility gaps")
+	testing.expect(t, strings.contains(result.output, "# shellx capability prelude"), "Capability prelude header should be emitted")
+	testing.expect(t, strings.contains(result.output, "__zx_warn"), "Capability helper should be emitted")
+}
+
+@(test)
+test_translate_fish_lowering_test_and_source_callsites :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_fish_lowering_test_and_source_callsites") { return }
+
+	opts := DEFAULT_TRANSLATION_OPTIONS
+	opts.insert_shims = true
+
+	src := "if test -f \"$HOME/.zshrc\"; then source \"$HOME/.zshrc\"; fi\n"
+	result := translate(src, .Bash, .Fish, opts)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, result.success, "Translation should succeed for test/source lowering")
+	testing.expect(t, strings.contains(result.output, "__zx_test"), "Fish output should lower test callsites to __zx_test")
+	testing.expect(t, strings.contains(result.output, "__zx_source"), "Fish output should lower source callsites to __zx_source")
+}
+
+@(test)
+test_translate_fish_lowering_assignment_callsite :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_fish_lowering_assignment_callsite") { return }
+
+	opts := DEFAULT_TRANSLATION_OPTIONS
+	opts.insert_shims = true
+
+	src := "name=world\necho \"$name\"\n"
+	result := translate(src, .Bash, .Fish, opts)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, result.success, "Translation should succeed for assignment lowering")
+	testing.expect(t, strings.contains(result.output, "__zx_set name"), "Fish output should lower simple assignments to __zx_set")
+}
+
+@(test)
 test_translate_insert_shims_parameter_expansion_to_fish_api :: proc(t: ^testing.T) {
 	if !should_run_test("test_translate_insert_shims_parameter_expansion_to_fish_api") { return }
 
