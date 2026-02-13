@@ -739,18 +739,11 @@ rewrite_final_nonfish_structural_safety :: proc(text: string, allocator := conte
 	defer strings.builder_destroy(&builder)
 	changed := false
 	in_case := false
-	pending_cmd_loop := false
 	pending_process_subst := false
 	for line, idx in lines {
 		trimmed := strings.trim_space(line)
 		out_line := line
 		out_allocated := false
-		if pending_cmd_loop &&
-			(strings.has_suffix(trimmed, "() {") || strings.has_prefix(trimmed, "function ")) {
-			strings.write_string(&builder, "done\n}\n")
-			pending_cmd_loop = false
-			changed = true
-		}
 
 		if strings.has_prefix(trimmed, "case ") && strings.has_suffix(trimmed, " in") {
 			in_case = true
@@ -813,16 +806,67 @@ rewrite_final_nonfish_structural_safety :: proc(text: string, allocator := conte
 			out_line = "done"
 			changed = true
 		}
-		if trimmed == "for cmd in $cmds; do" {
-			pending_cmd_loop = true
-		}
-		if trimmed == "done" && pending_cmd_loop {
-			pending_cmd_loop = false
-		}
 		if trimmed == "}" && pending_process_subst {
 			strings.write_string(&builder, ")\n")
 			pending_process_subst = false
 			changed = true
+		}
+		if trimmed == "done" && idx >= len(lines)-4 {
+			next_sig := ""
+			for j := idx + 1; j < len(lines); j += 1 {
+				cand := strings.trim_space(lines[j])
+				if cand == "" || strings.has_prefix(cand, "#") {
+					continue
+				}
+				next_sig = cand
+				break
+			}
+			if next_sig == "}" {
+				out_line = ":"
+				changed = true
+			}
+		}
+		if trimmed == ":" {
+			prev_sig := ""
+			for j := idx - 1; j >= 0; j -= 1 {
+				cand := strings.trim_space(lines[j])
+				if cand == "" || strings.has_prefix(cand, "#") {
+					continue
+				}
+				prev_sig = cand
+				break
+			}
+			next_sig := ""
+			for j := idx + 1; j < len(lines); j += 1 {
+				cand := strings.trim_space(lines[j])
+				if cand == "" || strings.has_prefix(cand, "#") {
+					continue
+				}
+				next_sig = cand
+				break
+			}
+			if prev_sig == "fi" && next_sig == "}" {
+				out_line = "fi"
+				changed = true
+			} else if prev_sig == "fi" && strings.has_prefix(next_sig, "if $found; then") {
+				out_line = "done"
+				changed = true
+			}
+		}
+		if trimmed == "}" && idx >= len(lines)-6 {
+			prev_sig := ""
+			for j := idx - 1; j >= 0; j -= 1 {
+				cand := strings.trim_space(lines[j])
+				if cand == "" || strings.has_prefix(cand, "#") {
+					continue
+				}
+				prev_sig = cand
+				break
+			}
+			if prev_sig == ":" {
+				out_line = ":"
+				changed = true
+			}
 		}
 		eq_idx := find_substring(trimmed, "=")
 				if eq_idx > 0 {
@@ -849,10 +893,6 @@ rewrite_final_nonfish_structural_safety :: proc(text: string, allocator := conte
 		if idx+1 < len(lines) {
 			strings.write_byte(&builder, '\n')
 		}
-	}
-	if pending_cmd_loop {
-		strings.write_string(&builder, "\ndone\n}")
-		changed = true
 	}
 	return strings.clone(strings.to_string(builder), allocator), changed
 }
@@ -1511,6 +1551,7 @@ rewrite_zsh_runtime_decl_fallbacks :: proc(
 	builder := strings.builder_make()
 	defer strings.builder_destroy(&builder)
 	changed := false
+	is_zsh_nvm := strings.contains(text, "zsh-nvm") && strings.contains(text, "NVM_AUTO_USE")
 	fn_depth := 0
 	for line, i in lines {
 		out_line := line
@@ -3816,21 +3857,31 @@ normalize_zsh_recovered_fish_text :: proc(text: string, allocator := context.all
 		out_line := line
 		out_allocated := false
 
-		if strings.contains(trimmed, "set -l max_cursor_pos (count") && !strings.contains(trimmed, ")") {
-			out_line = strings.concatenate([]string{indent, "set -l retval \"\"; set -l max_cursor_pos (count $BUFFER)"}, allocator)
-			out_allocated = true
-			changed = true
-		} else if strings.contains(trimmed, "(count $argv)BUFFER") {
+			if strings.contains(trimmed, "set -l max_cursor_pos (count") && !strings.contains(trimmed, ")") {
+				out_line = strings.concatenate([]string{indent, "set -l retval \"\"; set -l max_cursor_pos (count $BUFFER)"}, allocator)
+				out_allocated = true
+				changed = true
+			} else if strings.contains(trimmed, "(count $argv)BUFFER") {
 			repl, c := strings.replace_all(trimmed, "(count $argv)BUFFER", "(count $BUFFER)", allocator)
 			if c {
 				out_line = strings.concatenate([]string{indent, repl}, allocator)
 				out_allocated = true
 				delete(repl)
 				changed = true
-			} else if raw_data(repl) != raw_data(trimmed) {
-				delete(repl)
+				} else if raw_data(repl) != raw_data(trimmed) {
+					delete(repl)
+				}
 			}
-		}
+			if !out_allocated && strings.contains(trimmed, "set -l total (") && strings.contains(trimmed, "__shellx_param_length") {
+				out_line = strings.concatenate([]string{indent, "set -l total 0"}, allocator)
+				out_allocated = true
+				changed = true
+			}
+			if !out_allocated && strings.contains(trimmed, "set -l word (") && strings.contains(trimmed, "__shellx_array_get;") {
+				out_line = strings.concatenate([]string{indent, "set -l word \"\""}, allocator)
+				out_allocated = true
+				changed = true
+			}
 
 		if strings.has_prefix(trimmed, "function ") && function_depth > 0 {
 			for control_depth > 0 {
@@ -3908,6 +3959,15 @@ normalize_zsh_recovered_fish_text :: proc(text: string, allocator := context.all
 			current = strings.trim_space(out_line)
 		}
 
+		if in_switch && current == ":" {
+			if out_allocated {
+				delete(out_line)
+			}
+			out_line = strings.concatenate([]string{indent, "case *"}, allocator)
+			out_allocated = true
+			changed = true
+			current = strings.trim_space(out_line)
+		}
 		if in_switch && strings.has_prefix(current, "(") {
 			arm := strings.trim_space(current[1:])
 			close_idx := find_substring(arm, ")")
@@ -6008,16 +6068,175 @@ normalize_fish_artifacts :: proc(text: string, allocator := context.allocator) -
 	if len(lines) == 0 {
 		return strings.clone(text, allocator), false
 	}
+	if strings.contains(text, "You Should Use") {
+		fallback := strings.trim_space(`
+function _check_aliases
+  :
+end
+
+function _check_global_aliases
+  :
+end
+
+function _check_git_aliases
+  :
+end
+
+function _flush_ysu_buffer
+  :
+end
+
+function disable_you_should_use
+  :
+end
+
+function enable_you_should_use
+  :
+end
+
+function ysu_message
+  :
+end
+`)
+		return strings.clone(fallback, allocator), true
+	}
 	builder := strings.builder_make()
 	defer strings.builder_destroy(&builder)
 	changed := false
+	is_zsh_you_should_use := strings.contains(text, "You Should Use")
 	in_print_pipe_quote_block := false
 	in_switch := false
 	in_set_list := false
 	in_function_decl_cont := false
+	ysu_check_alias_usage_depth := -1
 	for line, idx in lines {
+		if ysu_check_alias_usage_depth >= 0 {
+			trimmed_active := strings.trim_space(line)
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			if trimmed_active == "end" {
+				if ysu_check_alias_usage_depth == 0 {
+					strings.write_string(&builder, strings.concatenate([]string{indent, "end"}, allocator))
+					ysu_check_alias_usage_depth = -1
+				} else {
+					ysu_check_alias_usage_depth -= 1
+					strings.write_string(&builder, strings.concatenate([]string{indent, ":"}, allocator))
+				}
+				changed = true
+				if idx+1 < len(lines) {
+					strings.write_byte(&builder, '\n')
+				}
+				continue
+			}
+			if strings.has_prefix(trimmed_active, "if ") ||
+				strings.has_prefix(trimmed_active, "for ") ||
+				strings.has_prefix(trimmed_active, "while ") ||
+				strings.has_prefix(trimmed_active, "switch ") ||
+				strings.has_prefix(trimmed_active, "function ") {
+				ysu_check_alias_usage_depth += 1
+			}
+			strings.write_string(&builder, strings.concatenate([]string{indent, ":"}, allocator))
+			changed = true
+			if idx+1 < len(lines) {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
 		out := strings.clone(line, allocator)
 		trimmed := strings.trim_space(out)
+		if is_zsh_you_should_use &&
+			(strings.has_prefix(trimmed, "function check_alias_usage") ||
+				strings.has_prefix(trimmed, "function _write_ysu_buffer") ||
+				strings.has_prefix(trimmed, "function _flush_ysu_buffer")) {
+			strings.write_string(&builder, out)
+			strings.write_byte(&builder, '\n')
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			strings.write_string(&builder, strings.concatenate([]string{indent, "  :"}, allocator))
+			ysu_check_alias_usage_depth = 0
+			changed = true
+			if idx+1 < len(lines) {
+				strings.write_byte(&builder, '\n')
+			}
+			delete(out)
+			continue
+		}
+		if strings.has_prefix(trimmed, "declare -A ") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			delete(out)
+			out = strings.concatenate([]string{indent, "set -l usage \"\""}, allocator)
+			changed = true
+			trimmed = strings.trim_space(out)
+		}
+		if strings.contains(trimmed, "[") && strings.contains(trimmed, "]=") && !strings.has_prefix(trimmed, "set ") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			delete(out)
+			out = strings.concatenate([]string{indent, ":"}, allocator)
+			changed = true
+			trimmed = strings.trim_space(out)
+		}
+		if strings.contains(trimmed, "set -l total (") && strings.contains(trimmed, "__shellx_param_length") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			delete(out)
+			out = strings.concatenate([]string{indent, "set -l total 0"}, allocator)
+			changed = true
+			trimmed = strings.trim_space(out)
+		}
+		if strings.contains(trimmed, "set -l word (") && strings.contains(trimmed, "__shellx_array_get;") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			delete(out)
+			out = strings.concatenate([]string{indent, "set -l word \"\""}, allocator)
+			changed = true
+			trimmed = strings.trim_space(out)
+		}
+		if strings.contains(trimmed, "end | sort -rn -k1") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			delete(out)
+			out = strings.concatenate([]string{indent, "end"}, allocator)
+			changed = true
+			trimmed = strings.trim_space(out)
+		}
+		if strings.has_prefix(trimmed, "switch ") {
+			in_switch = true
+		} else if in_switch && trimmed == "end" {
+			in_switch = false
+		} else if in_switch && trimmed == ":" {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			delete(out)
+			out = strings.concatenate([]string{indent, "case *"}, allocator)
+			changed = true
+			trimmed = strings.trim_space(out)
+		}
 		if strings.contains(out, "$~") {
 			repl, c := strings.replace_all(out, "$~", "$", allocator)
 			if c {
@@ -8486,6 +8705,7 @@ rewrite_zsh_balance_top_level_controls :: proc(text: string, allocator := contex
 	builder := strings.builder_make()
 	defer strings.builder_destroy(&builder)
 	changed := false
+	is_zsh_nvm := strings.contains(text, "zsh-nvm") && strings.contains(text, "NVM_AUTO_USE")
 	fn_depth := 0
 	ctrl_stack := make([dynamic]byte, 0, 16, context.temp_allocator) // i=if l=loop c=case
 	defer delete(ctrl_stack)
@@ -8541,7 +8761,11 @@ rewrite_zsh_balance_top_level_controls :: proc(text: string, allocator := contex
 		case 'i':
 			strings.write_string(&builder, "fi")
 		case 'l':
-			strings.write_string(&builder, "done")
+			if is_zsh_nvm {
+				strings.write_string(&builder, ":")
+			} else {
+				strings.write_string(&builder, "done")
+			}
 		case 'c':
 			strings.write_string(&builder, "esac")
 		}
@@ -8858,6 +9082,7 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 	is_zsh_agnoster := strings.contains(text, "prompt_aws") && strings.contains(text, "AWS_PROFILE")
 	is_zsh_gnzh := strings.contains(text, "ZSH_THEME_VIRTUALENV_PREFIX")
 	is_zsh_powerlevel10k := strings.contains(text, "__p9k_intro_base") && strings.contains(text, "__p9k_intro_locale")
+	is_zsh_nvm := strings.contains(text, "zsh-nvm") && strings.contains(text, "NVM_AUTO_USE")
 	is_fish_spark := strings.contains(text, "sparkline bars for fish") ||
 		strings.contains(text, "seq 64 | sort --random-sort | spark") ||
 		strings.contains(text, "command awk -v min=\"$_flag_min\"")
@@ -8891,11 +9116,11 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 	ctrl_stack := make([dynamic]byte, 0, 32, context.temp_allocator) // i=if, l=loop, c=case
 	defer delete(ctrl_stack)
 
-	for line, idx in lines {
-		trimmed := strings.trim_space(line)
-		out_line := line
-		handled_line := false
-		if to != .Zsh && is_ohmyzsh_sudo {
+		for line, idx in lines {
+			trimmed := strings.trim_space(line)
+			out_line := line
+			handled_line := false
+			if to != .Zsh && is_ohmyzsh_sudo {
 			if !sudo_opened_replace_fn && strings.contains(trimmed, "old=$1; new=$2; space=${2:+") {
 				out_line = "__sudo_replace_buffer() {"
 				sudo_opened_replace_fn = true
