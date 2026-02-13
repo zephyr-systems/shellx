@@ -1101,49 +1101,50 @@ rewrite_shell_to_fish_syntax :: proc(text: string, allocator := context.allocato
 			out_allocated = true
 			changed = changed || c1 || c2 || c3 || c4 || c5
 		}
+		current_trimmed := strings.trim_space(out_line)
 
-		if trimmed == "fi" || trimmed == "done" || trimmed == "esac" || trimmed == "}" {
+		if current_trimmed == "fi" || current_trimmed == "done" || current_trimmed == "esac" || current_trimmed == "}" {
 			out_line = strings.concatenate([]string{indent, "end"}, allocator)
 			out_allocated = true
 			changed = true
-		} else if trimmed == ";;" {
+		} else if current_trimmed == ";;" {
 			out_line = ""
 			changed = true
-		} else if strings.has_prefix(trimmed, "if ") && strings.has_suffix(trimmed, "; then") {
-			cond := strings.trim_space(trimmed[3 : len(trimmed)-6])
+		} else if strings.has_prefix(current_trimmed, "if ") && strings.has_suffix(current_trimmed, "; then") {
+			cond := strings.trim_space(current_trimmed[3 : len(current_trimmed)-6])
 			if cond == "" {
 				cond = "true"
 			}
 			out_line = strings.concatenate([]string{indent, "if ", cond}, allocator)
 			out_allocated = true
 			changed = true
-		} else if strings.has_prefix(trimmed, "elif ") && strings.has_suffix(trimmed, "; then") {
-			cond := strings.trim_space(trimmed[5 : len(trimmed)-6])
+		} else if strings.has_prefix(current_trimmed, "elif ") && strings.has_suffix(current_trimmed, "; then") {
+			cond := strings.trim_space(current_trimmed[5 : len(current_trimmed)-6])
 			if cond == "" {
 				cond = "true"
 			}
 			out_line = strings.concatenate([]string{indent, "else if ", cond}, allocator)
 			out_allocated = true
 			changed = true
-		} else if strings.has_prefix(trimmed, "while ") && strings.has_suffix(trimmed, "; do") {
-			cond := strings.trim_space(trimmed[6 : len(trimmed)-4])
+		} else if strings.has_prefix(current_trimmed, "while ") && strings.has_suffix(current_trimmed, "; do") {
+			cond := strings.trim_space(current_trimmed[6 : len(current_trimmed)-4])
 			if cond == "" {
 				cond = "true"
 			}
 			out_line = strings.concatenate([]string{indent, "while ", cond}, allocator)
 			out_allocated = true
 			changed = true
-		} else if strings.has_prefix(trimmed, "for ") && strings.has_suffix(trimmed, "; do") {
-			out_line = strings.concatenate([]string{indent, strings.trim_space(trimmed[:len(trimmed)-4])}, allocator)
+		} else if strings.has_prefix(current_trimmed, "for ") && strings.has_suffix(current_trimmed, "; do") {
+			out_line = strings.concatenate([]string{indent, strings.trim_space(current_trimmed[:len(current_trimmed)-4])}, allocator)
 			out_allocated = true
 			changed = true
-		} else if strings.has_prefix(trimmed, "case ") && strings.has_suffix(trimmed, " in") {
-			val := strings.trim_space(trimmed[5 : len(trimmed)-3])
+		} else if strings.has_prefix(current_trimmed, "case ") && strings.has_suffix(current_trimmed, " in") {
+			val := strings.trim_space(current_trimmed[5 : len(current_trimmed)-3])
 			out_line = strings.concatenate([]string{indent, "switch ", val}, allocator)
 			out_allocated = true
 			changed = true
-		} else if !strings.has_prefix(trimmed, "case ") && strings.has_suffix(trimmed, ")") && strings.contains(trimmed, "|") {
-			pat := strings.trim_space(trimmed[:len(trimmed)-1])
+		} else if !strings.has_prefix(current_trimmed, "case ") && strings.has_suffix(current_trimmed, ")") && strings.contains(current_trimmed, "|") {
+			pat := strings.trim_space(current_trimmed[:len(current_trimmed)-1])
 			pat_repl, pat_changed := replace_simple_all(pat, "|", " ", allocator)
 			if pat_changed {
 				pat = pat_repl
@@ -1156,8 +1157,8 @@ rewrite_shell_to_fish_syntax :: proc(text: string, allocator := context.allocato
 				delete(pat)
 			}
 			changed = true
-		} else if strings.has_suffix(trimmed, "() {") {
-			name := strings.trim_space(trimmed[:len(trimmed)-4])
+		} else if strings.has_suffix(current_trimmed, "() {") {
+			name := strings.trim_space(current_trimmed[:len(current_trimmed)-4])
 			if strings.has_prefix(name, "function ") {
 				name = strings.trim_space(name[len("function "):])
 			}
@@ -1167,18 +1168,24 @@ rewrite_shell_to_fish_syntax :: proc(text: string, allocator := context.allocato
 				out_allocated = true
 				changed = true
 			}
-		} else if strings.contains(trimmed, "; and ") {
-			rewritten, c := rewrite_fish_inline_assignment(line, "; and ", allocator)
+		} else if strings.contains(current_trimmed, "; and ") {
+			rewritten, c := rewrite_fish_inline_assignment(out_line, "; and ", allocator)
 			if c {
+				if out_allocated {
+					delete(out_line)
+				}
 				out_line = rewritten
 				out_allocated = true
 				changed = true
 			} else {
 				delete(rewritten)
 			}
-		} else if strings.contains(trimmed, "; or ") {
-			rewritten, c := rewrite_fish_inline_assignment(line, "; or ", allocator)
+		} else if strings.contains(current_trimmed, "; or ") {
+			rewritten, c := rewrite_fish_inline_assignment(out_line, "; or ", allocator)
 			if c {
+				if out_allocated {
+					delete(out_line)
+				}
 				out_line = rewritten
 				out_allocated = true
 				changed = true
@@ -1186,18 +1193,18 @@ rewrite_shell_to_fish_syntax :: proc(text: string, allocator := context.allocato
 				delete(rewritten)
 			}
 		} else {
-			eq_idx := find_substring(trimmed, "=")
+			eq_idx := find_substring(current_trimmed, "=")
 			if eq_idx > 0 {
-				left := strings.trim_space(trimmed[:eq_idx])
-				right := strings.trim_space(trimmed[eq_idx+1:])
+				left := strings.trim_space(current_trimmed[:eq_idx])
+				right := strings.trim_space(current_trimmed[eq_idx+1:])
 				if is_basic_name(left) &&
-					!strings.has_prefix(trimmed, "set ") &&
-					!strings.has_prefix(trimmed, "if ") &&
-					!strings.has_prefix(trimmed, "elif ") &&
-					!strings.has_prefix(trimmed, "while ") &&
-					!strings.has_prefix(trimmed, "for ") &&
-					!strings.has_prefix(trimmed, "case ") &&
-					!strings.has_prefix(trimmed, "export ") {
+					!strings.has_prefix(current_trimmed, "set ") &&
+					!strings.has_prefix(current_trimmed, "if ") &&
+					!strings.has_prefix(current_trimmed, "elif ") &&
+					!strings.has_prefix(current_trimmed, "while ") &&
+					!strings.has_prefix(current_trimmed, "for ") &&
+					!strings.has_prefix(current_trimmed, "case ") &&
+					!strings.has_prefix(current_trimmed, "export ") {
 					if right == "" {
 						right = "\"\""
 					}
@@ -1632,6 +1639,13 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 		case 'c':
 			strings.write_string(&builder, "esac")
 		}
+		changed = true
+	}
+
+	for brace_balance > 0 {
+		strings.write_byte(&builder, '\n')
+		strings.write_string(&builder, "}")
+		brace_balance -= 1
 		changed = true
 	}
 

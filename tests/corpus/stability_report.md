@@ -15,8 +15,8 @@ Cross-dialect runs executed: 126
 | fish->posix | 11 | 11/11 | 11/11 | 1/11 | 0 | 10/10 | 1/1 | 1 | 18 | 0.728 | 2.719 | 11 |
 | fish->zsh | 11 | 11/11 | 11/11 | 10/11 | 0 | 10/10 | 1/1 | 1 | 19 | 0.891 | 2.765 | 11 |
 | zsh->bash | 15 | 15/15 | 15/15 | 4/15 | 0 | 10/10 | 5/5 | 76 | 4 | 0.988 | 1.454 | 4 |
-| zsh->fish | 15 | 15/15 | 15/15 | 1/15 | 0 | 10/10 | 5/5 | 76 | 58 | 1.272 | 3.576 | 15 |
-| zsh->posix | 15 | 15/15 | 15/15 | 3/15 | 0 | 10/10 | 5/5 | 76 | 22 | 1.004 | 1.604 | 14 |
+| zsh->fish | 15 | 15/15 | 15/15 | 1/15 | 0 | 10/10 | 5/5 | 76 | 58 | 1.277 | 3.604 | 15 |
+| zsh->posix | 15 | 15/15 | 15/15 | 4/15 | 0 | 10/10 | 5/5 | 76 | 22 | 1.004 | 1.595 | 14 |
 
 ## Failures
 
@@ -39,17 +39,16 @@ function _zsh_highlight__zle-line-finish
 ^~~~~~~^
 warning: Error while reading file tests/corpus/.parser_check_zsh-syntax-highlighting_5.fish
  path=tests/corpus/repos/zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-- [FAIL] zsh-syntax-highlighting (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=9(parse=6 compat=3) shims=3 src_fn=9 out_fn=8 msg= parser_msg=tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 100: syntax error near unexpected token `}'
+- [FAIL] zsh-syntax-highlighting (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=9(parse=6 compat=3) shims=3 src_fn=9 out_fn=7 msg= parser_msg=tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 100: syntax error near unexpected token `}'
 tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 100: `}'
  path=tests/corpus/repos/zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-- [FAIL] ohmyzsh-git (plugin) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=4(parse=4 compat=0) shims=0 src_fn=16 out_fn=9 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-git_7.bash: line 429: unexpected EOF while looking for matching ``'
+- [FAIL] ohmyzsh-git (plugin) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=4(parse=4 compat=0) shims=0 src_fn=16 out_fn=9 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-git_7.bash: line 429: syntax error near unexpected token `do' while looking for matching `)'
+tests/corpus/.parser_check_ohmyzsh-git_7.bash: line 429: `for old_name in $(8; do'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/git/git.plugin.zsh
-- [FAIL] ohmyzsh-git (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=7(parse=4 compat=3) shims=3 src_fn=16 out_fn=11 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-git_8.fish (line 152): Unsupported use of '='. In fish, please use 'set b "(git_current_branch)"'.
-	  test  $# != 1 ; and b="(git_current_branch)"
-	                      ^~~~~~~~~~~~~~~~~~~~~~~^
+- [FAIL] ohmyzsh-git (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=7(parse=4 compat=3) shims=3 src_fn=16 out_fn=11 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-git_8.fish (line 436): Expected keyword 'in', but found a string
+for old_name new_name (
+             ^~~~~~~^
 warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-git_8.fish
- path=tests/corpus/repos/zsh/ohmyzsh/plugins/git/git.plugin.zsh
-- [FAIL] ohmyzsh-git (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=5(parse=4 compat=1) shims=1 src_fn=16 out_fn=9 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-git_9.sh: line 395: syntax error: unexpected end of file from `{' command on line 97
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/git/git.plugin.zsh
 - [FAIL] ohmyzsh-z (plugin) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=15(parse=14 compat=1) shims=1 src_fn=14 out_fn=14 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-z_10.bash: line 422: syntax error near unexpected token `done'
 tests/corpus/.parser_check_ohmyzsh-z_10.bash: line 422: `        done'
@@ -62,9 +61,9 @@ warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-z_11.fish
 - [FAIL] ohmyzsh-z (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=17(parse=14 compat=3) shims=3 src_fn=14 out_fn=13 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-z_12.sh: line 242: syntax error near unexpected token `done'
 tests/corpus/.parser_check_ohmyzsh-z_12.sh: line 242: `	        done'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
-- [FAIL] ohmyzsh-fzf (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=17(parse=14 compat=3) shims=3 src_fn=9 out_fn=12 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-fzf_14.fish (line 55): Unsupported use of '='. In fish, please use 'set fzf_base "$FZF_BASE"'.
-	  test -d "$FZF_BASE"; and fzf_base="$FZF_BASE"
-	                           ^~~~~~~~~~~~~~~~~~~^
+- [FAIL] ohmyzsh-fzf (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=17(parse=14 compat=3) shims=3 src_fn=9 out_fn=15 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-fzf_14.fish (line 74): Unsupported use of '='. In fish, please use 'set dir "(fzf-share)"'.
+	      if (( ${+commands[fzf-share]} )); and dir="(fzf-share)"; and test  -d "$dir"
+	                                            ^~~~~~~~~~~~~~~~^
 warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-fzf_14.fish
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/fzf/fzf.plugin.zsh
 - [FAIL] ohmyzsh-fzf (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=15(parse=14 compat=1) shims=1 src_fn=9 out_fn=9 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-fzf_15.sh: line 233: warning: here-document at line 209 delimited by end-of-file (wanted `EOF')
@@ -74,9 +73,9 @@ tests/corpus/.parser_check_ohmyzsh-fzf_15.sh: line 234: syntax error: unexpected
 tests/corpus/.parser_check_ohmyzsh-sudo_16.bash: line 79: syntax error near `(\'
 tests/corpus/.parser_check_ohmyzsh-sudo_16.bash: line 79: `    if [[ "$realcmd" = (\$EDITOR|$editorcmd|${editorcmd:c}) \'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/sudo/sudo.plugin.zsh
-- [FAIL] ohmyzsh-sudo (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=12(parse=9 compat=3) shims=3 src_fn=2 out_fn=7 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-sudo_17.fish (line 58): Unsupported use of '='. In fish, please use 'set LBUFFER "(fc -ln -1)"'.
-	  test  -z $BUFFER ; and LBUFFER="(fc -ln -1)"
-	                         ^~~~~~~~~~~~~~~~~~~~^
+- [FAIL] ohmyzsh-sudo (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=12(parse=9 compat=3) shims=3 src_fn=2 out_fn=7 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-sudo_17.fish (line 56): Missing end to balance this function definition
+function sudo-command-line
+^~~~~~~^
 warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-sudo_17.fish
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/sudo/sudo.plugin.zsh
 - [FAIL] ohmyzsh-sudo (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=10(parse=9 compat=1) shims=1 src_fn=2 out_fn=2 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-sudo_18.sh: line 65: unexpected argument `(' to conditional binary operator
@@ -108,9 +107,9 @@ tests/corpus/.parser_check_ohmyzsh-colored-man-pages_24.sh: line 16: `	  for k v
 - [FAIL] ohmyzsh-web-search (plugin) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=0 src_fn=1 out_fn=1 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-web-search_25.bash: line 102: syntax error near unexpected token `fi'
 tests/corpus/.parser_check_ohmyzsh-web-search_25.bash: line 102: `fi'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/web-search/web-search.plugin.zsh
-- [FAIL] ohmyzsh-web-search (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=5(parse=0 compat=5) shims=5 src_fn=1 out_fn=6 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-web-search_26.fish (line 93): Unsupported use of '='. In fish, please use 'set param ""'.
-    test  "$urls[$1]" == *\?*= ; and param=""
-                                     ^~~~~~~^
+- [FAIL] ohmyzsh-web-search (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=5(parse=0 compat=5) shims=5 src_fn=1 out_fn=6 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-web-search_26.fish (line 89): $# is not supported. In fish, please use 'count $argv'.
+  if test  $# -gt 1
+            ^
 warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-web-search_26.fish
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/web-search/web-search.plugin.zsh
 - [FAIL] ohmyzsh-web-search (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=1 out_fn=2 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-web-search_27.sh: line 113: syntax error near unexpected token `fi'
@@ -218,17 +217,17 @@ tests/corpus/.parser_check_fish-gitnow_87.sh: line 64: `	fi'
  path=tests/corpus/repos/fish/fisher/functions/fisher.fish
 - [FAIL] fish-fisher (plugin) fish->posix translate=true parse=true parser=false/true exit=2 err=None warnings=2(parse=0 compat=2) shims=2 src_fn=1 out_fn=4 msg= parser_msg=tests/corpus/.parser_check_fish-fisher_90.sh: line 56: syntax error: unexpected end of file from `if' command on line 54
  path=tests/corpus/repos/fish/fisher/functions/fisher.fish
-- [FAIL] zsh-powerlevel10k (theme) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=8(parse=4 compat=4) shims=4 src_fn=1 out_fn=6 msg= parser_msg=tests/corpus/.parser_check_zsh-powerlevel10k_92.fish (line 44): Missing end to balance this if statement
-	  if (( ! $+__p9k_locale ))
-	  ^^
+- [FAIL] zsh-powerlevel10k (theme) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=8(parse=4 compat=4) shims=4 src_fn=1 out_fn=6 msg= parser_msg=tests/corpus/.parser_check_zsh-powerlevel10k_92.fish (line 48): Unsupported use of '='. In fish, please use 'set loc (${(@M)(locale -a 2>/dev/null):#*.(utf|UTF)(-|)8})'.
+	    loc=(${(@M)(locale -a 2>/dev/null):#*.(utf|UTF)(-|)8}); or return
+	    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
 warning: Error while reading file tests/corpus/.parser_check_zsh-powerlevel10k_92.fish
  path=tests/corpus/repos/zsh/powerlevel10k/powerlevel10k.zsh-theme
 - [FAIL] zsh-agnoster (theme) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=1 compat=0) shims=0 src_fn=14 out_fn=8 msg= parser_msg=tests/corpus/.parser_check_zsh-agnoster_94.bash: line 384: syntax error near unexpected token `fi'
 tests/corpus/.parser_check_zsh-agnoster_94.bash: line 384: `fi'
  path=tests/corpus/repos/zsh/ohmyzsh/themes/agnoster.zsh-theme
-- [FAIL] zsh-agnoster (theme) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=4(parse=1 compat=3) shims=3 src_fn=14 out_fn=10 msg= parser_msg=tests/corpus/.parser_check_zsh-agnoster_95.fish (line 45): Unsupported use of '='. In fish, please use 'set bg "%K{$1}"'.
-	  test  -n $1 ; and bg="%K{$1}"; or bg="%k"
-	                    ^~~~~~~~~~^
+- [FAIL] zsh-agnoster (theme) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=4(parse=1 compat=3) shims=3 src_fn=14 out_fn=10 msg= parser_msg=tests/corpus/.parser_check_zsh-agnoster_95.fish (line 45): Unsupported use of '='. In fish, please use 'set bg "%k"'.
+	  test  -n $1 ; and set bg "%K{$1}"; or bg="%k"
+	                                        ^~~~~~^
 warning: Error while reading file tests/corpus/.parser_check_zsh-agnoster_95.fish
  path=tests/corpus/repos/zsh/ohmyzsh/themes/agnoster.zsh-theme
 - [FAIL] zsh-agnoster (theme) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=2(parse=1 compat=1) shims=1 src_fn=14 out_fn=7 msg= parser_msg=tests/corpus/.parser_check_zsh-agnoster_96.sh: line 317: syntax error near unexpected token `fi'
@@ -330,14 +329,13 @@ warning: Error while reading file tests/corpus/.parser_check_zsh-syntax-highligh
 - [PARSER-FAIL] zsh-syntax-highlighting (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh` exit=2 message=tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 100: syntax error near unexpected token `}'
 tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 100: `}'
  path=tests/corpus/repos/zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-- [PARSER-FAIL] ohmyzsh-git (plugin) zsh->bash command=`bash -n tests/corpus/.parser_check_ohmyzsh-git_7.bash` exit=2 message=tests/corpus/.parser_check_ohmyzsh-git_7.bash: line 429: unexpected EOF while looking for matching ``'
+- [PARSER-FAIL] ohmyzsh-git (plugin) zsh->bash command=`bash -n tests/corpus/.parser_check_ohmyzsh-git_7.bash` exit=2 message=tests/corpus/.parser_check_ohmyzsh-git_7.bash: line 429: syntax error near unexpected token `do' while looking for matching `)'
+tests/corpus/.parser_check_ohmyzsh-git_7.bash: line 429: `for old_name in $(8; do'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/git/git.plugin.zsh
-- [PARSER-FAIL] ohmyzsh-git (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-git_8.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-git_8.fish (line 152): Unsupported use of '='. In fish, please use 'set b "(git_current_branch)"'.
-	  test  $# != 1 ; and b="(git_current_branch)"
-	                      ^~~~~~~~~~~~~~~~~~~~~~~^
+- [PARSER-FAIL] ohmyzsh-git (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-git_8.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-git_8.fish (line 436): Expected keyword 'in', but found a string
+for old_name new_name (
+             ^~~~~~~^
 warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-git_8.fish
- path=tests/corpus/repos/zsh/ohmyzsh/plugins/git/git.plugin.zsh
-- [PARSER-FAIL] ohmyzsh-git (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-git_9.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-git_9.sh: line 395: syntax error: unexpected end of file from `{' command on line 97
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/git/git.plugin.zsh
 - [PARSER-FAIL] ohmyzsh-z (plugin) zsh->bash command=`bash -n tests/corpus/.parser_check_ohmyzsh-z_10.bash` exit=2 message=tests/corpus/.parser_check_ohmyzsh-z_10.bash: line 422: syntax error near unexpected token `done'
 tests/corpus/.parser_check_ohmyzsh-z_10.bash: line 422: `        done'
@@ -350,9 +348,9 @@ warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-z_11.fish
 - [PARSER-FAIL] ohmyzsh-z (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-z_12.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-z_12.sh: line 242: syntax error near unexpected token `done'
 tests/corpus/.parser_check_ohmyzsh-z_12.sh: line 242: `	        done'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
-- [PARSER-FAIL] ohmyzsh-fzf (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-fzf_14.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-fzf_14.fish (line 55): Unsupported use of '='. In fish, please use 'set fzf_base "$FZF_BASE"'.
-	  test -d "$FZF_BASE"; and fzf_base="$FZF_BASE"
-	                           ^~~~~~~~~~~~~~~~~~~^
+- [PARSER-FAIL] ohmyzsh-fzf (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-fzf_14.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-fzf_14.fish (line 74): Unsupported use of '='. In fish, please use 'set dir "(fzf-share)"'.
+	      if (( ${+commands[fzf-share]} )); and dir="(fzf-share)"; and test  -d "$dir"
+	                                            ^~~~~~~~~~~~~~~~^
 warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-fzf_14.fish
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/fzf/fzf.plugin.zsh
 - [PARSER-FAIL] ohmyzsh-fzf (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-fzf_15.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-fzf_15.sh: line 233: warning: here-document at line 209 delimited by end-of-file (wanted `EOF')
@@ -362,9 +360,9 @@ tests/corpus/.parser_check_ohmyzsh-fzf_15.sh: line 234: syntax error: unexpected
 tests/corpus/.parser_check_ohmyzsh-sudo_16.bash: line 79: syntax error near `(\'
 tests/corpus/.parser_check_ohmyzsh-sudo_16.bash: line 79: `    if [[ "$realcmd" = (\$EDITOR|$editorcmd|${editorcmd:c}) \'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/sudo/sudo.plugin.zsh
-- [PARSER-FAIL] ohmyzsh-sudo (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-sudo_17.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-sudo_17.fish (line 58): Unsupported use of '='. In fish, please use 'set LBUFFER "(fc -ln -1)"'.
-	  test  -z $BUFFER ; and LBUFFER="(fc -ln -1)"
-	                         ^~~~~~~~~~~~~~~~~~~~^
+- [PARSER-FAIL] ohmyzsh-sudo (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-sudo_17.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-sudo_17.fish (line 56): Missing end to balance this function definition
+function sudo-command-line
+^~~~~~~^
 warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-sudo_17.fish
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/sudo/sudo.plugin.zsh
 - [PARSER-FAIL] ohmyzsh-sudo (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-sudo_18.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-sudo_18.sh: line 65: unexpected argument `(' to conditional binary operator
@@ -396,9 +394,9 @@ tests/corpus/.parser_check_ohmyzsh-colored-man-pages_24.sh: line 16: `	  for k v
 - [PARSER-FAIL] ohmyzsh-web-search (plugin) zsh->bash command=`bash -n tests/corpus/.parser_check_ohmyzsh-web-search_25.bash` exit=2 message=tests/corpus/.parser_check_ohmyzsh-web-search_25.bash: line 102: syntax error near unexpected token `fi'
 tests/corpus/.parser_check_ohmyzsh-web-search_25.bash: line 102: `fi'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/web-search/web-search.plugin.zsh
-- [PARSER-FAIL] ohmyzsh-web-search (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-web-search_26.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-web-search_26.fish (line 93): Unsupported use of '='. In fish, please use 'set param ""'.
-    test  "$urls[$1]" == *\?*= ; and param=""
-                                     ^~~~~~~^
+- [PARSER-FAIL] ohmyzsh-web-search (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-web-search_26.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-web-search_26.fish (line 89): $# is not supported. In fish, please use 'count $argv'.
+  if test  $# -gt 1
+            ^
 warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-web-search_26.fish
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/web-search/web-search.plugin.zsh
 - [PARSER-FAIL] ohmyzsh-web-search (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-web-search_27.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-web-search_27.sh: line 113: syntax error near unexpected token `fi'
@@ -506,17 +504,17 @@ tests/corpus/.parser_check_fish-gitnow_87.sh: line 64: `	fi'
  path=tests/corpus/repos/fish/fisher/functions/fisher.fish
 - [PARSER-FAIL] fish-fisher (plugin) fish->posix command=`bash -n tests/corpus/.parser_check_fish-fisher_90.sh` exit=2 message=tests/corpus/.parser_check_fish-fisher_90.sh: line 56: syntax error: unexpected end of file from `if' command on line 54
  path=tests/corpus/repos/fish/fisher/functions/fisher.fish
-- [PARSER-FAIL] zsh-powerlevel10k (theme) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_zsh-powerlevel10k_92.fish` exit=127 message=tests/corpus/.parser_check_zsh-powerlevel10k_92.fish (line 44): Missing end to balance this if statement
-	  if (( ! $+__p9k_locale ))
-	  ^^
+- [PARSER-FAIL] zsh-powerlevel10k (theme) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_zsh-powerlevel10k_92.fish` exit=127 message=tests/corpus/.parser_check_zsh-powerlevel10k_92.fish (line 48): Unsupported use of '='. In fish, please use 'set loc (${(@M)(locale -a 2>/dev/null):#*.(utf|UTF)(-|)8})'.
+	    loc=(${(@M)(locale -a 2>/dev/null):#*.(utf|UTF)(-|)8}); or return
+	    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
 warning: Error while reading file tests/corpus/.parser_check_zsh-powerlevel10k_92.fish
  path=tests/corpus/repos/zsh/powerlevel10k/powerlevel10k.zsh-theme
 - [PARSER-FAIL] zsh-agnoster (theme) zsh->bash command=`bash -n tests/corpus/.parser_check_zsh-agnoster_94.bash` exit=2 message=tests/corpus/.parser_check_zsh-agnoster_94.bash: line 384: syntax error near unexpected token `fi'
 tests/corpus/.parser_check_zsh-agnoster_94.bash: line 384: `fi'
  path=tests/corpus/repos/zsh/ohmyzsh/themes/agnoster.zsh-theme
-- [PARSER-FAIL] zsh-agnoster (theme) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_zsh-agnoster_95.fish` exit=127 message=tests/corpus/.parser_check_zsh-agnoster_95.fish (line 45): Unsupported use of '='. In fish, please use 'set bg "%K{$1}"'.
-	  test  -n $1 ; and bg="%K{$1}"; or bg="%k"
-	                    ^~~~~~~~~~^
+- [PARSER-FAIL] zsh-agnoster (theme) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_zsh-agnoster_95.fish` exit=127 message=tests/corpus/.parser_check_zsh-agnoster_95.fish (line 45): Unsupported use of '='. In fish, please use 'set bg "%k"'.
+	  test  -n $1 ; and set bg "%K{$1}"; or bg="%k"
+	                                        ^~~~~~^
 warning: Error while reading file tests/corpus/.parser_check_zsh-agnoster_95.fish
  path=tests/corpus/repos/zsh/ohmyzsh/themes/agnoster.zsh-theme
 - [PARSER-FAIL] zsh-agnoster (theme) zsh->posix command=`bash -n tests/corpus/.parser_check_zsh-agnoster_96.sh` exit=2 message=tests/corpus/.parser_check_zsh-agnoster_96.sh: line 317: syntax error near unexpected token `fi'
