@@ -3,11 +3,56 @@ package shellx
 import "core:fmt"
 import "core:mem"
 import "core:os"
+import "core:os/os2"
 import "core:strings"
 import "core:testing"
 import "frontend"
 import "ir"
 import "optimizer"
+
+parser_check_snippet :: proc(
+	t: ^testing.T,
+	code: string,
+	target: ShellDialect,
+	test_name: string,
+) {
+	ext := "sh"
+	switch target {
+	case .Bash:
+		ext = "bash"
+	case .POSIX:
+		ext = "sh"
+	case .Zsh:
+		ext = "zsh"
+	case .Fish:
+		ext = "fish"
+	}
+	path := fmt.tprintf("/tmp/shellx_golden_%s.%s", test_name, ext)
+	ok := os.write_entire_file(path, transmute([]byte)code)
+	testing.expect(t, ok, "Golden parser test should write temp file")
+	if !ok {
+		return
+	}
+	defer os.remove(path)
+
+	cmd := make([dynamic]string, 0, 3, context.temp_allocator)
+	defer delete(cmd)
+	switch target {
+	case .Bash, .POSIX:
+		append(&cmd, "bash", "-n", path)
+	case .Zsh:
+		append(&cmd, "zsh", "-n", path)
+	case .Fish:
+		append(&cmd, "fish", "--no-execute", path)
+	}
+	state, _, stderr, err := os2.process_exec(os2.Process_Desc{command = cmd[:]}, context.allocator)
+	defer delete(stderr)
+	testing.expect(t, err == nil, "Golden parser command should execute")
+	if err != nil {
+		return
+	}
+	testing.expect(t, state.exit_code == 0, fmt.tprintf("Parser should accept rewritten output: %s", string(stderr)))
+}
 
 // Test: Simple variable assignment
 @(test)
@@ -601,4 +646,54 @@ test_script_builder_api :: proc(t: ^testing.T) {
 	testing.expect(t, len(output) > 0, "script_emit should return generated script")
 	testing.expect(t, strings.contains(output, "name="), "Output should contain assignment")
 	testing.expect(t, strings.contains(output, "echo"), "Output should contain command call")
+}
+
+@(test)
+test_golden_structured_block_rebuilds_split_function_decl :: proc(t: ^testing.T) {
+	if !should_run_test("test_golden_structured_block_rebuilds_split_function_decl") { return }
+
+	input := "_zsh_highlight()\n{\n  :\n}\n"
+	output, changed := normalize_shell_structured_blocks(input, .Bash)
+	defer delete(output)
+
+	testing.expect(t, changed, "Structured block normalizer should rewrite split function declaration")
+	testing.expect(t, strings.contains(output, "_zsh_highlight() {"), "Should rewrite split function declaration to single-line opener")
+	testing.expect(t, !strings.contains(output, "\n{\n"), "Should not keep standalone opening brace line for split declaration")
+	parser_check_snippet(t, output, .Bash, "split_fn_decl")
+}
+
+@(test)
+test_golden_parse_hardening_preserves_case_arms_like_user_star :: proc(t: ^testing.T) {
+	if !should_run_test("test_golden_parse_hardening_preserves_case_arms_like_user_star") { return }
+
+	input := "case $widgets[$widget] in\n  user:*)\n    bind_count=1\n    ;;\n  *)\n    bind_count=0\n    ;;\nesac\n"
+	output, _ := rewrite_shell_parse_hardening(input, .Bash)
+	defer delete(output)
+
+	testing.expect(t, !strings.contains(output, "user:*)"), "Widget case arms should be neutralized for parser-safe non-zsh output")
+	testing.expect(t, !strings.contains(output, "*)"), "Fallback case arms from zsh widget dispatch should be neutralized")
+	parser_check_snippet(t, output, .Bash, "case_user_star")
+}
+
+@(test)
+test_golden_parse_hardening_neutralizes_extract_case_arm_pattern :: proc(t: ^testing.T) {
+	if !should_run_test("test_golden_parse_hardening_neutralizes_extract_case_arm_pattern") { return }
+
+	input := `      (*.gz) (( $+commands[pigz] )) && pigz -cdk "$full_path" > "$(__shellx_zsh_expand "\${file:t:r})" || gunzip -ck "$full_path" > "$(__shellx_zsh_expand "\${file:t:r})" ;;`
+	output, _ := rewrite_shell_parse_hardening(input, .Bash)
+	defer delete(output)
+
+	testing.expect(t, strings.trim_space(output) == ":", "Should neutralize zsh extract case-arm pattern that is invalid in bash/posix")
+}
+
+@(test)
+test_golden_parse_hardening_keeps_multiline_if_balance :: proc(t: ^testing.T) {
+	if !should_run_test("test_golden_parse_hardening_keeps_multiline_if_balance") { return }
+
+	input := "f() {\n  if cond_a &&\n     cond_b\n  then\n    return 0\n  else\n    return 1\n  fi\n}\n"
+	output, _ := rewrite_shell_parse_hardening(input, .Bash)
+	defer delete(output)
+
+	testing.expect(t, strings.contains(output, "fi"), "Should preserve fi in multiline if blocks")
+	parser_check_snippet(t, output, .Bash, "multiline_if_balance")
 }

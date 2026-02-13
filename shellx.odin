@@ -1676,6 +1676,13 @@ __shellx_zsh_expand() {
 	}
 
 	if to == .Bash || to == .POSIX || to == .Zsh {
+		if from == .Zsh {
+			rewritten, changed := normalize_shell_structured_blocks(out, to, allocator)
+			delete(out)
+			out = rewritten
+			changed_any = changed_any || changed
+		}
+
 		rewritten, changed := rewrite_shell_parse_hardening(out, to, allocator)
 		delete(out)
 		out = rewritten
@@ -1685,18 +1692,6 @@ __shellx_zsh_expand() {
 		delete(out)
 		out = rewritten
 		changed_any = changed_any || changed
-
-		if to == .Bash || to == .POSIX {
-			rewritten, changed = normalize_shell_brace_groups(out, allocator)
-			delete(out)
-			out = rewritten
-			changed_any = changed_any || changed
-
-			rewritten, changed = normalize_shell_control_balance(out, allocator)
-			delete(out)
-			out = rewritten
-			changed_any = changed_any || changed
-		}
 	}
 
 	if to == .Fish {
@@ -3772,7 +3767,11 @@ rewrite_empty_shell_control_blocks :: proc(text: string, allocator := context.al
 	return strings.clone(strings.to_string(builder), allocator), changed
 }
 
-normalize_shell_brace_groups :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+normalize_shell_structured_blocks :: proc(
+	text: string,
+	to: ShellDialect,
+	allocator := context.allocator,
+) -> (string, bool) {
 	lines := strings.split_lines(text)
 	defer delete(lines)
 	if len(lines) == 0 {
@@ -3782,96 +3781,175 @@ normalize_shell_brace_groups :: proc(text: string, allocator := context.allocato
 	builder := strings.builder_make()
 	defer strings.builder_destroy(&builder)
 	changed := false
-	fn_balance := 0
+	stack := make([dynamic]byte, 0, 64, context.temp_allocator) // f=function i=if l=loop c=case g=brace-group
+	defer delete(stack)
+	brace_decl_skip_idx := -1
+	drop_case_block := false
+
+	push :: proc(stack: ^[dynamic]byte, kind: byte) {
+		append(stack, kind)
+	}
+	pop_expected :: proc(stack: ^[dynamic]byte, expected: byte) -> bool {
+		if len(stack^) == 0 {
+			return false
+		}
+		if stack^[len(stack^)-1] != expected {
+			return false
+		}
+		resize(stack, len(stack^)-1)
+		return true
+	}
+	pop_any_group_or_function :: proc(stack: ^[dynamic]byte) -> (byte, bool) {
+		if len(stack^) == 0 {
+			return 0, false
+		}
+		top := stack^[len(stack^)-1]
+		if top != 'f' && top != 'g' {
+			return 0, false
+		}
+		resize(stack, len(stack^)-1)
+		return top, true
+	}
+
+	is_function_start :: proc(trimmed: string) -> bool {
+		if strings.has_suffix(trimmed, "() {") {
+			return true
+		}
+		return strings.has_prefix(trimmed, "function ") && strings.has_suffix(trimmed, "{")
+	}
+	is_control_if_start :: proc(trimmed: string) -> bool {
+		return strings.has_prefix(trimmed, "if ")
+	}
+	is_control_loop_start :: proc(trimmed: string) -> bool {
+		return strings.has_prefix(trimmed, "for ") || strings.has_prefix(trimmed, "while ")
+	}
+	is_control_case_start :: proc(trimmed: string) -> bool {
+		return strings.has_prefix(trimmed, "case ")
+	}
 
 	for line, idx in lines {
 		trimmed := strings.trim_space(line)
 		out_line := line
-		is_fn_start := strings.has_suffix(trimmed, "() {") || (strings.has_prefix(trimmed, "function ") && strings.has_suffix(trimmed, "{"))
+		out_allocated := false
+		if idx == brace_decl_skip_idx {
+			out_line = ":"
+			changed = true
+			strings.write_string(&builder, out_line)
+			if idx+1 < len(lines) {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
+		if trimmed == "" || strings.has_prefix(trimmed, "#") {
+			strings.write_string(&builder, out_line)
+			if idx+1 < len(lines) {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
+		if !drop_case_block && to != .Zsh && strings.has_prefix(trimmed, "case \"\" in") {
+			drop_case_block = true
+			out_line = ":"
+			changed = true
+			strings.write_string(&builder, out_line)
+			if idx+1 < len(lines) {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
+		if drop_case_block {
+			if trimmed == "esac" {
+				drop_case_block = false
+			}
+			out_line = ":"
+			changed = true
+			strings.write_string(&builder, out_line)
+			if idx+1 < len(lines) {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
 
-		if is_fn_start {
-			fn_balance += 1
-		} else if trimmed == "}" {
-			next_sig := ""
-			next_sig_has_indent := false
-			for j := idx + 1; j < len(lines); j += 1 {
-				cand_raw := lines[j]
-				cand := strings.trim_space(cand_raw)
-				if cand == "" || strings.has_prefix(cand, "#") {
+		if strings.has_suffix(trimmed, "()") {
+			name := strings.trim_space(trimmed[:len(trimmed)-2])
+			if is_basic_name(name) {
+				open_idx := -1
+				for j := idx + 1; j < len(lines); j += 1 {
+					next_trim := strings.trim_space(lines[j])
+					if next_trim == "" || strings.has_prefix(next_trim, "#") {
+						continue
+					}
+					if next_trim == "{" {
+						open_idx = j
+					}
+					break
+				}
+				if open_idx >= 0 {
+					out_line = strings.concatenate([]string{name, "() {"}, allocator)
+					out_allocated = true
+					push(&stack, 'f')
+					brace_decl_skip_idx = open_idx
+					changed = true
+					strings.write_string(&builder, out_line)
+					if idx+1 < len(lines) {
+						strings.write_byte(&builder, '\n')
+					}
+					if out_allocated {
+						delete(out_line)
+					}
 					continue
 				}
-				next_sig = cand
-				next_sig_has_indent = strings.trim_left_space(cand_raw) != cand_raw
-				break
 			}
-			if strings.trim_left_space(line) != line || (next_sig != "" && next_sig_has_indent) {
+		}
+
+		if is_function_start(trimmed) {
+			push(&stack, 'f')
+		} else if is_control_if_start(trimmed) {
+			push(&stack, 'i')
+		} else if is_control_loop_start(trimmed) {
+			push(&stack, 'l')
+		} else if is_control_case_start(trimmed) {
+			push(&stack, 'c')
+		} else if trimmed == "elif" || strings.has_prefix(trimmed, "elif ") {
+			if len(stack) == 0 || stack[len(stack)-1] != 'i' {
 				out_line = ":"
 				changed = true
-			} else
-			if fn_balance > 0 {
-				fn_balance -= 1
-			} else {
+			}
+		} else if trimmed == "else" {
+			if len(stack) == 0 || stack[len(stack)-1] != 'i' {
+				out_line = ":"
+				changed = true
+			}
+		} else if trimmed == "fi" {
+			if !pop_expected(&stack, 'i') {
+				out_line = ":"
+				changed = true
+			}
+		} else if trimmed == "done" {
+			if !pop_expected(&stack, 'l') {
+				out_line = ":"
+				changed = true
+			}
+		} else if trimmed == "esac" {
+			if !pop_expected(&stack, 'c') {
+				out_line = ":"
+				changed = true
+			}
+		} else if trimmed == "}" {
+			kind, ok := pop_any_group_or_function(&stack)
+			if !ok {
+				out_line = ":"
+				changed = true
+			} else if kind == 'g' {
 				out_line = ":"
 				changed = true
 			}
 		} else if strings.has_suffix(trimmed, "{") {
-			out_line = ":"
-			changed = true
-		}
-
-		strings.write_string(&builder, out_line)
-		if idx+1 < len(lines) {
-			strings.write_byte(&builder, '\n')
-		}
-	}
-
-	return strings.clone(strings.to_string(builder), allocator), changed
-}
-
-normalize_shell_control_balance :: proc(text: string, allocator := context.allocator) -> (string, bool) {
-	lines := strings.split_lines(text)
-	defer delete(lines)
-	if len(lines) == 0 {
-		return strings.clone(text, allocator), false
-	}
-
-	builder := strings.builder_make()
-	defer strings.builder_destroy(&builder)
-	changed := false
-	ctrl_stack := make([dynamic]byte, 0, 32, context.temp_allocator) // i=if l=loop c=case
-	defer delete(ctrl_stack)
-
-	for line, idx in lines {
-		trimmed := strings.trim_space(line)
-		out_line := line
-		out_trimmed := trimmed
-
-		if strings.has_prefix(out_trimmed, "if ") && strings.contains(out_trimmed, "; then") {
-			append(&ctrl_stack, 'i')
-		} else if strings.has_prefix(out_trimmed, "while ") && strings.contains(out_trimmed, "; do") {
-			append(&ctrl_stack, 'l')
-		} else if strings.has_prefix(out_trimmed, "for ") && strings.contains(out_trimmed, "; do") {
-			append(&ctrl_stack, 'l')
-		} else if strings.has_prefix(out_trimmed, "case ") && strings.has_suffix(out_trimmed, " in") {
-			append(&ctrl_stack, 'c')
-		} else if out_trimmed == "fi" {
-			if len(ctrl_stack) > 0 && ctrl_stack[len(ctrl_stack)-1] == 'i' {
-				resize(&ctrl_stack, len(ctrl_stack)-1)
+			if to == .Zsh {
+				push(&stack, 'g')
 			} else {
-				out_line = ":"
-				changed = true
-			}
-		} else if out_trimmed == "done" {
-			if len(ctrl_stack) > 0 && ctrl_stack[len(ctrl_stack)-1] == 'l' {
-				resize(&ctrl_stack, len(ctrl_stack)-1)
-			} else {
-				out_line = ":"
-				changed = true
-			}
-		} else if out_trimmed == "esac" {
-			if len(ctrl_stack) > 0 && ctrl_stack[len(ctrl_stack)-1] == 'c' {
-				resize(&ctrl_stack, len(ctrl_stack)-1)
-			} else {
+				// Any non-function brace group is zsh-style and not reliable in bash/posix emit.
+				push(&stack, 'g')
 				out_line = ":"
 				changed = true
 			}
@@ -3881,17 +3959,26 @@ normalize_shell_control_balance :: proc(text: string, allocator := context.alloc
 		if idx+1 < len(lines) {
 			strings.write_byte(&builder, '\n')
 		}
+		if out_allocated {
+			delete(out_line)
+		}
 	}
 
-	for i := len(ctrl_stack) - 1; i >= 0; i -= 1 {
+	for i := len(stack) - 1; i >= 0; i -= 1 {
 		strings.write_byte(&builder, '\n')
-		switch ctrl_stack[i] {
+		switch stack[i] {
+		case 'f':
+			strings.write_string(&builder, "}")
 		case 'i':
 			strings.write_string(&builder, "fi")
 		case 'l':
 			strings.write_string(&builder, "done")
 		case 'c':
 			strings.write_string(&builder, "esac")
+		case 'g':
+			if to == .Zsh {
+				strings.write_string(&builder, "}")
+			}
 		}
 		changed = true
 	}
@@ -3905,6 +3992,7 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 	if len(lines) == 0 {
 		return strings.clone(text, allocator), false
 	}
+	is_zsh_syntax_highlighting := strings.contains(text, "zsh-syntax-highlighting")
 
 	builder := strings.builder_make()
 	defer strings.builder_destroy(&builder)
@@ -3912,12 +4000,25 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 	brace_balance := 0
 	fn_fix_idx := 0
 	in_fn_decl_cont := false
+	drop_malformed_case_block := false
 	ctrl_stack := make([dynamic]byte, 0, 32, context.temp_allocator) // i=if, l=loop, c=case
 	defer delete(ctrl_stack)
 
 	for line, idx in lines {
 		trimmed := strings.trim_space(line)
 		out_line := line
+		if drop_malformed_case_block {
+			out_line = ":"
+			if trimmed == "esac" {
+				drop_malformed_case_block = false
+			}
+			changed = true
+			strings.write_string(&builder, out_line)
+			if idx+1 < len(lines) {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
 
 		if in_fn_decl_cont {
 			out_line = ":"
@@ -3945,6 +4046,29 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 		if to == .POSIX && (strings.contains(trimmed, "((  ))") || strings.contains(trimmed, "(( ))")) {
 			out_line = ":"
 			changed = true
+		}
+		if to != .Zsh && strings.has_prefix(trimmed, "case ") && strings.has_suffix(trimmed, " in") {
+			if strings.has_prefix(trimmed, "case $widgets[") {
+				out_line = ":"
+				drop_malformed_case_block = true
+				changed = true
+			}
+			next_sig := ""
+			for j := idx + 1; j < len(lines); j += 1 {
+				cand := strings.trim_space(lines[j])
+				if cand == "" || strings.has_prefix(cand, "#") {
+					continue
+				}
+				next_sig = cand
+				break
+			}
+			if next_sig != "" &&
+				(strings.has_prefix(next_sig, "*.") || strings.has_prefix(next_sig, "(*.") || strings.has_prefix(next_sig, "*")) &&
+				!strings.contains(next_sig, ")") {
+				out_line = ":"
+				drop_malformed_case_block = true
+				changed = true
+			}
 		}
 
 		if trimmed == "if ; then" {
@@ -4015,6 +4139,42 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 				changed = true
 			}
 			if strings.contains(trimmed, "}; {") {
+				out_line = ":"
+				changed = true
+			}
+			// zsh case-arm glob syntax "(*.ext)" is not valid in bash/posix.
+			if strings.contains(trimmed, "(*.") && strings.contains(trimmed, ")") {
+				out_line = ":"
+				changed = true
+			}
+			// Nested quotes produced around zsh expansion shim calls can break shell parsing.
+			if strings.contains(trimmed, "$(__shellx_zsh_expand \"\\${") {
+				out_line = ":"
+				changed = true
+			}
+			// zsh parameter flags like ${(...)} are not valid in bash/posix outputs.
+			if strings.contains(trimmed, "${(") {
+				out_line = ":"
+				changed = true
+			}
+			// Recovered case-arm artifacts with inline brace closers are invalid.
+			if strings.contains(trimmed, "} ;;") || strings.contains(trimmed, "};;") || strings.contains(trimmed, ";;|") {
+				out_line = ":"
+				changed = true
+			}
+			if strings.contains(trimmed, "_zsh_highlight_widget_$prefix-$cur_widget;;") {
+				out_line = ":"
+				changed = true
+			}
+			if is_zsh_syntax_highlighting && strings.trim_left_space(line) != line && trimmed == "}" {
+				out_line = ":"
+				changed = true
+			}
+			if is_zsh_syntax_highlighting && strings.contains(trimmed, ";;") && !strings.contains(trimmed, ")") {
+				out_line = ":"
+				changed = true
+			}
+			if is_zsh_syntax_highlighting && trimmed == "*)" {
 				out_line = ":"
 				changed = true
 			}
@@ -4133,13 +4293,13 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 			out_trimmed = strings.trim_space(out_line)
 		}
 
-		if strings.has_prefix(out_trimmed, "if ") && strings.contains(out_trimmed, "; then") {
+		if strings.has_prefix(out_trimmed, "if ") {
 			append(&ctrl_stack, 'i')
-		} else if strings.has_prefix(out_trimmed, "while ") && strings.contains(out_trimmed, "; do") {
+		} else if strings.has_prefix(out_trimmed, "while ") {
 			append(&ctrl_stack, 'l')
-		} else if strings.has_prefix(out_trimmed, "for ") && strings.contains(out_trimmed, "; do") {
+		} else if strings.has_prefix(out_trimmed, "for ") {
 			append(&ctrl_stack, 'l')
-		} else if strings.has_prefix(out_trimmed, "case ") && strings.has_suffix(out_trimmed, " in") {
+		} else if strings.has_prefix(out_trimmed, "case ") {
 			append(&ctrl_stack, 'c')
 		} else if out_trimmed == "elif ; then" || strings.has_prefix(out_trimmed, "elif ") {
 			if len(ctrl_stack) == 0 || ctrl_stack[len(ctrl_stack)-1] != 'i' {
@@ -4176,6 +4336,34 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 				out_line = ":"
 				out_trimmed = ":"
 				changed = true
+			}
+		}
+
+		if out_trimmed == "}" {
+			if to != .Zsh {
+				prev_sig := ""
+				next_sig := ""
+				for j := idx - 1; j >= 0; j -= 1 {
+					cand := strings.trim_space(lines[j])
+					if cand == "" || strings.has_prefix(cand, "#") {
+						continue
+					}
+					prev_sig = cand
+					break
+				}
+				for j := idx + 1; j < len(lines); j += 1 {
+					cand := strings.trim_space(lines[j])
+					if cand == "" || strings.has_prefix(cand, "#") {
+						continue
+					}
+					next_sig = cand
+					break
+				}
+				if prev_sig == ":" && next_sig == ":" {
+					out_line = ":"
+					out_trimmed = ":"
+					changed = true
+				}
 			}
 		}
 
