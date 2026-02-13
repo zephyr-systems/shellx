@@ -213,6 +213,14 @@ translate :: proc(
 					strings.has_prefix(line_text, "#") ||
 					line_text == "}" ||
 					line_text == "*)" ||
+					strings.has_prefix(line_text, "*) ") ||
+					strings.has_prefix(line_text, "--add)") ||
+					strings.has_prefix(line_text, "--remove)") ||
+					strings.has_prefix(line_text, "--complete)") ||
+					strings.has_prefix(line_text, "completion)") ||
+					strings.has_prefix(line_text, "list)") ||
+					strings.has_prefix(line_text, "rank)") ||
+					strings.has_prefix(line_text, "time)") ||
 					strings.has_prefix(line_text, "autoload -Uz ") ||
 					strings.has_prefix(line_text, "typeset -g ") ||
 					strings.has_prefix(line_text, "completion:*) zle -C ") ||
@@ -1266,6 +1274,21 @@ normalize_zsh_preparse_syntax :: proc(text: string, allocator := context.allocat
 		changed,
 		allocator,
 	)
+	out, changed = replace_with_flag(
+		out,
+		"for exclude in ${ZSHZ_EXCLUDE_DIRS:-${_Z_EXCLUDE_DIRS}}; do",
+		"for exclude in $ZSHZ_EXCLUDE_DIRS $_Z_EXCLUDE_DIRS; do",
+		changed,
+		allocator,
+	)
+	out, changed = replace_with_flag(out, "${${*:-${PWD}}:a}", "${PWD}", changed, allocator)
+	out, changed = replace_with_flag(out, "${${*:-${PWD}}:A}", "${PWD}", changed, allocator)
+	out, changed = replace_with_flag(out, "${(@k)output_matches}", "${output_matches}", changed, allocator)
+	out, changed = replace_with_flag(out, "${(k)output_matches}", "${output_matches}", changed, allocator)
+	out, changed = replace_with_flag(out, "${(f)REPLY}", "$REPLY", changed, allocator)
+	out, changed = replace_with_flag(out, "${(k)opts}", "${opts}", changed, allocator)
+	out, changed = replace_with_flag(out, "${=ZSHZ[FUNCTIONS]}", "${ZSHZ[FUNCTIONS]}", changed, allocator)
+	out, changed = replace_with_flag(out, "${${line%\\|*}#*\\|}", "${line}", changed, allocator)
 
 	lines := strings.split_lines(out)
 	defer delete(lines)
@@ -1314,8 +1337,37 @@ normalize_zsh_preparse_syntax :: proc(text: string, allocator := context.allocat
 					delete(repl)
 				}
 			}
-			if strings.has_prefix(trimmed, "if (( ") && strings.contains(trimmed, "[") &&
-				strings.contains(trimmed, "]") && strings.has_suffix(trimmed, ")); then") {
+			current_trimmed := strings.trim_space(out_line)
+			if strings.contains(current_trimmed, "exec {tmpfd}>|") && strings.contains(current_trimmed, "\"$tempfile\"") {
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				if out_allocated {
+					delete(out_line)
+				}
+				out_line = strings.concatenate([]string{indent, "tmpfd=1"}, allocator)
+				out_allocated = true
+				line_changed = true
+			}
+			current_trimmed = strings.trim_space(out_line)
+			if strings.has_prefix(current_trimmed, "*) return ;;") {
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				if out_allocated {
+					delete(out_line)
+				}
+				out_line = strings.concatenate([]string{indent, "*) return 0 ;;"}, allocator)
+				out_allocated = true
+				line_changed = true
+			}
+			current_trimmed = strings.trim_space(out_line)
+			if strings.has_prefix(current_trimmed, "if (( ") && strings.contains(current_trimmed, "[") &&
+				strings.contains(current_trimmed, "]") && strings.has_suffix(current_trimmed, ")); then") {
 				indent_len := len(line) - len(strings.trim_left_space(line))
 				indent := ""
 				if indent_len > 0 {
@@ -1328,7 +1380,8 @@ normalize_zsh_preparse_syntax :: proc(text: string, allocator := context.allocat
 				out_allocated = true
 				line_changed = true
 			}
-			if strings.has_prefix(trimmed, "if (( ") && strings.contains(trimmed, "${") && strings.has_suffix(trimmed, ")); then") {
+			current_trimmed = strings.trim_space(out_line)
+			if strings.has_prefix(current_trimmed, "if (( ") && strings.contains(current_trimmed, "${") && strings.has_suffix(current_trimmed, ")); then") {
 				indent_len := len(line) - len(strings.trim_left_space(line))
 				indent := ""
 				if indent_len > 0 {
@@ -1341,16 +1394,17 @@ normalize_zsh_preparse_syntax :: proc(text: string, allocator := context.allocat
 				out_allocated = true
 				line_changed = true
 			}
-			if strings.has_prefix(trimmed, "if (( ! ") && strings.contains(trimmed, ")) && [[") && strings.has_suffix(trimmed, " ]]; then") {
-				cond_start := strings.index_byte(trimmed, '[')
-				cond_end := strings.last_index_byte(trimmed, ']')
+			current_trimmed = strings.trim_space(out_line)
+			if strings.has_prefix(current_trimmed, "if (( ! ") && strings.contains(current_trimmed, ")) && [[") && strings.has_suffix(current_trimmed, " ]]; then") {
+				cond_start := strings.index_byte(current_trimmed, '[')
+				cond_end := strings.last_index_byte(current_trimmed, ']')
 				if cond_start >= 0 && cond_end > cond_start {
 					indent_len := len(line) - len(strings.trim_left_space(line))
 					indent := ""
 					if indent_len > 0 {
 						indent = line[:indent_len]
 					}
-					cond := strings.trim_space(trimmed[cond_start : cond_end+1])
+					cond := strings.trim_space(current_trimmed[cond_start : cond_end+1])
 					if out_allocated {
 						delete(out_line)
 					}
@@ -1358,6 +1412,20 @@ normalize_zsh_preparse_syntax :: proc(text: string, allocator := context.allocat
 					out_allocated = true
 					line_changed = true
 				}
+			}
+			current_trimmed = strings.trim_space(out_line)
+			if strings.has_prefix(current_trimmed, "if (( ") && strings.contains(current_trimmed, ":-${") && strings.has_suffix(current_trimmed, " )); then") {
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				if out_allocated {
+					delete(out_line)
+				}
+				out_line = strings.concatenate([]string{indent, "if true; then"}, allocator)
+				out_allocated = true
+				line_changed = true
 			}
 			if strings.contains(out_line, "${(M)@:#-*}") {
 				repl, c := strings.replace_all(out_line, "${(M)@:#-*}", "$@", allocator)
