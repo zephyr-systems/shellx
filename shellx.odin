@@ -768,14 +768,8 @@ rewrite_parameter_expansion_callsites :: proc(
 
 	i := 0
 	for i < len(text) {
-		inner_start := -1
 		if i+1 < len(text) && text[i] == '$' && text[i+1] == '{' {
-			inner_start = i + 2
-		} else if text[i] == '{' {
-			inner_start = i + 1
-		}
-
-		if inner_start >= 0 {
+			inner_start := i + 2
 			j := inner_start
 			for j < len(text) && text[j] != '}' {
 				j += 1
@@ -786,22 +780,40 @@ rewrite_parameter_expansion_callsites :: proc(
 
 				if len(inner) > 1 && inner[0] == '#' {
 					var_name := strings.trim_space(inner[1:])
-					if var_name != "" {
+					if var_name != "" && is_basic_name(var_name) {
 						repl = fmt.tprintf("(__shellx_param_length %s)", var_name)
 					}
 				} else {
-					idx := find_substring(inner, ":-")
-					if idx < 0 {
-						idx = find_substring(inner, ":=")
+					// ${var:?message}
+					req_idx := find_substring(inner, ":?")
+					if req_idx > 0 {
+						var_name := strings.trim_space(inner[:req_idx])
+						err_msg := strings.trim_space(inner[req_idx+2:])
+						if var_name != "" && is_basic_name(var_name) {
+							escaped_msg := escape_double_quoted(err_msg, allocator)
+							repl = fmt.tprintf("(__shellx_param_required %s \"%s\")", var_name, escaped_msg)
+							delete(escaped_msg)
+						}
 					}
-					if idx > 0 {
-						var_name := strings.trim_space(inner[:idx])
-						default_value := strings.trim_space(inner[idx+2:])
-						if var_name != "" {
+
+					// ${var:-default} / ${var:=default}
+					def_idx := find_substring(inner, ":-")
+					if def_idx < 0 {
+						def_idx = find_substring(inner, ":=")
+					}
+					if repl == "" && def_idx > 0 {
+						var_name := strings.trim_space(inner[:def_idx])
+						default_value := strings.trim_space(inner[def_idx+2:])
+						if var_name != "" && is_basic_name(var_name) {
 							escaped_default := escape_double_quoted(default_value, allocator)
 							repl = fmt.tprintf("(__shellx_param_default %s \"%s\")", var_name, escaped_default)
 							delete(escaped_default)
 						}
+					}
+
+					// ${var}
+					if repl == "" && is_basic_name(inner) {
+						repl = fmt.tprintf("$%s", inner)
 					}
 				}
 
@@ -926,6 +938,11 @@ __shellx_zsh_expand() {
 		delete(out)
 		out = rewritten
 		changed_any = changed_any || changed
+
+		rewritten, changed = rewrite_parameter_expansion_callsites(out, to, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
 	}
 
 	if from == .Fish && (to == .Bash || to == .POSIX) {
@@ -1004,20 +1021,28 @@ rewrite_fish_inline_assignment :: proc(line: string, connector: string, allocato
 		return strings.clone(line, allocator), false
 	}
 	prefix := line[:idx+len(connector)]
-	rest := strings.trim_space(line[idx+len(connector):])
+	rest_full := line[idx+len(connector):]
+	rest := strings.trim_space(rest_full)
 	eq_idx := find_substring(rest, "=")
 	if eq_idx <= 0 {
 		return strings.clone(line, allocator), false
 	}
 	name := strings.trim_space(rest[:eq_idx])
-	value := strings.trim_space(rest[eq_idx+1:])
+	value_and_tail := strings.trim_space(rest[eq_idx+1:])
+	tail := ""
+	value := value_and_tail
+	semi := find_substring(value_and_tail, ";")
+	if semi >= 0 {
+		value = strings.trim_space(value_and_tail[:semi])
+		tail = value_and_tail[semi:]
+	}
 	if !is_basic_name(name) {
 		return strings.clone(line, allocator), false
 	}
 	if value == "" {
 		value = "\"\""
 	}
-	rewritten := strings.concatenate([]string{prefix, "set ", name, " ", value}, allocator)
+	rewritten := strings.concatenate([]string{prefix, "set ", name, " ", value, tail}, allocator)
 	return rewritten, true
 }
 
@@ -1629,6 +1654,7 @@ rewrite_fish_parse_hardening :: proc(text: string, allocator := context.allocato
 	for line, idx in lines {
 		trimmed := strings.trim_space(line)
 		out_line := line
+		out_allocated := false
 		if trimmed == "if" {
 			out_line = "if true"
 			changed = true
@@ -1638,6 +1664,55 @@ rewrite_fish_parse_hardening :: proc(text: string, allocator := context.allocato
 		} else if trimmed == "for" {
 			out_line = "for _ in 1"
 			changed = true
+		} else if trimmed == "fi" || trimmed == "done" || trimmed == "esac" || trimmed == "}" {
+			out_line = "end"
+			changed = true
+		} else if trimmed == "then" || trimmed == "do" || trimmed == "{" || trimmed == ";;" {
+			out_line = ":"
+			changed = true
+		} else if strings.has_prefix(trimmed, "if ") && strings.has_suffix(trimmed, "; then") {
+			cond := strings.trim_space(trimmed[len("if "):len(trimmed)-len("; then")])
+			if cond == "" {
+				cond = "true"
+			}
+			out_line = strings.concatenate([]string{"if ", cond}, allocator)
+			out_allocated = true
+			changed = true
+		} else if strings.has_prefix(trimmed, "elif ") && strings.has_suffix(trimmed, "; then") {
+			cond := strings.trim_space(trimmed[len("elif "):len(trimmed)-len("; then")])
+			if cond == "" {
+				cond = "true"
+			}
+			out_line = strings.concatenate([]string{"else if ", cond}, allocator)
+			out_allocated = true
+			changed = true
+		} else if strings.has_prefix(trimmed, "while ") && strings.has_suffix(trimmed, "; do") {
+			cond := strings.trim_space(trimmed[len("while "):len(trimmed)-len("; do")])
+			if cond == "" {
+				cond = "true"
+			}
+			out_line = strings.concatenate([]string{"while ", cond}, allocator)
+			out_allocated = true
+			changed = true
+		} else if strings.has_prefix(trimmed, "for ") && strings.has_suffix(trimmed, "; do") {
+			out_line = strings.trim_space(trimmed[:len(trimmed)-len("; do")])
+			changed = true
+		} else if strings.has_prefix(trimmed, "case ") && strings.has_suffix(trimmed, " in") {
+			v := strings.trim_space(trimmed[len("case "):len(trimmed)-len(" in")])
+			out_line = strings.concatenate([]string{"switch ", v}, allocator)
+			out_allocated = true
+			changed = true
+		} else if strings.has_suffix(trimmed, "() {") {
+			name := strings.trim_space(trimmed[:len(trimmed)-len("() {")])
+			if strings.has_prefix(name, "function ") {
+				name = strings.trim_space(name[len("function "):])
+			}
+			name = normalize_function_name_token(name)
+			if name != "" {
+				out_line = strings.concatenate([]string{"function ", name}, allocator)
+				out_allocated = true
+				changed = true
+			}
 		}
 
 		out_trimmed := strings.trim_space(out_line)
@@ -1679,6 +1754,9 @@ rewrite_fish_parse_hardening :: proc(text: string, allocator := context.allocato
 		}
 
 		strings.write_string(&builder, out_line)
+		if out_allocated {
+			delete(out_line)
+		}
 		if idx+1 < len(lines) {
 			strings.write_byte(&builder, '\n')
 		}

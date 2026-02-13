@@ -454,6 +454,19 @@ function __shellx_param_length --argument var_name
     and eval string length -- \$$var_name
     or echo 0
 end
+
+function __shellx_param_required --argument var_name message
+    set -q $var_name
+    and eval echo \$$var_name
+    or begin
+        if test -n "$message"
+            echo "$message" >&2
+        else
+            echo "$var_name: parameter required" >&2
+        end
+        return 1
+    end
+end
 `)
 		}
 	}
