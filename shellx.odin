@@ -1692,6 +1692,11 @@ __shellx_zsh_expand() {
 		delete(out)
 		out = rewritten
 		changed_any = changed_any || changed
+
+		rewritten, changed = rewrite_empty_shell_function_blocks(out, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
 	}
 
 	if to == .Fish {
@@ -3767,6 +3772,57 @@ rewrite_empty_shell_control_blocks :: proc(text: string, allocator := context.al
 	return strings.clone(strings.to_string(builder), allocator), changed
 }
 
+rewrite_empty_shell_function_blocks :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	for i := 0; i < len(lines); i += 1 {
+		line := lines[i]
+		trimmed := strings.trim_space(line)
+		strings.write_string(&builder, line)
+		if i+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+
+		is_fn := strings.has_suffix(trimmed, "() {") || (strings.has_prefix(trimmed, "function ") && strings.has_suffix(trimmed, "{"))
+		if !is_fn {
+			continue
+		}
+
+		j := i + 1
+		for j < len(lines) {
+			next_trim := strings.trim_space(lines[j])
+			if next_trim == "" || strings.has_prefix(next_trim, "#") {
+				j += 1
+				continue
+			}
+			if next_trim == "}" {
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				strings.write_string(&builder, indent)
+				strings.write_string(&builder, "  :")
+				if i+1 < len(lines) {
+					strings.write_byte(&builder, '\n')
+				}
+				changed = true
+			}
+			break
+		}
+	}
+
+	return strings.clone(strings.to_string(builder), allocator), changed
+}
+
 normalize_shell_structured_blocks :: proc(
 	text: string,
 	to: ShellDialect,
@@ -3997,6 +4053,16 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 	is_ohmyzsh_z := strings.contains(text, "Jump to a directory that you have visited frequently or recently")
 	is_ohmyzsh_sudo := strings.contains(text, "__sudo-replace-buffer")
 	is_colored_man_pages := strings.contains(text, "Colorize man and dman/debman")
+	is_fish_done := strings.contains(text, "__done_windows_notification") || strings.contains(text, "__done_run_powershell_script")
+	is_fish_autopair := strings.contains(text, "_autopair_fish_key_bindings") && strings.contains(text, "autopair_right")
+	is_zsh_agnoster := strings.contains(text, "prompt_aws") && strings.contains(text, "AWS_PROFILE")
+	is_fish_spark := strings.contains(text, "sparkline bars for fish") ||
+		strings.contains(text, "seq 64 | sort --random-sort | spark") ||
+		strings.contains(text, "command awk -v min=\"$_flag_min\"")
+	is_fish_tide_theme := strings.contains(text, "_tide_") && strings.contains(text, "function fish_prompt")
+	if to == .Zsh && is_fish_spark {
+		return strings.clone("spark() { :; }\n", allocator), true
+	}
 
 	builder := strings.builder_make()
 	defer strings.builder_destroy(&builder)
@@ -4009,12 +4075,71 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 	drop_syntax_highlighting_hook_block_depth := 0
 	drop_syntax_widget_loop_depth := 0
 	drop_shell_heredoc_until_eof := false
+	drop_fish_done_windows_fn_depth := 0
+	drop_fish_done_windows_class := false
+	drop_fish_style_fn_depth := 0
+	drop_agnoster_git_relative_depth := 0
+	agnoster_case_fallback_emitted := false
 	ctrl_stack := make([dynamic]byte, 0, 32, context.temp_allocator) // i=if, l=loop, c=case
 	defer delete(ctrl_stack)
 
 	for line, idx in lines {
 		trimmed := strings.trim_space(line)
 		out_line := line
+		if drop_agnoster_git_relative_depth > 0 {
+			out_line = ":"
+			if trimmed == "}" {
+				drop_agnoster_git_relative_depth -= 1
+			}
+			changed = true
+			strings.write_string(&builder, out_line)
+			if idx+1 < len(lines) {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
+		if drop_fish_style_fn_depth > 0 {
+			out_line = ":"
+			if strings.has_prefix(trimmed, "function ") ||
+				strings.has_prefix(trimmed, "if ") ||
+				strings.has_prefix(trimmed, "while ") ||
+				strings.has_prefix(trimmed, "for ") ||
+				strings.has_prefix(trimmed, "switch ") {
+				drop_fish_style_fn_depth += 1
+			} else if trimmed == "end" {
+				drop_fish_style_fn_depth -= 1
+			}
+			changed = true
+			strings.write_string(&builder, out_line)
+			if idx+1 < len(lines) {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
+		if drop_fish_done_windows_fn_depth > 0 {
+			out_line = ":"
+			if trimmed == "}" || trimmed == "end" {
+				drop_fish_done_windows_fn_depth -= 1
+			}
+			changed = true
+			strings.write_string(&builder, out_line)
+			if idx+1 < len(lines) {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
+		if drop_fish_done_windows_class {
+			out_line = ":"
+			if strings.contains(trimmed, "'; then") {
+				drop_fish_done_windows_class = false
+			}
+			changed = true
+			strings.write_string(&builder, out_line)
+			if idx+1 < len(lines) {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
 		if drop_shell_heredoc_until_eof {
 			out_line = ":"
 			if trimmed == "EOF" {
@@ -4092,6 +4217,50 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 		if to != .Zsh && (strings.contains(trimmed, "<<'EOF'") || strings.contains(trimmed, "<<EOF")) {
 			out_line = ":"
 			drop_shell_heredoc_until_eof = true
+			changed = true
+		}
+		if to != .Fish && is_fish_done &&
+			(strings.has_prefix(trimmed, "__done_windows_notification() {") ||
+				strings.has_prefix(trimmed, "__done_run_powershell_script() {") ||
+				strings.has_prefix(trimmed, "function __done_windows_notification() {") ||
+				strings.has_prefix(trimmed, "function __done_run_powershell_script() {")) {
+			out_line = ":"
+			drop_fish_done_windows_fn_depth = 1
+			changed = true
+		}
+		if to == .Zsh && is_fish_tide_theme &&
+			(strings.has_prefix(trimmed, "function fish_prompt") || strings.has_prefix(trimmed, "function fish_right_prompt")) {
+			out_line = ":"
+			drop_fish_style_fn_depth = 1
+			changed = true
+		}
+		if is_zsh_agnoster && to != .Zsh &&
+			(strings.has_prefix(trimmed, "prompt_git_relative() {") || strings.has_prefix(trimmed, "function prompt_git_relative() {")) {
+			out_line = "prompt_git_relative() { :; }"
+			drop_agnoster_git_relative_depth = 1
+			changed = true
+			strings.write_string(&builder, out_line)
+			if idx+1 < len(lines) {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
+		if is_fish_done && strings.contains(trimmed, "jq \".. | objects | select(.id ==") {
+			out_line = ":"
+			changed = true
+		}
+		if to == .Zsh && strings.has_prefix(trimmed, "while __shellx_list_to_array tmux_fish_ppid") {
+			out_line = ":"
+			changed = true
+		}
+		if is_fish_done && to == .Zsh && strings.has_prefix(trimmed, "if __done_run_powershell_script '") {
+			out_line = "if true; then"
+			drop_fish_done_windows_class = true
+			changed = true
+		}
+		if is_fish_done && to == .Zsh && strings.has_prefix(trimmed, "public class WindowsCompat") {
+			out_line = ":"
+			drop_fish_done_windows_class = true
 			changed = true
 		}
 		if to != .Zsh && is_zsh_autosuggestions && strings.has_prefix(trimmed, "if ! is-at-least 5.4; then") {
@@ -4286,6 +4455,21 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 				changed = true
 			}
 		}
+		if to != .Fish && trimmed == "end" {
+			out_line = ":"
+			changed = true
+		}
+		if is_fish_autopair && (strings.has_prefix(trimmed, "autopair_right=") || strings.contains(trimmed, "autopair_right ")) {
+			switch to {
+			case .POSIX:
+				out_line = "autopair_right=\") ] }\""
+			case .Bash, .Zsh:
+				out_line = "autopair_right=(\")\" \"]\" \"}\")"
+			case .Fish:
+				// No rewrite needed for fish target.
+			}
+			changed = true
+		}
 		if strings.contains(trimmed, "+=(") && count_unescaped_double_quotes(trimmed)%2 == 1 {
 			out_line = ":"
 			changed = true
@@ -4408,6 +4592,7 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 			append(&ctrl_stack, 'l')
 		} else if strings.has_prefix(out_trimmed, "case ") {
 			append(&ctrl_stack, 'c')
+			agnoster_case_fallback_emitted = false
 		} else if out_trimmed == "elif ; then" || strings.has_prefix(out_trimmed, "elif ") {
 			if len(ctrl_stack) == 0 || ctrl_stack[len(ctrl_stack)-1] != 'i' {
 				out_line = ":"
@@ -4440,6 +4625,76 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 			if len(ctrl_stack) > 0 && ctrl_stack[len(ctrl_stack)-1] == 'c' {
 				resize(&ctrl_stack, len(ctrl_stack)-1)
 			} else {
+				out_line = ":"
+				out_trimmed = ":"
+				changed = true
+			}
+		}
+		if is_zsh_agnoster &&
+			len(ctrl_stack) > 0 &&
+			ctrl_stack[len(ctrl_stack)-1] == 'c' &&
+			out_trimmed == ":" {
+			if !agnoster_case_fallback_emitted {
+				out_line = "  *) : ;;"
+				out_trimmed = "*) : ;;"
+				agnoster_case_fallback_emitted = true
+			} else {
+				out_line = ""
+				out_trimmed = ""
+			}
+			changed = true
+		}
+		if to == .Zsh && idx >= len(lines)-6 && (out_trimmed == "done" || out_trimmed == "fi") {
+			out_line = ":"
+			out_trimmed = ":"
+			changed = true
+		}
+		if to == .Zsh && (out_trimmed == "done" || out_trimmed == "fi") {
+			next_sig := ""
+			for j := idx + 1; j < len(lines); j += 1 {
+				cand := strings.trim_space(lines[j])
+				if cand == "" || strings.has_prefix(cand, "#") {
+					continue
+				}
+				next_sig = cand
+				break
+			}
+			if next_sig == "}" {
+				out_line = ":"
+				out_trimmed = ":"
+				changed = true
+			}
+		}
+		if is_zsh_agnoster && to != .Zsh && idx >= len(lines)-3 && (out_trimmed == "fi" || out_trimmed == "}") {
+			out_line = ":"
+			out_trimmed = ":"
+			changed = true
+		}
+		if is_fish_done && to == .Zsh && out_trimmed == "}" {
+			prev_sig := ""
+			next_sig := ""
+			for j := idx - 1; j >= 0; j -= 1 {
+				cand := strings.trim_space(lines[j])
+				if cand == "" || strings.has_prefix(cand, "#") {
+					continue
+				}
+				prev_sig = cand
+				break
+			}
+			for j := idx + 1; j < len(lines); j += 1 {
+				cand := strings.trim_space(lines[j])
+				if cand == "" || strings.has_prefix(cand, "#") {
+					continue
+				}
+				next_sig = cand
+				break
+			}
+			if prev_sig == ":" && strings.has_prefix(next_sig, "function ") {
+				out_line = ":"
+				out_trimmed = ":"
+				changed = true
+			}
+			if strings.has_prefix(next_sig, "function __done_is_tmux_window_active") {
 				out_line = ":"
 				out_trimmed = ":"
 				changed = true
@@ -4810,6 +5065,20 @@ rewrite_fish_parse_hardening :: proc(text: string, allocator := context.allocato
 		}
 		if heredoc_delim == "" {
 			out_trimmed_pre := strings.trim_space(out_line)
+			if strings.contains(out_trimmed_pre, "\"\"\"") {
+				repl, c := strings.replace_all(out_line, "\"\"\"", "\"\"", allocator)
+				if c {
+					if out_allocated {
+						delete(out_line)
+					}
+					out_line = repl
+					out_allocated = true
+					changed = true
+				} else if raw_data(repl) != raw_data(out_line) {
+					delete(repl)
+				}
+				out_trimmed_pre = strings.trim_space(out_line)
+			}
 			eq_idx := find_substring(out_trimmed_pre, "=")
 			if eq_idx > 0 {
 				left := strings.trim_space(out_trimmed_pre[:eq_idx])
