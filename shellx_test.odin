@@ -469,6 +469,33 @@ test_rewrite_zsh_parameter_expansion_advanced_tokens :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_rewrite_unsupported_zsh_expansion_equal_prefix :: proc(t: ^testing.T) {
+	if !should_run_test("test_rewrite_unsupported_zsh_expansion_equal_prefix") { return }
+
+	input := `echo ${=ZSHZ[FUNCTIONS]}`
+	output, changed := rewrite_unsupported_zsh_expansions_for_bash(input)
+	defer delete(output)
+
+	testing.expect(t, changed, "zsh ${=...} expansion should normalize for bash compatibility")
+	testing.expect(t, !strings.contains(output, "${="), "normalized output should not contain ${= prefix")
+	testing.expect(t, strings.contains(output, "${ZSHZ[FUNCTIONS]}"), "normalized output should preserve indexed expansion body")
+}
+
+@(test)
+test_append_ohmyzsh_z_command_wrapper :: proc(t: ^testing.T) {
+	if !should_run_test("test_append_ohmyzsh_z_command_wrapper") { return }
+
+	source := "# Jump to a directory that you have visited frequently or recently\n"
+	input := "zshz() {\n  :\n}\n"
+	output, changed := append_ohmyzsh_z_command_wrapper(source, input, .Zsh, .Bash)
+	defer delete(output)
+
+	testing.expect(t, changed, "ohmyzsh-z translation should append z command wrapper when zshz exists")
+	testing.expect(t, strings.contains(output, "z() {"), "wrapper should define z function")
+	testing.expect(t, strings.contains(output, "zshz \"$@\""), "wrapper should delegate to zshz implementation")
+}
+
+@(test)
 test_translate_file_and_batch_api :: proc(t: ^testing.T) {
 	if !should_run_test("test_translate_file_and_batch_api") { return }
 
@@ -534,6 +561,22 @@ test_translate_capability_prelude_disabled_by_default :: proc(t: ^testing.T) {
 
 	testing.expect(t, result.success, "Translation should succeed with default options")
 	testing.expect(t, !strings.contains(result.output, "__zx_warn"), "Capability prelude should not be emitted unless insert_shims=true")
+}
+
+@(test)
+test_translate_runtime_polyfill_uses_valid_sh_identifiers :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_runtime_polyfill_uses_valid_sh_identifiers") { return }
+
+	src := "about-plugin\n"
+	opts := DEFAULT_TRANSLATION_OPTIONS
+	opts.insert_shims = true
+	result := translate(src, .Bash, .POSIX, opts)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, result.success, "Bash->POSIX runtime polyfill translation should succeed")
+	testing.expect(t, strings.contains(result.output, "about_plugin()"), "POSIX runtime polyfill should use underscore function identifier")
+	testing.expect(t, strings.contains(result.output, "alias about-plugin=about_plugin"), "POSIX runtime polyfill should expose dashed command via alias")
+	parser_check_snippet(t, result.output, .POSIX, "runtime_polyfill_posix_identifiers")
 }
 
 @(test)

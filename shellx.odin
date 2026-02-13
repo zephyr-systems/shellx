@@ -548,6 +548,13 @@ translate :: proc(
 			delete(rewritten)
 		}
 	}
+	rewritten_omz_z, changed_omz_z := append_ohmyzsh_z_command_wrapper(source_code, emitted, from, to, context.allocator)
+	if changed_omz_z {
+		delete(emitted)
+		emitted = rewritten_omz_z
+	} else {
+		delete(rewritten_omz_z)
+	}
 	cap_prelude := ""
 	if options.insert_shims {
 		compat.collect_caps_from_output(&result.required_caps, emitted, to)
@@ -754,8 +761,8 @@ collect_runtime_polyfill_shims :: proc(
 	}
 	if strings.contains(emitted, "autoload ") ||
 		strings.contains(emitted, "is-at-least ") ||
-		strings.contains(emitted, "about-plugin ") ||
-		strings.contains(emitted, "about-alias ") ||
+		strings.contains(emitted, "about-plugin") ||
+		strings.contains(emitted, "about-alias") ||
 		strings.contains(emitted, "emulate ") ||
 		strings.contains(emitted, "unfunction ") ||
 		strings.contains(emitted, "zsystem ") ||
@@ -943,6 +950,30 @@ rewrite_zsh_runtime_decl_fallbacks :: proc(
 		return strings.clone(text, allocator), false
 	}
 	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+append_ohmyzsh_z_command_wrapper :: proc(
+	source_code: string,
+	text: string,
+	from: ShellDialect,
+	to: ShellDialect,
+	allocator := context.allocator,
+) -> (string, bool) {
+	if from != .Zsh || (to != .Bash && to != .POSIX) {
+		return strings.clone(text, allocator), false
+	}
+	if !strings.contains(source_code, "Jump to a directory that you have visited frequently or recently") {
+		return strings.clone(text, allocator), false
+	}
+	if !strings.contains(text, "zshz() {") {
+		return strings.clone(text, allocator), false
+	}
+	if strings.contains(text, "\nz() {") || strings.contains(text, "\nfunction z") || strings.contains(text, "\nalias z=") {
+		return strings.clone(text, allocator), false
+	}
+	wrapper := "\nz() {\n  zshz \"$@\"\n}\n"
+	out := strings.concatenate([]string{text, wrapper}, allocator)
+	return out, true
 }
 
 collect_fish_event_registration_lines :: proc(
@@ -9579,10 +9610,18 @@ rewrite_unsupported_zsh_expansions_for_bash :: proc(text: string, allocator := c
 				}
 				j += 1
 			}
-			if j < len(text) && depth == 0 {
-				inner := text[i+2 : j]
-				if strings.contains(inner, "${${") ||
-					strings.contains(inner, "(q)") ||
+				if j < len(text) && depth == 0 {
+					inner := text[i+2 : j]
+					if strings.has_prefix(inner, "=") && len(inner) > 1 {
+						strings.write_string(&builder, "${")
+						strings.write_string(&builder, inner[1:])
+						strings.write_byte(&builder, '}')
+						changed = true
+						i = j + 1
+						continue
+					}
+					if strings.contains(inner, "${${") ||
+						strings.contains(inner, "(q)") ||
 					strings.contains(inner, "(qq)") ||
 					strings.contains(inner, ":h") ||
 					strings.contains(inner, ":t") ||

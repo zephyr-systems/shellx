@@ -653,17 +653,17 @@ generate_runtime_polyfill_shim :: proc(to: ir.ShellDialect) -> string {
 		return strings.trim_space(`
 # cross-shell runtime polyfills for translated plugins
 
-about-plugin() {
+about_plugin() {
   SHELLX_ABOUT_PLUGIN="$*"
   return 0
 }
 
-about-alias() {
+about_alias() {
   SHELLX_ABOUT_ALIAS="$*"
   return 0
 }
 
-is-at-least() {
+is_at_least() {
   _zx_req="$1"
   _zx_cur="${2:-${ZSH_VERSION:-${BASH_VERSION:-0}}}"
   [ -n "$_zx_req" ] || return 1
@@ -772,6 +772,24 @@ status() {
   esac
 }
 
+print() {
+  _zx_newline=1
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -n) _zx_newline=0; shift ;;
+      -r|-P|--|--) shift ;;
+      -u*) shift ;;
+      -*) shift ;;
+      *) break ;;
+    esac
+  done
+  if [ "$_zx_newline" -eq 1 ]; then
+    printf "%s\n" "$*"
+  else
+    printf "%s" "$*"
+  fi
+}
+
 if [ -n "${BASH_VERSION-}" ]; then
   typeset() {
     _zx_opt=""
@@ -819,7 +837,7 @@ __shellx_remove_hook() {
   printf "%s" "$_zx_out"
 }
 
-add-zsh-hook() {
+add_zsh_hook() {
   _zx_mode="add"
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -848,6 +866,18 @@ add-zsh-hook() {
   esac
   return 0
 }
+
+alias about-plugin=about_plugin
+alias about-alias=about_alias
+alias is-at-least=is_at_least
+alias add-zsh-hook=add_zsh_hook
+
+if [ -n "${BASH_VERSION-}" ]; then
+  eval 'about-plugin() { about_plugin "$@"; }'
+  eval 'about-alias() { about_alias "$@"; }'
+  eval 'is-at-least() { is_at_least "$@"; }'
+  eval 'add-zsh-hook() { add_zsh_hook "$@"; }'
+fi
 `)
 	}
 	return ""

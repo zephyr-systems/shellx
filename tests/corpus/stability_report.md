@@ -9,26 +9,26 @@ Cross-dialect runs executed: 126
 | Pair | Cases | Translate | Parse | Parser Matrix | Parser Skipped | Plugin Parse | Theme Parse | Parse Warn | Compat Warn | Avg Size Ratio | Avg Fn Ratio | With Shims |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | bash->fish | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 0 | 1.779 | 8.563 | 15 |
-| bash->posix | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 0 | 1.375 | 6.952 | 12 |
-| bash->zsh | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 0 | 0.346 | 0.945 | 0 |
-| fish->bash | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 0 | 0 | 1.368 | 8.363 | 11 |
-| fish->posix | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 0 | 0 | 1.628 | 9.953 | 11 |
-| fish->zsh | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 0 | 0 | 1.450 | 6.598 | 11 |
-| zsh->bash | 15 | 15/15 | 15/15 | 12/15 | 0 | 10/10 | 5/5 | 0 | 0 | 2.039 | 5.768 | 11 |
+| bash->posix | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 0 | 3.884 | 9.964 | 14 |
+| bash->zsh | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 0 | 2.842 | 4.262 | 9 |
+| fish->bash | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 0 | 0 | 1.416 | 8.428 | 11 |
+| fish->posix | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 0 | 0 | 1.676 | 10.018 | 11 |
+| fish->zsh | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 0 | 0 | 1.498 | 6.662 | 11 |
+| zsh->bash | 15 | 15/15 | 15/15 | 12/15 | 0 | 10/10 | 5/5 | 0 | 0 | 2.229 | 6.146 | 11 |
 | zsh->fish | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 0 | 2.101 | 10.386 | 15 |
-| zsh->posix | 15 | 15/15 | 15/15 | 12/15 | 0 | 10/10 | 5/5 | 0 | 0 | 3.347 | 13.076 | 14 |
+| zsh->posix | 15 | 15/15 | 15/15 | 12/15 | 0 | 10/10 | 5/5 | 0 | 0 | 3.539 | 13.447 | 14 |
 
 ## Failures
 
 - [FAIL] ohmyzsh-sudo (plugin) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=0 src_fn=2 out_fn=0 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-sudo_16.bash: line 19: unexpected EOF while looking for matching `}'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/sudo/sudo.plugin.zsh
-- [FAIL] ohmyzsh-sudo (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=1 src_fn=2 out_fn=19 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-sudo_18.sh: line 217: unexpected EOF while looking for matching `}'
+- [FAIL] ohmyzsh-sudo (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=1 src_fn=2 out_fn=19 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-sudo_18.sh: line 220: unexpected EOF while looking for matching `}'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/sudo/sudo.plugin.zsh
-- [FAIL] zsh-powerlevel10k (theme) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=1 src_fn=1 out_fn=11 msg= parser_msg=tests/corpus/.parser_check_zsh-powerlevel10k_91.bash: line 236: syntax error near unexpected token `('
-tests/corpus/.parser_check_zsh-powerlevel10k_91.bash: line 236: `  typeset -gr __p9k_intro_locale='[[ $langinfo[CODESET] != (utf|UTF)(-|)8 ]] && _p9k_init_locale && { [[ -n $LC_ALL ]] && local LC_ALL=$__p9k_locale || local LC_CTYPE=$__p9k_locale; }''
+- [FAIL] zsh-powerlevel10k (theme) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=1 src_fn=1 out_fn=12 msg= parser_msg=tests/corpus/.parser_check_zsh-powerlevel10k_91.bash: line 266: syntax error near unexpected token `('
+tests/corpus/.parser_check_zsh-powerlevel10k_91.bash: line 266: `  typeset -gr __p9k_intro_locale='[[ $langinfo[CODESET] != (utf|UTF)(-|)8 ]] && _p9k_init_locale && { [[ -n $LC_ALL ]] && local LC_ALL=$__p9k_locale || local LC_CTYPE=$__p9k_locale; }''
  path=tests/corpus/repos/zsh/powerlevel10k/powerlevel10k.zsh-theme
-- [FAIL] zsh-powerlevel10k (theme) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=3 src_fn=1 out_fn=29 msg= parser_msg=tests/corpus/.parser_check_zsh-powerlevel10k_93.sh: line 442: syntax error near unexpected token `('
-tests/corpus/.parser_check_zsh-powerlevel10k_93.sh: line 442: `  typeset -gr __p9k_intro_locale='[[ $langinfo[CODESET] != (utf|UTF)(-|)8 ]] && _p9k_init_locale && { [[ -n $LC_ALL ]] && local LC_ALL=$__p9k_locale || local LC_CTYPE=$__p9k_locale; }''
+- [FAIL] zsh-powerlevel10k (theme) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=3 src_fn=1 out_fn=30 msg= parser_msg=tests/corpus/.parser_check_zsh-powerlevel10k_93.sh: line 472: syntax error near unexpected token `('
+tests/corpus/.parser_check_zsh-powerlevel10k_93.sh: line 472: `  typeset -gr __p9k_intro_locale='[[ $langinfo[CODESET] != (utf|UTF)(-|)8 ]] && _p9k_init_locale && { [[ -n $LC_ALL ]] && local LC_ALL=$__p9k_locale || local LC_CTYPE=$__p9k_locale; }''
  path=tests/corpus/repos/zsh/powerlevel10k/powerlevel10k.zsh-theme
 - [FAIL] zsh-gnzh (theme) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=0 src_fn=0 out_fn=0 msg= parser_msg=tests/corpus/.parser_check_zsh-gnzh_103.bash: line 32: syntax error near unexpected token `('
 tests/corpus/.parser_check_zsh-gnzh_103.bash: line 32: `ZSH_THEME_VIRTUALENV_PREFIX="%F{red}("'
@@ -41,13 +41,13 @@ tests/corpus/.parser_check_zsh-gnzh_105.sh: line 247: `ZSH_THEME_VIRTUALENV_PREF
 
 - [PARSER-FAIL] ohmyzsh-sudo (plugin) zsh->bash command=`bash -n tests/corpus/.parser_check_ohmyzsh-sudo_16.bash` exit=2 message=tests/corpus/.parser_check_ohmyzsh-sudo_16.bash: line 19: unexpected EOF while looking for matching `}'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/sudo/sudo.plugin.zsh
-- [PARSER-FAIL] ohmyzsh-sudo (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-sudo_18.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-sudo_18.sh: line 217: unexpected EOF while looking for matching `}'
+- [PARSER-FAIL] ohmyzsh-sudo (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-sudo_18.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-sudo_18.sh: line 220: unexpected EOF while looking for matching `}'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/sudo/sudo.plugin.zsh
-- [PARSER-FAIL] zsh-powerlevel10k (theme) zsh->bash command=`bash -n tests/corpus/.parser_check_zsh-powerlevel10k_91.bash` exit=2 message=tests/corpus/.parser_check_zsh-powerlevel10k_91.bash: line 236: syntax error near unexpected token `('
-tests/corpus/.parser_check_zsh-powerlevel10k_91.bash: line 236: `  typeset -gr __p9k_intro_locale='[[ $langinfo[CODESET] != (utf|UTF)(-|)8 ]] && _p9k_init_locale && { [[ -n $LC_ALL ]] && local LC_ALL=$__p9k_locale || local LC_CTYPE=$__p9k_locale; }''
+- [PARSER-FAIL] zsh-powerlevel10k (theme) zsh->bash command=`bash -n tests/corpus/.parser_check_zsh-powerlevel10k_91.bash` exit=2 message=tests/corpus/.parser_check_zsh-powerlevel10k_91.bash: line 266: syntax error near unexpected token `('
+tests/corpus/.parser_check_zsh-powerlevel10k_91.bash: line 266: `  typeset -gr __p9k_intro_locale='[[ $langinfo[CODESET] != (utf|UTF)(-|)8 ]] && _p9k_init_locale && { [[ -n $LC_ALL ]] && local LC_ALL=$__p9k_locale || local LC_CTYPE=$__p9k_locale; }''
  path=tests/corpus/repos/zsh/powerlevel10k/powerlevel10k.zsh-theme
-- [PARSER-FAIL] zsh-powerlevel10k (theme) zsh->posix command=`bash -n tests/corpus/.parser_check_zsh-powerlevel10k_93.sh` exit=2 message=tests/corpus/.parser_check_zsh-powerlevel10k_93.sh: line 442: syntax error near unexpected token `('
-tests/corpus/.parser_check_zsh-powerlevel10k_93.sh: line 442: `  typeset -gr __p9k_intro_locale='[[ $langinfo[CODESET] != (utf|UTF)(-|)8 ]] && _p9k_init_locale && { [[ -n $LC_ALL ]] && local LC_ALL=$__p9k_locale || local LC_CTYPE=$__p9k_locale; }''
+- [PARSER-FAIL] zsh-powerlevel10k (theme) zsh->posix command=`bash -n tests/corpus/.parser_check_zsh-powerlevel10k_93.sh` exit=2 message=tests/corpus/.parser_check_zsh-powerlevel10k_93.sh: line 472: syntax error near unexpected token `('
+tests/corpus/.parser_check_zsh-powerlevel10k_93.sh: line 472: `  typeset -gr __p9k_intro_locale='[[ $langinfo[CODESET] != (utf|UTF)(-|)8 ]] && _p9k_init_locale && { [[ -n $LC_ALL ]] && local LC_ALL=$__p9k_locale || local LC_CTYPE=$__p9k_locale; }''
  path=tests/corpus/repos/zsh/powerlevel10k/powerlevel10k.zsh-theme
 - [PARSER-FAIL] zsh-gnzh (theme) zsh->bash command=`bash -n tests/corpus/.parser_check_zsh-gnzh_103.bash` exit=2 message=tests/corpus/.parser_check_zsh-gnzh_103.bash: line 32: syntax error near unexpected token `('
 tests/corpus/.parser_check_zsh-gnzh_103.bash: line 32: `ZSH_THEME_VIRTUALENV_PREFIX="%F{red}("'
@@ -84,7 +84,7 @@ tests/corpus/.parser_check_zsh-gnzh_105.sh: line 247: `ZSH_THEME_VIRTUALENV_PREF
 
 ## Semantic Differential Checks
 
-Cases: 22, Passed: 20, Skipped: 0
+Cases: 22, Passed: 22, Skipped: 0
 
 ### Semantic Pair Summary
 
@@ -94,14 +94,14 @@ Cases: 22, Passed: 20, Skipped: 0
 | fish->posix | 1 | 1 | 0 | 0 |
 | fish->zsh | 1 | 1 | 0 | 0 |
 | zsh->fish | 4 | 4 | 0 | 0 |
-| zsh->bash | 3 | 2 | 1 | 0 |
+| zsh->bash | 3 | 3 | 0 | 0 |
 | zsh->posix | 1 | 1 | 0 | 0 |
 | bash->fish | 3 | 3 | 0 | 0 |
 | bash->zsh | 1 | 1 | 0 | 0 |
 | posix->fish | 1 | 1 | 0 | 0 |
 | posix->zsh | 1 | 1 | 0 | 0 |
 | posix->bash | 1 | 1 | 0 | 0 |
-| bash->posix | 1 | 0 | 1 | 0 |
+| bash->posix | 1 | 1 | 0 | 0 |
 
 - [PASS] fish_gitnow_branch_compare fish->bash exit=0 out="SAME"
 - [PASS] fish_list_index_bash fish->bash exit=0 out="two"
@@ -122,6 +122,6 @@ Cases: 22, Passed: 20, Skipped: 0
 - [PASS] posix_if_fish posix->fish exit=0 out="one"
 - [PASS] posix_default_zsh posix->zsh exit=0 out="alt"
 - [PASS] posix_case_bash posix->bash exit=0 out="match"
-- [FAIL] plugin_ohmyzsh_z_zsh_to_bash zsh->bash src_exit=0 dst_exit=0 src_out="HAVE_z" dst_out="" src_err="" dst_err="tests/corpus/.semantic_module_plugin_ohmyzsh_z_zsh_to_bash_dst.bash: line 1298: ${=ZSHZ[FUNCTIONS]}: bad substitution"
-- [FAIL] plugin_bashit_aliases_bash_to_posix bash->posix src_exit=0 dst_exit=0 src_out="HAVE_ALIAS_COMPLETION_CB" dst_out="" src_err="tests/corpus/.semantic_module_plugin_bashit_aliases_bash_to_posix_src.bash: line 2: about-plugin: command not found" dst_err=""
+- [PASS] plugin_ohmyzsh_z_zsh_to_bash zsh->bash exit=0 out="HAVE_z"
+- [PASS] plugin_bashit_aliases_bash_to_posix bash->posix exit=0 out="HAVE_ALIAS_COMPLETION_CB"
 - [PASS] plugin_fish_autopair_fish_to_bash fish->bash exit=0 out=""
