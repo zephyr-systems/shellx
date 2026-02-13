@@ -1669,6 +1669,11 @@ __shellx_zsh_expand() {
 		delete(out)
 		out = rewritten
 		changed_any = changed_any || changed
+
+		rewritten, changed = rewrite_fish_list_index_access(out, to, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
 	}
 
 	if to == .Bash || to == .POSIX || to == .Zsh {
@@ -3770,6 +3775,66 @@ rewrite_fish_to_posix_syntax :: proc(text: string, to: ShellDialect, allocator :
 	return result, changed_any
 }
 
+rewrite_fish_list_index_access :: proc(text: string, to: ShellDialect, allocator := context.allocator) -> (string, bool) {
+	if text == "" || !(to == .Bash || to == .POSIX) {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	i := 0
+	for i < len(text) {
+		if text[i] == '$' && i+1 < len(text) && is_basic_name_char(text[i+1]) {
+			name_start := i + 1
+			name_end := name_start
+			for name_end < len(text) && is_basic_name_char(text[name_end]) {
+				name_end += 1
+			}
+
+			if name_end < len(text) && text[name_end] == '[' {
+				idx_start := name_end + 1
+				idx_end := idx_start
+				for idx_end < len(text) && text[idx_end] >= '0' && text[idx_end] <= '9' {
+					idx_end += 1
+				}
+				if idx_end > idx_start && idx_end < len(text) && text[idx_end] == ']' {
+					name := text[name_start:name_end]
+					index_text := text[idx_start:idx_end]
+					if to == .Bash {
+						idx := 0
+						for ch in index_text {
+							idx = idx*10 + int(ch-'0')
+						}
+						if idx > 0 {
+							idx -= 1
+						}
+						idx_str := fmt.tprintf("%d", idx)
+						repl := strings.concatenate([]string{"${", name, "[", idx_str, "]}"}, allocator)
+						strings.write_string(&builder, repl)
+						delete(repl)
+					} else {
+						repl := fmt.tprintf("$(__shellx_list_get %s %s)", name, index_text)
+						strings.write_string(&builder, repl)
+					}
+					changed = true
+					i = idx_end + 1
+					continue
+				}
+			}
+		}
+
+		strings.write_byte(&builder, text[i])
+		i += 1
+	}
+
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
 fix_fish_command_substitution :: proc(text: string, allocator := context.allocator) -> (string, bool) {
 	if text == "" {
 		return strings.clone(text, allocator), false
@@ -3782,6 +3847,17 @@ fix_fish_command_substitution :: proc(text: string, allocator := context.allocat
 	i := 0
 	for i < len(text) {
 		if text[i] == '(' && (i == 0 || text[i-1] != '$') {
+			// Keep shell array literals like `name=(a b)` intact.
+			prev := i - 1
+			for prev >= 0 && (text[prev] == ' ' || text[prev] == '\t') {
+				prev -= 1
+			}
+			if prev >= 0 && text[prev] == '=' {
+				strings.write_byte(&builder, text[i])
+				i += 1
+				continue
+			}
+
 			depth := 1
 			j := i + 1
 			for j < len(text) {

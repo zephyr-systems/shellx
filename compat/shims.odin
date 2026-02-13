@@ -282,6 +282,14 @@ __shellx_list_join() {
     printf " %s" "$_it"
   done
 }
+
+__shellx_list_get() {
+  _zx_name="$1"
+  _zx_idx="$2"
+  eval "_zx_vals=\${$_zx_name}"
+  set -- $_zx_vals
+  eval "printf '%s' \"\${$_zx_idx}\""
+}
 `)
 	}
 	return ""

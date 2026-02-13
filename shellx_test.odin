@@ -54,6 +54,92 @@ parser_check_snippet :: proc(
 	testing.expect(t, state.exit_code == 0, fmt.tprintf("Parser should accept rewritten output: %s", string(stderr)))
 }
 
+has_shell_binary_for_runtime_test :: proc(bin: string) -> bool {
+	desc := os2.Process_Desc{command = []string{"sh", "-lc", fmt.tprintf("command -v %s >/dev/null 2>&1", bin)}}
+	state, _, _, err := os2.process_exec(desc, context.temp_allocator)
+	return err == nil && state.exit_code == 0
+}
+
+target_shell_runtime_cmd :: proc(target: ShellDialect) -> (string, bool) {
+	switch target {
+	case .Bash:
+		if !has_shell_binary_for_runtime_test("bash") { return "", false }
+		return "bash", true
+	case .Zsh:
+		if !has_shell_binary_for_runtime_test("zsh") { return "", false }
+		return "zsh", true
+	case .Fish:
+		if !has_shell_binary_for_runtime_test("fish") { return "", false }
+		return "fish", true
+	case .POSIX:
+		if !has_shell_binary_for_runtime_test("sh") { return "", false }
+		return "sh", true
+	}
+	return "", false
+}
+
+runtime_file_ext_for_dialect :: proc(target: ShellDialect) -> string {
+	switch target {
+	case .Fish:
+		return "fish"
+	case .Zsh:
+		return "zsh"
+	case .Bash:
+		return "bash"
+	case .POSIX:
+		return "sh"
+	}
+	return "sh"
+}
+
+run_translated_script_runtime :: proc(
+	t: ^testing.T,
+	source: string,
+	from: ShellDialect,
+	to: ShellDialect,
+	test_name: string,
+) -> (stdout: string, ok: bool) {
+	shell_bin, shell_ok := target_shell_runtime_cmd(to)
+	if !shell_ok {
+		return "", false
+	}
+
+	opts := DEFAULT_TRANSLATION_OPTIONS
+	opts.insert_shims = true
+	opts.source_name = test_name
+
+	tr := translate(source, from, to, opts)
+	defer destroy_translation_result(&tr)
+	testing.expect(t, tr.success, "Translation should succeed")
+	if !tr.success {
+		return "", false
+	}
+
+	tmp_path := fmt.tprintf("/tmp/shellx_sem_%s.%s", test_name, runtime_file_ext_for_dialect(to))
+	write_ok := os.write_entire_file(tmp_path, transmute([]byte)tr.output)
+	testing.expect(t, write_ok, "Translated output should be writable")
+	if !write_ok {
+		return "", false
+	}
+	defer os.remove(tmp_path)
+
+	cmd := make([dynamic]string, 0, 3, context.temp_allocator)
+	defer delete(cmd)
+	append(&cmd, shell_bin)
+	append(&cmd, tmp_path)
+
+	state, out, err_out, err := os2.process_exec(os2.Process_Desc{command = cmd[:]}, context.temp_allocator)
+	if err != nil {
+		testing.expect(t, false, "Runtime shell should execute translated script")
+		return "", false
+	}
+	if state.exit_code != 0 {
+		testing.expect(t, false, fmt.tprintf("Translated script exited non-zero: %d stderr=%s", state.exit_code, string(err_out)))
+		return "", false
+	}
+	return strings.trim_space(string(out)), true
+}
+
 // Test: Simple variable assignment
 @(test)
 test_variable_assignment :: proc(t: ^testing.T) {
@@ -696,4 +782,59 @@ test_golden_parse_hardening_keeps_multiline_if_balance :: proc(t: ^testing.T) {
 
 	testing.expect(t, strings.contains(output, "fi"), "Should preserve fi in multiline if blocks")
 	parser_check_snippet(t, output, .Bash, "multiline_if_balance")
+}
+
+@(test)
+test_semantic_array_list_fish_to_bash_runtime :: proc(t: ^testing.T) {
+	if !should_run_test("test_semantic_array_list_fish_to_bash_runtime") { return }
+	source := `set arr one two three
+echo $arr[2]`
+	out, ok := run_translated_script_runtime(t, source, .Fish, .Bash, "array_list_fish_to_bash_runtime")
+	if !ok { return }
+	testing.expect(t, out == "two", "Fish list indexing should preserve semantic value in Bash output")
+}
+
+@(test)
+test_semantic_assoc_map_zsh_to_bash_runtime :: proc(t: ^testing.T) {
+	if !should_run_test("test_semantic_assoc_map_zsh_to_bash_runtime") { return }
+	source := `typeset -A m
+m[foo]=bar
+echo ${m[foo]}`
+	out, ok := run_translated_script_runtime(t, source, .Zsh, .Bash, "assoc_map_zsh_to_bash_runtime")
+	if !ok { return }
+	testing.expect(t, out == "bar", "Associative map lookup should preserve semantic value")
+}
+
+@(test)
+test_semantic_hook_precmd_zsh_to_bash_runtime :: proc(t: ^testing.T) {
+	if !should_run_test("test_semantic_hook_precmd_zsh_to_bash_runtime") { return }
+	source := `my_precmd() { echo hook; }
+add-zsh-hook precmd my_precmd
+__shellx_run_precmd`
+	out, ok := run_translated_script_runtime(t, source, .Zsh, .Bash, "hook_precmd_zsh_to_bash_runtime")
+	if !ok { return }
+	testing.expect(t, out == "hook", "Hook registration shim should dispatch precmd function")
+}
+
+@(test)
+test_semantic_condition_string_match_fish_to_bash_runtime :: proc(t: ^testing.T) {
+	if !should_run_test("test_semantic_condition_string_match_fish_to_bash_runtime") { return }
+	source := `set x foobar
+if string match -q 'foo*' $x
+	echo ok
+end`
+	out, ok := run_translated_script_runtime(t, source, .Fish, .Bash, "condition_string_match_fish_to_bash_runtime")
+	if !ok { return }
+	testing.expect(t, out == "ok", "Fish string-match condition should preserve truth semantics")
+}
+
+@(test)
+test_semantic_param_modifiers_zsh_to_bash_runtime :: proc(t: ^testing.T) {
+	if !should_run_test("test_semantic_param_modifiers_zsh_to_bash_runtime") { return }
+	source := `name=HeLLo
+echo ${name:l}
+echo ${name:u}`
+	out, ok := run_translated_script_runtime(t, source, .Zsh, .Bash, "param_modifiers_zsh_to_bash_runtime")
+	if !ok { return }
+	testing.expect(t, out == "hello\nHELLO", "Zsh lower/upper parameter modifiers should preserve output semantics in Bash")
 }
