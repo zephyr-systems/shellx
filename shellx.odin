@@ -194,7 +194,16 @@ translate :: proc(
 		emitted_parse_warns := 0
 		parse_lines := strings.split_lines(parse_source)
 		defer delete(parse_lines)
+		seen_parse_diags := make(map[string]bool, context.temp_allocator)
+		defer delete(seen_parse_diags)
 		for diag in parse_diags {
+			key := fmt.tprintf("%d:%d:%s", diag.location.line, diag.location.column, diag.message)
+			if seen_parse_diags[key] {
+				omitted_parse_warns += 1
+				continue
+			}
+			seen_parse_diags[key] = true
+
 			if from == .Zsh && to != .Zsh {
 				line_text := ""
 				if diag.location.line >= 1 && diag.location.line <= len(parse_lines) {
