@@ -884,7 +884,7 @@ test_normalize_zsh_preparse_local_cmdsubs :: proc(t: ^testing.T) {
 test_normalize_zsh_preparse_syntax :: proc(t: ^testing.T) {
 	if !should_run_test("test_normalize_zsh_preparse_syntax") { return }
 
-	input := "for x in ${(@Pk)1}; do :; done\nv=${(Pkv)match_array}\nif [[ -n ${(M)@:#-*} ]]; then :; fi\n(( ${+ZSHZ_DEBUG} )) && () { :; }\n"
+	input := "for x in ${(@Pk)1}; do :; done\nv=${(Pkv)match_array}\nif [[ -n ${(M)@:#-*} ]]; then :; fi\n(( ${+ZSHZ_DEBUG} )) && () { :; }\n'builtin' 'local' '-a' '__p9k_src_opts'\n'builtin' 'setopt' 'no_aliases' 'no_sh_glob' 'brace_expand'\n'builtin' 'unset' '__p9k_src_opts'\n"
 	output, changed := normalize_zsh_preparse_syntax(input)
 	defer delete(output)
 
@@ -892,7 +892,45 @@ test_normalize_zsh_preparse_syntax :: proc(t: ^testing.T) {
 	testing.expect(t, !strings.contains(output, "(@Pk)"), "Should remove (@Pk) preparse token")
 	testing.expect(t, !strings.contains(output, "(Pkv)"), "Should remove (Pkv) preparse token")
 	testing.expect(t, !strings.contains(output, "(M)@:#"), "Should remove (M)@:# preparse token")
+	testing.expect(t, !strings.contains(output, "'builtin' 'local'"), "Should normalize quoted builtin local preparse signature")
+	testing.expect(t, !strings.contains(output, "'builtin' 'setopt'"), "Should normalize quoted builtin setopt preparse signature")
+	testing.expect(t, !strings.contains(output, "'builtin' 'unset'"), "Should normalize quoted builtin unset preparse signature")
+	testing.expect(t, !strings.contains(output, "builtin local -a __p9k_src_opts"), "Quoted builtin local should be neutralized for preparse")
+	testing.expect(t, !strings.contains(output, "builtin setopt no_aliases no_sh_glob brace_expand"), "Quoted builtin setopt should be neutralized for preparse")
+	testing.expect(t, !strings.contains(output, "builtin unset __p9k_src_opts"), "Quoted builtin unset should be neutralized for preparse")
+	testing.expect(t, strings.contains(output, "\n:\n"), "Powerlevel10k quoted builtin preparse lines should be replaced with no-op statements")
 	testing.expect(t, strings.contains(output, "&& {") || strings.contains(output, "if [[ -n ${ZSHZ_DEBUG} ]]; then"), "Should normalize inline anonymous function opener")
+}
+
+@(test)
+test_normalize_zsh_preparse_parser_safety_plus_probes :: proc(t: ^testing.T) {
+	if !should_run_test("test_normalize_zsh_preparse_parser_safety_plus_probes") { return }
+
+	input := "'builtin' 'local' '-a' '__p9k_src_opts'\n(( $+__p9k_root_dir )) || typeset -gr __p9k_root_dir=${POWERLEVEL9K_INSTALLATION_DIR:-${${(%):-%x}:A:h}}\nif (( ! $+__p9k_locale )); then\n  (( $+commands[locale] )) || return\nfi\n(( $+functions[_p9k_setup] )) && _p9k_setup\n"
+	output, changed := normalize_zsh_preparse_parser_safety(input)
+	defer delete(output)
+
+	testing.expect(t, changed, "Parser safety pre-normalization should rewrite zsh $+ probes and unsupported nested defaults")
+	testing.expect(t, !strings.contains(output, "$+__p9k_root_dir"), "Variable probe should be rewritten for parser safety")
+	testing.expect(t, !strings.contains(output, "$+__p9k_locale"), "Negated variable probe should be rewritten for parser safety")
+	testing.expect(t, !strings.contains(output, "$+commands[locale]"), "Indexed commands probe should be rewritten for parser safety")
+	testing.expect(t, !strings.contains(output, "$+functions[_p9k_setup]"), "Functions probe should be rewritten for parser safety")
+	testing.expect(t, !strings.contains(output, "${POWERLEVEL9K_INSTALLATION_DIR:-${${(%):-%x}:A:h}}"), "Nested default expansion should be rewritten for parser safety")
+	testing.expect(t, strings.contains(output, "[ -n \"${commands[locale]+1}\" ] || return"), "Indexed command probe should become parser-safe test")
+	testing.expect(t, strings.contains(output, "[ -n \"${functions[_p9k_setup]+1}\" ] && _p9k_setup"), "Function probe should become parser-safe test")
+	testing.expect(t, strings.contains(output, "if [ -z \"${__p9k_locale+1}\" ]; then"), "Negated probe should become parser-safe if test")
+	testing.expect(t, strings.contains(output, "__p9k_root_dir=$POWERLEVEL9K_INSTALLATION_DIR"), "Powerlevel10k root dir assignment should use parser-safe fallback expression")
+
+	fe := frontend.create_frontend(.Zsh)
+	defer frontend.destroy_frontend(&fe)
+	tree, parse_err := frontend.parse(&fe, output)
+	testing.expect(t, parse_err.error == .None && tree != nil, "Normalized parser-safety output should parse in zsh frontend")
+	if parse_err.error == .None && tree != nil {
+		defer frontend.destroy_tree(tree)
+		diags := frontend.collect_parse_diagnostics(tree, output, "<input>")
+		defer delete(diags)
+		testing.expect(t, len(diags) == 0, fmt.tprintf("Expected no zsh frontend parse diagnostics after parser-safety normalization, got %d", len(diags)))
+	}
 }
 
 @(test)

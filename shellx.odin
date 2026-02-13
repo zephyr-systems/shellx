@@ -134,6 +134,18 @@ translate :: proc(
 				delete(normalized_zsh)
 			}
 		}
+		if to == .POSIX {
+			normalized_posix, changed_posix := normalize_zsh_preparse_parser_safety(parse_source, context.allocator)
+			if changed_posix {
+				if parse_source_allocated {
+					delete(parse_source)
+				}
+				parse_source = normalized_posix
+				parse_source_allocated = true
+			} else {
+				delete(normalized_posix)
+			}
+		}
 	}
 	if from == .Bash && to == .Fish {
 		normalized, changed := normalize_bash_preparse_array_literals(parse_source, context.allocator)
@@ -2186,6 +2198,27 @@ normalize_zsh_preparse_syntax :: proc(text: string, allocator := context.allocat
 	out, changed = replace_with_flag(out, "|| () {", "|| {", changed, allocator)
 	out, changed = replace_with_flag(
 		out,
+		"'builtin' 'local' '-a' '__p9k_src_opts'",
+		":",
+		changed,
+		allocator,
+	)
+	out, changed = replace_with_flag(
+		out,
+		"'builtin' 'setopt' 'no_aliases' 'no_sh_glob' 'brace_expand'",
+		":",
+		changed,
+		allocator,
+	)
+	out, changed = replace_with_flag(
+		out,
+		"'builtin' 'unset' '__p9k_src_opts'",
+		":",
+		changed,
+		allocator,
+	)
+	out, changed = replace_with_flag(
+		out,
 		"git_version=\"${${(As: :)$(git version 2>/dev/null)}[3]}\"",
 		"git_version=\"$(git version 2>/dev/null | cut -d' ' -f3)\"",
 		changed,
@@ -2458,6 +2491,155 @@ normalize_zsh_preparse_syntax :: proc(text: string, allocator := context.allocat
 		return out, false
 	}
 	return out, true
+}
+
+normalize_zsh_preparse_parser_safety :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	out := strings.clone(text, allocator)
+	changed := false
+
+	out, changed = replace_with_flag(
+		out,
+		"'builtin' 'local' '-a' '__p9k_src_opts'",
+		":",
+		changed,
+		allocator,
+	)
+	out, changed = replace_with_flag(
+		out,
+		"'builtin' 'setopt' 'no_aliases' 'no_sh_glob' 'brace_expand'",
+		":",
+		changed,
+		allocator,
+	)
+	out, changed = replace_with_flag(
+		out,
+		"'builtin' 'unset' '__p9k_src_opts'",
+		":",
+		changed,
+		allocator,
+	)
+	out, changed = replace_with_flag(
+		out,
+		"${POWERLEVEL9K_INSTALLATION_DIR:-${${(%):-%x}:A:h}}",
+		"$POWERLEVEL9K_INSTALLATION_DIR",
+		changed,
+		allocator,
+	)
+	rewritten, rewritten_changed := rewrite_zsh_preparse_plus_probes_for_parser(out, changed, allocator)
+	delete(out)
+	out = rewritten
+	changed = rewritten_changed
+
+	return out, changed
+}
+
+rewrite_zsh_preparse_plus_probes_for_parser :: proc(
+	text: string,
+	changed: bool,
+	allocator := context.allocator,
+) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), changed
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	any_changed := changed
+	for line, i in lines {
+		out_line, line_changed := rewrite_zsh_plus_probe_line_for_parser(line, allocator)
+		if line_changed {
+			any_changed = true
+		}
+		strings.write_string(&builder, out_line)
+		delete(out_line)
+		if i+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+
+	return strings.clone(strings.to_string(builder), allocator), any_changed
+}
+
+rewrite_zsh_plus_probe_line_for_parser :: proc(line: string, allocator := context.allocator) -> (string, bool) {
+	out := strings.clone(line, allocator)
+	changed := false
+
+	cursor := 0
+	for cursor < len(out) {
+		open_rel := find_substring(out[cursor:], "((")
+		if open_rel < 0 {
+			break
+		}
+		open_idx := cursor + open_rel
+		close_rel := find_substring(out[open_idx+2:], "))")
+		if close_rel < 0 {
+			break
+		}
+		close_idx := open_idx + 2 + close_rel
+		inner := strings.trim_space(out[open_idx+2 : close_idx])
+		negated := false
+		if strings.has_prefix(inner, "!") {
+			negated = true
+			inner = strings.trim_space(inner[1:])
+		}
+		if !strings.has_prefix(inner, "$+") {
+			cursor = close_idx + 2
+			continue
+		}
+
+		target := strings.trim_space(inner[2:])
+		if !is_zsh_plus_probe_target(target) {
+			cursor = close_idx + 2
+			continue
+		}
+
+		test_expr := ""
+		if negated {
+			test_expr = strings.concatenate([]string{"[ -z \"${", target, "+1}\" ]"}, allocator)
+		} else {
+			test_expr = strings.concatenate([]string{"[ -n \"${", target, "+1}\" ]"}, allocator)
+		}
+		next := strings.concatenate([]string{out[:open_idx], test_expr, out[close_idx+2:]}, allocator)
+		delete(test_expr)
+		delete(out)
+		out = next
+		changed = true
+		cursor = open_idx + 1
+	}
+
+	return out, changed
+}
+
+is_zsh_plus_probe_target :: proc(s: string) -> bool {
+	target := strings.trim_space(s)
+	if target == "" || strings.contains(target, " ") || strings.contains(target, "\t") {
+		return false
+	}
+
+	open_idx := find_substring(target, "[")
+	if open_idx < 0 {
+		return is_basic_name(target)
+	}
+	if !strings.has_suffix(target, "]") || open_idx == 0 {
+		return false
+	}
+	name := strings.trim_space(target[:open_idx])
+	index := strings.trim_space(target[open_idx+1 : len(target)-1])
+	if !is_basic_name(name) || index == "" {
+		return false
+	}
+	if strings.contains(index, " ") || strings.contains(index, "\t") {
+		return false
+	}
+	if strings.contains(index, "\"") || strings.contains(index, "'") {
+		return false
+	}
+	if strings.contains(index, "$(") || strings.contains(index, "`") {
+		return false
+	}
+	return true
 }
 
 normalize_bash_preparse_array_literals :: proc(text: string, allocator := context.allocator) -> (string, bool) {
@@ -5439,6 +5621,19 @@ normalize_fish_artifacts :: proc(text: string, allocator := context.allocator) -
 			trimmed = strings.trim_space(out)
 		}
 		if strings.has_prefix(trimmed, "builtin print ") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			delete(out)
+			out = strings.concatenate([]string{indent, ":"}, allocator)
+			changed = true
+			trimmed = strings.trim_space(out)
+		}
+		if strings.has_prefix(trimmed, "builtin local ") ||
+			strings.has_prefix(trimmed, "builtin setopt ") ||
+			strings.has_prefix(trimmed, "builtin unset ") {
 			indent_len := len(line) - len(strings.trim_left_space(line))
 			indent := ""
 			if indent_len > 0 {

@@ -16,7 +16,7 @@ Cross-dialect runs executed: 126
 | fish->zsh | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 0 | 1.140 | 5.827 | 11 |
 | zsh->bash | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 0 | 0.822 | 2.050 | 4 |
 | zsh->fish | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 0 | 2.101 | 10.386 | 15 |
-| zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 2 | 0 | 2.139 | 9.386 | 14 |
+| zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 0 | 2.139 | 9.442 | 14 |
 
 ## Failures
 
@@ -57,12 +57,6 @@ Cross-dialect runs executed: 126
 
 - `parse_recovery/parse_diagnostic`: 1
   - fish-autopair (plugin) Parse diagnostic at <input>:1:1: Parse tree contains syntax errors
-
-### zsh->posix
-
-- `parse_recovery/parse_diagnostic`: 2
-  - zsh-powerlevel10k (theme) Parse diagnostic at <input>:14:1: Syntax error
-  - zsh-powerlevel10k (theme) Parse diagnostic at <input>:0:0: 3 additional diagnostics suppressed
 
 ## Semantic Parity Matrix
 
