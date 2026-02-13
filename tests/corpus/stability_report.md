@@ -34,9 +34,9 @@ tests/corpus/.parser_check_zsh-autosuggestions_3.sh: line 717: `}'
 - [FAIL] zsh-syntax-highlighting (plugin) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=7(parse=6 compat=1) shims=1 src_fn=9 out_fn=14 msg= parser_msg=tests/corpus/.parser_check_zsh-syntax-highlighting_4.bash: line 158: syntax error near unexpected token `}'
 tests/corpus/.parser_check_zsh-syntax-highlighting_4.bash: line 158: `}'
  path=tests/corpus/repos/zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-- [FAIL] zsh-syntax-highlighting (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=12(parse=6 compat=6) shims=6 src_fn=9 out_fn=19 msg= parser_msg=tests/corpus/.parser_check_zsh-syntax-highlighting_5.fish (line 173): Expected a command, but found end of the statement
-	    zmodload zsh/zleparameter 2>/dev/null; or 
-	                                              ^
+- [FAIL] zsh-syntax-highlighting (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=12(parse=6 compat=6) shims=6 src_fn=9 out_fn=19 msg= parser_msg=tests/corpus/.parser_check_zsh-syntax-highlighting_5.fish (line 298): Missing end to balance this switch statement
+    switch $region_highlight
+    ^~~~~^
 warning: Error while reading file tests/corpus/.parser_check_zsh-syntax-highlighting_5.fish
  path=tests/corpus/repos/zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 - [FAIL] zsh-syntax-highlighting (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=9(parse=6 compat=3) shims=3 src_fn=9 out_fn=7 msg= parser_msg=tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 100: syntax error near unexpected token `}'
@@ -50,9 +50,9 @@ warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-git_8.fish
 - [FAIL] ohmyzsh-z (plugin) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=15(parse=14 compat=1) shims=1 src_fn=14 out_fn=14 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-z_10.bash: line 422: syntax error near unexpected token `done'
 tests/corpus/.parser_check_ohmyzsh-z_10.bash: line 422: `        done'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
-- [FAIL] ohmyzsh-z (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=20(parse=14 compat=6) shims=6 src_fn=14 out_fn=24 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-z_11.fish (line 116): Unexpected '}' for unopened brace
-	  test  -f $datafile ; or  mkdir -p "$datafile"; and touch "$datafile" }
-	                                                                       ^
+- [FAIL] ohmyzsh-z (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=20(parse=14 compat=6) shims=6 src_fn=14 out_fn=24 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-z_11.fish (line 367): Expected end of the statement, but found an incomplete token
+	        case descending_list=( ""
+	                             ^
 warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-z_11.fish
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
 - [FAIL] ohmyzsh-z (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=17(parse=14 compat=3) shims=3 src_fn=14 out_fn=13 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-z_12.sh: line 242: syntax error near unexpected token `done'
@@ -77,9 +77,9 @@ tests/corpus/.parser_check_ohmyzsh-sudo_18.sh: line 65: `	    if [[ "$realcmd" =
 - [FAIL] ohmyzsh-extract (plugin) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=1 compat=0) shims=0 src_fn=0 out_fn=1 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-extract_19.bash: line 56: syntax error near unexpected token `newline'
 tests/corpus/.parser_check_ohmyzsh-extract_19.bash: line 56: `      *.tar.gz|      *.tgz'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/extract/extract.plugin.zsh
-- [FAIL] ohmyzsh-extract (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=4(parse=1 compat=3) shims=3 src_fn=0 out_fn=6 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-extract_20.fish (line 88): Expected a command, but found end of the statement
-        true; and  tar -I pixz -xvf "$full_path" ; or 
-                                                      ^
+- [FAIL] ohmyzsh-extract (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=4(parse=1 compat=3) shims=3 src_fn=0 out_fn=6 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-extract_20.fish (line 59): Missing end to balance this while loop
+  while true
+  ^~~~^
 warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-extract_20.fish
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/extract/extract.plugin.zsh
 - [FAIL] ohmyzsh-extract (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=2(parse=1 compat=1) shims=1 src_fn=0 out_fn=1 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-extract_21.sh: line 52: syntax error near unexpected token `newline'
@@ -125,11 +125,10 @@ tests/corpus/.parser_check_fish-replay_75.sh: line 51: `}'
 - [FAIL] fish-autopair (plugin) fish->posix translate=true parse=true parser=false/true exit=2 err=None warnings=2(parse=1 compat=1) shims=1 src_fn=2 out_fn=4 msg= parser_msg=tests/corpus/.parser_check_fish-autopair_81.sh: line 54: syntax error near unexpected token `('
 tests/corpus/.parser_check_fish-autopair_81.sh: line 54: `autopair_pairs=""()" "[]" "{}" '""' "''""'
  path=tests/corpus/repos/fish/autopair.fish/conf.d/autopair.fish
-- [FAIL] zsh-powerlevel10k (theme) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=8(parse=4 compat=4) shims=4 src_fn=1 out_fn=7 msg= parser_msg=tests/corpus/.parser_check_zsh-powerlevel10k_92.fish (line 73): Expected a command, but found end of the statement
-true; or 
-         ^
-warning: Error while reading file tests/corpus/.parser_check_zsh-powerlevel10k_92.fish
- path=tests/corpus/repos/zsh/powerlevel10k/powerlevel10k.zsh-theme
+- [FAIL] zsh-powerlevel10k (theme) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=8(parse=4 compat=4) shims=4 src_fn=1 out_fn=7 msg= parser_msg=tests/corpus/.parser_check_zsh-powerlevel10k_92.fish (line 102): Expected end of the statement, but found an incomplete token
+      for f in $__p9k_root_dir/{powerlevel9k.zsh-theme,powerlevel10k.zsh-theme,internal/p10k.zsh,internal/icons.zsh,internal/configure.zsh,internal/worker.zsh,internal/parser.zsh,gitstatus/gitstatus.plugin.zsh,gitstatus/install
+                               ^
+warning: Erro path=tests/corpus/repos/zsh/powerlevel10k/powerlevel10k.zsh-theme
 - [FAIL] zsh-agnoster (theme) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=1 compat=0) shims=0 src_fn=14 out_fn=8 msg= parser_msg=tests/corpus/.parser_check_zsh-agnoster_94.bash: line 384: syntax error near unexpected token `fi'
 tests/corpus/.parser_check_zsh-agnoster_94.bash: line 384: `fi'
  path=tests/corpus/repos/zsh/ohmyzsh/themes/agnoster.zsh-theme
@@ -189,9 +188,9 @@ tests/corpus/.parser_check_zsh-autosuggestions_3.sh: line 717: `}'
 - [PARSER-FAIL] zsh-syntax-highlighting (plugin) zsh->bash command=`bash -n tests/corpus/.parser_check_zsh-syntax-highlighting_4.bash` exit=2 message=tests/corpus/.parser_check_zsh-syntax-highlighting_4.bash: line 158: syntax error near unexpected token `}'
 tests/corpus/.parser_check_zsh-syntax-highlighting_4.bash: line 158: `}'
  path=tests/corpus/repos/zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-- [PARSER-FAIL] zsh-syntax-highlighting (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_zsh-syntax-highlighting_5.fish` exit=127 message=tests/corpus/.parser_check_zsh-syntax-highlighting_5.fish (line 173): Expected a command, but found end of the statement
-	    zmodload zsh/zleparameter 2>/dev/null; or 
-	                                              ^
+- [PARSER-FAIL] zsh-syntax-highlighting (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_zsh-syntax-highlighting_5.fish` exit=127 message=tests/corpus/.parser_check_zsh-syntax-highlighting_5.fish (line 298): Missing end to balance this switch statement
+    switch $region_highlight
+    ^~~~~^
 warning: Error while reading file tests/corpus/.parser_check_zsh-syntax-highlighting_5.fish
  path=tests/corpus/repos/zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 - [PARSER-FAIL] zsh-syntax-highlighting (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh` exit=2 message=tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 100: syntax error near unexpected token `}'
@@ -205,9 +204,9 @@ warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-git_8.fish
 - [PARSER-FAIL] ohmyzsh-z (plugin) zsh->bash command=`bash -n tests/corpus/.parser_check_ohmyzsh-z_10.bash` exit=2 message=tests/corpus/.parser_check_ohmyzsh-z_10.bash: line 422: syntax error near unexpected token `done'
 tests/corpus/.parser_check_ohmyzsh-z_10.bash: line 422: `        done'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
-- [PARSER-FAIL] ohmyzsh-z (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-z_11.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-z_11.fish (line 116): Unexpected '}' for unopened brace
-	  test  -f $datafile ; or  mkdir -p "$datafile"; and touch "$datafile" }
-	                                                                       ^
+- [PARSER-FAIL] ohmyzsh-z (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-z_11.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-z_11.fish (line 367): Expected end of the statement, but found an incomplete token
+	        case descending_list=( ""
+	                             ^
 warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-z_11.fish
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
 - [PARSER-FAIL] ohmyzsh-z (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-z_12.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-z_12.sh: line 242: syntax error near unexpected token `done'
@@ -232,9 +231,9 @@ tests/corpus/.parser_check_ohmyzsh-sudo_18.sh: line 65: `	    if [[ "$realcmd" =
 - [PARSER-FAIL] ohmyzsh-extract (plugin) zsh->bash command=`bash -n tests/corpus/.parser_check_ohmyzsh-extract_19.bash` exit=2 message=tests/corpus/.parser_check_ohmyzsh-extract_19.bash: line 56: syntax error near unexpected token `newline'
 tests/corpus/.parser_check_ohmyzsh-extract_19.bash: line 56: `      *.tar.gz|      *.tgz'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/extract/extract.plugin.zsh
-- [PARSER-FAIL] ohmyzsh-extract (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-extract_20.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-extract_20.fish (line 88): Expected a command, but found end of the statement
-        true; and  tar -I pixz -xvf "$full_path" ; or 
-                                                      ^
+- [PARSER-FAIL] ohmyzsh-extract (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-extract_20.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-extract_20.fish (line 59): Missing end to balance this while loop
+  while true
+  ^~~~^
 warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-extract_20.fish
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/extract/extract.plugin.zsh
 - [PARSER-FAIL] ohmyzsh-extract (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-extract_21.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-extract_21.sh: line 52: syntax error near unexpected token `newline'
@@ -280,11 +279,10 @@ tests/corpus/.parser_check_fish-replay_75.sh: line 51: `}'
 - [PARSER-FAIL] fish-autopair (plugin) fish->posix command=`bash -n tests/corpus/.parser_check_fish-autopair_81.sh` exit=2 message=tests/corpus/.parser_check_fish-autopair_81.sh: line 54: syntax error near unexpected token `('
 tests/corpus/.parser_check_fish-autopair_81.sh: line 54: `autopair_pairs=""()" "[]" "{}" '""' "''""'
  path=tests/corpus/repos/fish/autopair.fish/conf.d/autopair.fish
-- [PARSER-FAIL] zsh-powerlevel10k (theme) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_zsh-powerlevel10k_92.fish` exit=127 message=tests/corpus/.parser_check_zsh-powerlevel10k_92.fish (line 73): Expected a command, but found end of the statement
-true; or 
-         ^
-warning: Error while reading file tests/corpus/.parser_check_zsh-powerlevel10k_92.fish
- path=tests/corpus/repos/zsh/powerlevel10k/powerlevel10k.zsh-theme
+- [PARSER-FAIL] zsh-powerlevel10k (theme) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_zsh-powerlevel10k_92.fish` exit=127 message=tests/corpus/.parser_check_zsh-powerlevel10k_92.fish (line 102): Expected end of the statement, but found an incomplete token
+      for f in $__p9k_root_dir/{powerlevel9k.zsh-theme,powerlevel10k.zsh-theme,internal/p10k.zsh,internal/icons.zsh,internal/configure.zsh,internal/worker.zsh,internal/parser.zsh,gitstatus/gitstatus.plugin.zsh,gitstatus/install
+                               ^
+warning: Erro path=tests/corpus/repos/zsh/powerlevel10k/powerlevel10k.zsh-theme
 - [PARSER-FAIL] zsh-agnoster (theme) zsh->bash command=`bash -n tests/corpus/.parser_check_zsh-agnoster_94.bash` exit=2 message=tests/corpus/.parser_check_zsh-agnoster_94.bash: line 384: syntax error near unexpected token `fi'
 tests/corpus/.parser_check_zsh-agnoster_94.bash: line 384: `fi'
  path=tests/corpus/repos/zsh/ohmyzsh/themes/agnoster.zsh-theme

@@ -1817,6 +1817,26 @@ normalize_fish_simple_assignments :: proc(text: string, allocator := context.all
 	return strings.clone(strings.to_string(builder), allocator), changed
 }
 
+count_unescaped_double_quotes :: proc(s: string) -> int {
+	count := 0
+	escaped := false
+	for i in 0 ..< len(s) {
+		c := s[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if c == '\\' {
+			escaped = true
+			continue
+		}
+		if c == '"' {
+			count += 1
+		}
+	}
+	return count
+}
+
 normalize_fish_artifacts :: proc(text: string, allocator := context.allocator) -> (string, bool) {
 	lines := strings.split_lines(text)
 	defer delete(lines)
@@ -1826,9 +1846,45 @@ normalize_fish_artifacts :: proc(text: string, allocator := context.allocator) -
 	builder := strings.builder_make()
 	defer strings.builder_destroy(&builder)
 	changed := false
+	in_print_pipe_quote_block := false
 	for line, idx in lines {
 		out := strings.clone(line, allocator)
 		trimmed := strings.trim_space(out)
+
+		if in_print_pipe_quote_block {
+			indent_len := len(out) - len(strings.trim_left_space(out))
+			indent := ""
+			if indent_len > 0 {
+				indent = out[:indent_len]
+			}
+			delete(out)
+			out = strings.concatenate([]string{indent, ":"}, allocator)
+			changed = true
+			if count_unescaped_double_quotes(line)%2 == 1 {
+				in_print_pipe_quote_block = false
+			}
+			strings.write_string(&builder, out)
+			delete(out)
+			if idx+1 < len(lines) {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
+
+		if strings.contains(trimmed, "print \"") && strings.contains(trimmed, "|") {
+			if count_unescaped_double_quotes(trimmed)%2 == 1 {
+				indent_len := len(out) - len(strings.trim_left_space(out))
+				indent := ""
+				if indent_len > 0 {
+					indent = out[:indent_len]
+				}
+				delete(out)
+				out = strings.concatenate([]string{indent, ":"}, allocator)
+				in_print_pipe_quote_block = true
+				changed = true
+			}
+		}
+
 		if strings.contains(trimmed, "exec {") {
 			indent_len := len(out) - len(strings.trim_left_space(out))
 			indent := ""
@@ -1880,6 +1936,31 @@ normalize_fish_artifacts :: proc(text: string, allocator := context.allocator) -
 			delete(repl)
 		}
 		trimmed = strings.trim_space(out)
+
+		if strings.has_suffix(trimmed, "; and") {
+			out = strings.concatenate([]string{out, " true"}, allocator)
+			changed = true
+			trimmed = strings.trim_space(out)
+		} else if strings.has_suffix(trimmed, "; or") {
+			out = strings.concatenate([]string{out, " true"}, allocator)
+			changed = true
+			trimmed = strings.trim_space(out)
+		}
+
+		if strings.contains(trimmed, "}") && !strings.contains(trimmed, "{") {
+			builder2 := strings.builder_make()
+			for i in 0 ..< len(out) {
+				if out[i] != '}' {
+					strings.write_byte(&builder2, out[i])
+				}
+			}
+			delete(out)
+			out = strings.clone(strings.to_string(builder2), allocator)
+			strings.builder_destroy(&builder2)
+			changed = true
+			trimmed = strings.trim_space(out)
+		}
+
 		if strings.has_prefix(trimmed, "set ") && strings.has_suffix(trimmed, "))") {
 			out = strings.trim_right_space(out)
 			out = out[:len(out)-2]
