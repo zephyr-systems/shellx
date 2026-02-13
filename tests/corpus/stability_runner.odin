@@ -64,6 +64,7 @@ CaseOutcome :: struct {
 	parser_command:    string,
 	parser_exit_code:  int,
 	parser_message:    string,
+	parser_artifact:   string,
 
 	source_len: int,
 	output_len: int,
@@ -421,13 +422,12 @@ run_target_parser_check :: proc(
 	target: shellx.ShellDialect,
 	case_name: string,
 	run_index: int,
-) -> (ran: bool, ok: bool, command: string, exit_code: int, message: string) {
+) -> (ran: bool, ok: bool, command: string, exit_code: int, message: string, artifact_path: string) {
 	temp_path := fmt.tprintf("tests/corpus/.parser_check_%s_%d.%s", case_name, run_index, file_ext_for_dialect(target))
 	write_ok := os.write_entire_file(temp_path, transmute([]byte)output_code)
 	if !write_ok {
-		return false, false, "", -1, "failed to write parser temp file"
+		return false, false, "", -1, "failed to write parser temp file", temp_path
 	}
-	defer os.remove(temp_path)
 
 	cmd := make([dynamic]string, 0, 3, context.temp_allocator)
 	defer delete(cmd)
@@ -439,7 +439,7 @@ run_target_parser_check :: proc(
 	case .Fish:
 		append(&cmd, "fish", "--no-execute", temp_path)
 	case:
-		return false, false, "", -1, "no parser command for target dialect"
+		return false, false, "", -1, "no parser command for target dialect", temp_path
 	}
 
 	command = strings.join(cmd[:], " ", context.temp_allocator)
@@ -448,18 +448,22 @@ run_target_parser_check :: proc(
 	defer delete(stderr)
 
 	if err != nil {
-		return false, false, command, -1, fmt.tprintf("parser execution error: %v", err)
+		return false, false, command, -1, fmt.tprintf("parser execution error: %v", err), temp_path
 	}
 
 	ran = true
 	ok = state.exit_code == 0
 	exit_code = state.exit_code
+	artifact_path = temp_path
 	if !ok {
 		err_text := string(stderr)
 		if len(err_text) > 400 {
 			err_text = err_text[:400]
 		}
 		message = strings.clone(err_text, context.allocator)
+	} else {
+		os.remove(temp_path)
+		artifact_path = ""
 	}
 	return
 }
@@ -782,7 +786,7 @@ main :: proc() {
 				}
 				frontend.destroy_frontend(&fe)
 
-				out.parser_ran, out.parser_success, out.parser_command, out.parser_exit_code, out.parser_message =
+				out.parser_ran, out.parser_success, out.parser_command, out.parser_exit_code, out.parser_message, out.parser_artifact =
 					run_target_parser_check(tr.output, to, c.name, total_runs)
 				if out.parser_ran {
 					summary.parser_matrix_ran += 1
@@ -907,7 +911,7 @@ main :: proc() {
 		strings.write_string(
 			&report,
 			fmt.tprintf(
-				"- [FAIL] %s (%s) %s->%s translate=%v parse=%v parser=%v/%v exit=%d err=%v warnings=%d(parse=%d compat=%d) shims=%d src_fn=%d out_fn=%d msg=%s parser_msg=%s path=%s\n",
+				"- [FAIL] %s (%s) %s->%s translate=%v parse=%v parser=%v/%v exit=%d err=%v warnings=%d(parse=%d compat=%d) shims=%d src_fn=%d out_fn=%d msg=%s parser_msg=%s parser_artifact=%s path=%s\n",
 				outcome.case_.name,
 				outcome.case_.kind,
 				dialect_name(outcome.case_.from),
@@ -926,6 +930,7 @@ main :: proc() {
 				outcome.target_functions,
 				outcome.first_error,
 				outcome.parser_message,
+				outcome.parser_artifact,
 				outcome.case_.path,
 			),
 		)
@@ -943,13 +948,14 @@ main :: proc() {
 			strings.write_string(
 				&report,
 				fmt.tprintf(
-					"- [PARSER-SKIP] %s (%s) %s->%s command=`%s` message=%s path=%s\n",
+					"- [PARSER-SKIP] %s (%s) %s->%s command=`%s` message=%s parser_artifact=%s path=%s\n",
 					outcome.case_.name,
 					outcome.case_.kind,
 					dialect_name(outcome.case_.from),
 					dialect_name(outcome.to),
 					outcome.parser_command,
 					outcome.parser_message,
+					outcome.parser_artifact,
 					outcome.case_.path,
 				),
 			)
@@ -962,7 +968,7 @@ main :: proc() {
 		strings.write_string(
 			&report,
 			fmt.tprintf(
-				"- [PARSER-FAIL] %s (%s) %s->%s command=`%s` exit=%d message=%s path=%s\n",
+				"- [PARSER-FAIL] %s (%s) %s->%s command=`%s` exit=%d message=%s parser_artifact=%s path=%s\n",
 				outcome.case_.name,
 				outcome.case_.kind,
 				dialect_name(outcome.case_.from),
@@ -970,6 +976,7 @@ main :: proc() {
 				outcome.parser_command,
 				outcome.parser_exit_code,
 				outcome.parser_message,
+				outcome.parser_artifact,
 				outcome.case_.path,
 			),
 		)

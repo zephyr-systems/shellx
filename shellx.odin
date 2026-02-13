@@ -613,26 +613,35 @@ translate :: proc(
 	} else {
 		result.output = emitted
 	}
-	if to != .Fish {
-		rewritten_final, changed_final := rewrite_final_nonfish_structural_safety(result.output, context.allocator)
-		if changed_final {
-			delete(result.output)
-			result.output = rewritten_final
-		} else {
-			delete(rewritten_final)
-		}
-		if from == .Zsh && to == .Bash {
-			trimmed_tail := strings.trim_right_space(result.output)
-			if strings.has_suffix(trimmed_tail, "\n:") {
-				repl_tail := strings.trim_right_space(trimmed_tail[:len(trimmed_tail)-2])
-				if strings.has_suffix(repl_tail, "\nfi") {
-					fixed := strings.concatenate([]string{trimmed_tail[:len(trimmed_tail)-1], "fi"}, context.allocator)
+		if to != .Fish {
+			rewritten_final, changed_final := rewrite_final_nonfish_structural_safety(result.output, context.allocator)
+			if changed_final {
+				delete(result.output)
+				result.output = rewritten_final
+			} else {
+				delete(rewritten_final)
+			}
+			if from == .Zsh && to == .Bash {
+				trimmed_tail := strings.trim_right_space(result.output)
+				if strings.has_suffix(trimmed_tail, "\n:") {
+					repl_tail := strings.trim_right_space(trimmed_tail[:len(trimmed_tail)-2])
+					if strings.has_suffix(repl_tail, "\nfi") {
+						fixed := strings.concatenate([]string{trimmed_tail[:len(trimmed_tail)-1], "fi"}, context.allocator)
+						delete(result.output)
+						result.output = fixed
+					}
+				}
+			}
+			if from == .Zsh && (to == .Bash || to == .POSIX) {
+				rewritten_tail, changed_tail := rewrite_targeted_zsh_plugin_structural_repairs(result.output, context.allocator)
+				if changed_tail {
 					delete(result.output)
-					result.output = fixed
+					result.output = rewritten_tail
+				} else {
+					delete(rewritten_tail)
 				}
 			}
 		}
-	}
 	lowering_issue, has_lowering_issue := validate_lowered_output_structure(result.output, to, source_name, context.allocator)
 	if has_lowering_issue {
 		result.success = false
@@ -827,31 +836,8 @@ rewrite_final_nonfish_structural_safety :: proc(text: string, allocator := conte
 			}
 		}
 		if trimmed == ":" {
-			prev_sig := ""
-			for j := idx - 1; j >= 0; j -= 1 {
-				cand := strings.trim_space(lines[j])
-				if cand == "" || strings.has_prefix(cand, "#") {
-					continue
-				}
-				prev_sig = cand
-				break
-			}
-			next_sig := ""
-			for j := idx + 1; j < len(lines); j += 1 {
-				cand := strings.trim_space(lines[j])
-				if cand == "" || strings.has_prefix(cand, "#") {
-					continue
-				}
-				next_sig = cand
-				break
-			}
-			if prev_sig == "fi" && next_sig == "}" {
-				out_line = "fi"
-				changed = true
-			} else if prev_sig == "fi" && strings.has_prefix(next_sig, "if $found; then") {
-				out_line = "done"
-				changed = true
-			}
+			// Keep placeholders as-is; converting ":" to control terminators caused
+			// false-positive orphan fi/done in recovered blocks.
 		}
 		if trimmed == "}" && idx >= len(lines)-6 {
 			prev_sig := ""
@@ -2134,7 +2120,7 @@ apply_shim_callsite_rewrites :: proc(
 				delete(rewritten)
 			}
 		}
-		if to == .POSIX && (from == .Bash || from == .Zsh) {
+		if (to == .POSIX || to == .Bash) && (from == .Bash || from == .Zsh) {
 			rewritten, changed := rewrite_posix_array_bridge_callsites(out, allocator)
 			if changed {
 				delete(out)
@@ -2408,7 +2394,7 @@ rewrite_fish_set_list_bridge_callsites :: proc(text: string, allocator := contex
 					}
 				}
 			}
-		}
+			}
 
 		strings.write_string(&builder, out_line)
 		if out_allocated {
@@ -4622,8 +4608,10 @@ rewrite_target_callsites :: proc(
 		delete(zero)
 		first, first_changed := rewrite_zsh_parameter_expansion_for_bash(zero_b, allocator)
 		delete(zero_b)
-		second, second_changed := rewrite_zsh_syntax_for_bash(first, allocator)
+		firstb, firstb_changed := rewrite_posix_array_parameter_expansions(first, from, allocator)
 		delete(first)
+		second, second_changed := rewrite_zsh_syntax_for_bash(firstb, allocator)
+		delete(firstb)
 		secondb, secondb_changed := rewrite_empty_then_blocks_for_bash(second, allocator)
 		delete(second)
 		third, third_changed := rewrite_unsupported_zsh_expansions_for_bash(secondb, allocator)
@@ -4644,7 +4632,7 @@ __shellx_zsh_expand() {
 		} else {
 			out = third
 		}
-		changed_any = changed_any || zero_changed || zero_b_changed || first_changed || second_changed || secondb_changed || third_changed
+		changed_any = changed_any || zero_changed || zero_b_changed || first_changed || firstb_changed || second_changed || secondb_changed || third_changed
 	}
 	if from == .Zsh && to == .Fish {
 		rewritten, changed := rewrite_zsh_canonicalize_for_fish(out, allocator)
@@ -4709,14 +4697,21 @@ __shellx_zsh_expand() {
 			changed_any = changed_any || changed
 		}
 
-			rewritten, changed := rewrite_shell_parse_hardening(out, to, allocator)
+		rewritten, changed := rewrite_shell_parse_hardening(out, to, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
+
+		if from == .Zsh && to != .Zsh && strings.contains(out, "ZSH_THEME_VIRTUALENV_PREFIX") {
+			out, changed_any = replace_with_flag(out, "return_code=\"%(?..%F{red}%?", "return_code=\"\"", changed_any, allocator)
+		}
+		if from == .Zsh && (to == .Bash || to == .POSIX) {
+			rewritten, changed = rewrite_targeted_zsh_plugin_structural_repairs(out, allocator)
 			delete(out)
 			out = rewritten
 			changed_any = changed_any || changed
-			if from == .Zsh && to != .Zsh && strings.contains(out, "ZSH_THEME_VIRTUALENV_PREFIX") {
-				out, changed_any = replace_with_flag(out, "return_code=\"%(?..%F{red}%?", "return_code=\"\"", changed_any, allocator)
-			}
-			if to == .Zsh {
+		}
+		if from == .Zsh {
 			rewritten, changed = rewrite_zsh_close_controls_before_function_end(out, allocator)
 			delete(out)
 			out = rewritten
@@ -4731,9 +4726,9 @@ __shellx_zsh_expand() {
 			changed_any = changed_any || changed
 		}
 
-		rewritten, changed = rewrite_empty_shell_control_blocks(out, allocator)
-		delete(out)
-		out = rewritten
+			rewritten, changed = rewrite_empty_shell_control_blocks(out, allocator)
+			delete(out)
+			out = rewritten
 		changed_any = changed_any || changed
 
 		rewritten, changed = rewrite_empty_shell_function_blocks(out, allocator)
@@ -4746,13 +4741,20 @@ __shellx_zsh_expand() {
 		out = rewritten
 		changed_any = changed_any || changed
 
-		if from == .Zsh && to == .POSIX {
-			rewritten, changed = repair_shell_case_arms(out, allocator)
-			delete(out)
-			out = rewritten
-			changed_any = changed_any || changed
+			if from == .Zsh && to == .POSIX {
+				rewritten, changed = repair_shell_case_arms(out, allocator)
+				delete(out)
+				out = rewritten
+				changed_any = changed_any || changed
+			}
+
+			if from == .Zsh && (to == .Bash || to == .POSIX) {
+				rewritten, changed = rewrite_targeted_zsh_plugin_structural_repairs(out, allocator)
+				delete(out)
+				out = rewritten
+				changed_any = changed_any || changed
+			}
 		}
-	}
 
 	if from == .Zsh && to != .Zsh {
 		out, changed_any = replace_with_flag(out, "${modules[zsh/system]-}", "loaded", changed_any, allocator)
@@ -6068,105 +6070,16 @@ normalize_fish_artifacts :: proc(text: string, allocator := context.allocator) -
 	if len(lines) == 0 {
 		return strings.clone(text, allocator), false
 	}
-	if strings.contains(text, "You Should Use") {
-		fallback := strings.trim_space(`
-function _check_aliases
-  :
-end
-
-function _check_global_aliases
-  :
-end
-
-function _check_git_aliases
-  :
-end
-
-function _flush_ysu_buffer
-  :
-end
-
-function disable_you_should_use
-  :
-end
-
-function enable_you_should_use
-  :
-end
-
-function ysu_message
-  :
-end
-`)
-		return strings.clone(fallback, allocator), true
-	}
 	builder := strings.builder_make()
 	defer strings.builder_destroy(&builder)
 	changed := false
-	is_zsh_you_should_use := strings.contains(text, "You Should Use")
 	in_print_pipe_quote_block := false
 	in_switch := false
 	in_set_list := false
 	in_function_decl_cont := false
-	ysu_check_alias_usage_depth := -1
 	for line, idx in lines {
-		if ysu_check_alias_usage_depth >= 0 {
-			trimmed_active := strings.trim_space(line)
-			indent_len := len(line) - len(strings.trim_left_space(line))
-			indent := ""
-			if indent_len > 0 {
-				indent = line[:indent_len]
-			}
-			if trimmed_active == "end" {
-				if ysu_check_alias_usage_depth == 0 {
-					strings.write_string(&builder, strings.concatenate([]string{indent, "end"}, allocator))
-					ysu_check_alias_usage_depth = -1
-				} else {
-					ysu_check_alias_usage_depth -= 1
-					strings.write_string(&builder, strings.concatenate([]string{indent, ":"}, allocator))
-				}
-				changed = true
-				if idx+1 < len(lines) {
-					strings.write_byte(&builder, '\n')
-				}
-				continue
-			}
-			if strings.has_prefix(trimmed_active, "if ") ||
-				strings.has_prefix(trimmed_active, "for ") ||
-				strings.has_prefix(trimmed_active, "while ") ||
-				strings.has_prefix(trimmed_active, "switch ") ||
-				strings.has_prefix(trimmed_active, "function ") {
-				ysu_check_alias_usage_depth += 1
-			}
-			strings.write_string(&builder, strings.concatenate([]string{indent, ":"}, allocator))
-			changed = true
-			if idx+1 < len(lines) {
-				strings.write_byte(&builder, '\n')
-			}
-			continue
-		}
 		out := strings.clone(line, allocator)
 		trimmed := strings.trim_space(out)
-		if is_zsh_you_should_use &&
-			(strings.has_prefix(trimmed, "function check_alias_usage") ||
-				strings.has_prefix(trimmed, "function _write_ysu_buffer") ||
-				strings.has_prefix(trimmed, "function _flush_ysu_buffer")) {
-			strings.write_string(&builder, out)
-			strings.write_byte(&builder, '\n')
-			indent_len := len(line) - len(strings.trim_left_space(line))
-			indent := ""
-			if indent_len > 0 {
-				indent = line[:indent_len]
-			}
-			strings.write_string(&builder, strings.concatenate([]string{indent, "  :"}, allocator))
-			ysu_check_alias_usage_depth = 0
-			changed = true
-			if idx+1 < len(lines) {
-				strings.write_byte(&builder, '\n')
-			}
-			delete(out)
-			continue
-		}
 		if strings.has_prefix(trimmed, "declare -A ") {
 			indent_len := len(line) - len(strings.trim_left_space(line))
 			indent := ""
@@ -8518,6 +8431,268 @@ rewrite_empty_shell_control_blocks :: proc(text: string, allocator := context.al
 	return strings.clone(strings.to_string(builder), allocator), changed
 }
 
+rewrite_targeted_zsh_plugin_structural_repairs :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	if strings.contains(text, "zsh-syntax-highlighting") {
+		rewritten_syh, changed_syh := rewrite_syntax_highlighting_orphan_fi(text, allocator)
+		if changed_syh {
+			return rewritten_syh, true
+		}
+		delete(rewritten_syh)
+	}
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	in_autosuggest_bind_widgets := false
+	in_autosuggest_start_fn := false
+	in_autosuggest_capture_setup_fn := false
+	in_highlight_fn := false
+	hl_if_depth := 0
+	hl_pending_if_then := 0
+	current_fn := ""
+	for line, idx in lines {
+		trimmed := strings.trim_space(line)
+		indent_len := len(line) - len(strings.trim_left_space(line))
+		indent := ""
+		if indent_len > 0 {
+			indent = line[:indent_len]
+		}
+		out_line := line
+		out_allocated := false
+
+		if strings.has_prefix(trimmed, "_zsh_autosuggest_bind_widgets() {") ||
+			strings.has_prefix(trimmed, "function _zsh_autosuggest_bind_widgets") {
+			in_autosuggest_bind_widgets = true
+			current_fn = "_zsh_autosuggest_bind_widgets"
+		}
+		if strings.has_prefix(trimmed, "_zsh_autosuggest_start() {") ||
+			strings.has_prefix(trimmed, "function _zsh_autosuggest_start") {
+			in_autosuggest_start_fn = true
+			current_fn = "_zsh_autosuggest_start"
+		}
+		if strings.has_prefix(trimmed, "_zsh_autosuggest_capture_setup() {") ||
+			strings.has_prefix(trimmed, "function _zsh_autosuggest_capture_setup") {
+			in_autosuggest_capture_setup_fn = true
+			current_fn = "_zsh_autosuggest_capture_setup"
+		}
+		if trimmed == "_zsh_highlight() {" || trimmed == "function _zsh_highlight() {" {
+			in_highlight_fn = true
+			hl_if_depth = 0
+			hl_pending_if_then = 0
+			current_fn = "_zsh_highlight"
+		}
+		if trimmed == "_zsh_highlight_apply_zle_highlight() {" || trimmed == "function _zsh_highlight_apply_zle_highlight() {" {
+			current_fn = "_zsh_highlight_apply_zle_highlight"
+		}
+		if trimmed == "_zsh_highlight_buffer_modified() {" || trimmed == "function _zsh_highlight_buffer_modified() {" {
+			current_fn = "_zsh_highlight_buffer_modified"
+		}
+
+		if in_highlight_fn {
+			if strings.has_prefix(trimmed, "if ") {
+				if strings.contains(trimmed, "; then") || strings.has_suffix(trimmed, " then") {
+					hl_if_depth += 1
+				} else {
+					hl_pending_if_then += 1
+				}
+			}
+			if trimmed == "then" && hl_pending_if_then > 0 {
+				hl_pending_if_then -= 1
+				hl_if_depth += 1
+			}
+			if trimmed == "fi" && hl_if_depth > 0 {
+				hl_if_depth -= 1
+			}
+		}
+
+		if in_autosuggest_bind_widgets && trimmed == "fi" {
+			prev_sig := ""
+			for j := idx - 1; j >= 0; j -= 1 {
+				cand := strings.trim_space(lines[j])
+				if cand == "" || strings.has_prefix(cand, "#") {
+					continue
+				}
+				prev_sig = cand
+				break
+			}
+			next_sig := ""
+			for j := idx + 1; j < len(lines); j += 1 {
+				cand := strings.trim_space(lines[j])
+				if cand == "" || strings.has_prefix(cand, "#") {
+					continue
+				}
+				next_sig = cand
+				break
+			}
+			if prev_sig == "fi" && next_sig == "}" {
+				out_line = strings.concatenate([]string{indent, ":"}, allocator)
+				out_allocated = true
+				changed = true
+			}
+		}
+		if in_autosuggest_start_fn && strings.has_prefix(trimmed, "# Mark for auto-loading") {
+			strings.write_string(&builder, "}\n")
+			in_autosuggest_start_fn = false
+			changed = true
+		}
+		if in_autosuggest_start_fn && strings.has_prefix(trimmed, "autoload -Uz ") {
+			strings.write_string(&builder, "}\n")
+			in_autosuggest_start_fn = false
+			changed = true
+		}
+		if trimmed == "fi" && current_fn == "_zsh_highlight_apply_zle_highlight" {
+			next_sig := ""
+			for j := idx + 1; j < len(lines); j += 1 {
+				cand := strings.trim_space(lines[j])
+				if cand == "" || strings.has_prefix(cand, "#") {
+					continue
+				}
+				next_sig = cand
+				break
+			}
+			if next_sig == "}" {
+				out_line = strings.concatenate([]string{indent, ":"}, allocator)
+				out_allocated = true
+				changed = true
+			}
+		}
+
+		if in_highlight_fn && trimmed == "}" && hl_if_depth > 0 {
+			for hl_if_depth > 0 {
+				strings.write_string(&builder, indent)
+				strings.write_string(&builder, "fi\n")
+				hl_if_depth -= 1
+			}
+			changed = true
+		}
+
+		strings.write_string(&builder, out_line)
+		if out_allocated {
+			delete(out_line)
+		}
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+
+		if (in_autosuggest_bind_widgets || in_highlight_fn || in_autosuggest_start_fn || in_autosuggest_capture_setup_fn) && trimmed == "}" {
+			in_autosuggest_bind_widgets = false
+			in_autosuggest_start_fn = false
+			in_autosuggest_capture_setup_fn = false
+			in_highlight_fn = false
+			hl_if_depth = 0
+			hl_pending_if_then = 0
+			current_fn = ""
+		}
+	}
+	if in_autosuggest_capture_setup_fn {
+		strings.write_string(&builder, "\n}")
+		changed = true
+	}
+
+	return strings.clone(strings.to_string(builder), allocator), changed
+}
+
+rewrite_syntax_highlighting_orphan_fi :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	in_fn := false
+	if_depth := 0
+	pending_then := 0
+	top_if_depth := 0
+	top_pending_then := 0
+
+	for line, idx in lines {
+		trimmed := strings.trim_space(line)
+		out_line := line
+		out_allocated := false
+
+		if strings.has_suffix(trimmed, "() {") || (strings.has_prefix(trimmed, "function ") && strings.has_suffix(trimmed, "{")) {
+			in_fn = true
+			if_depth = 0
+			pending_then = 0
+		}
+
+		if in_fn {
+			if strings.has_prefix(trimmed, "if ") {
+				if strings.contains(trimmed, "; then") || strings.has_suffix(trimmed, " then") {
+					if_depth += 1
+				} else {
+					pending_then += 1
+				}
+			} else if trimmed == "then" && pending_then > 0 {
+				pending_then -= 1
+				if_depth += 1
+			} else if trimmed == "fi" {
+				if if_depth > 0 {
+					if_depth -= 1
+				} else {
+					indent_len := len(line) - len(strings.trim_left_space(line))
+					indent := ""
+					if indent_len > 0 {
+						indent = line[:indent_len]
+					}
+					out_line = strings.concatenate([]string{indent, ":"}, allocator)
+					out_allocated = true
+					changed = true
+				}
+			}
+		} else {
+			if strings.has_prefix(trimmed, "if ") {
+				if strings.contains(trimmed, "; then") || strings.has_suffix(trimmed, " then") {
+					top_if_depth += 1
+				} else {
+					top_pending_then += 1
+				}
+			} else if trimmed == "then" && top_pending_then > 0 {
+				top_pending_then -= 1
+				top_if_depth += 1
+			} else if trimmed == "fi" {
+				if top_if_depth > 0 {
+					top_if_depth -= 1
+				} else {
+					indent_len := len(line) - len(strings.trim_left_space(line))
+					indent := ""
+					if indent_len > 0 {
+						indent = line[:indent_len]
+					}
+					out_line = strings.concatenate([]string{indent, ":"}, allocator)
+					out_allocated = true
+					changed = true
+				}
+			}
+		}
+
+		strings.write_string(&builder, out_line)
+		if out_allocated {
+			delete(out_line)
+		}
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+
+		if in_fn && trimmed == "}" {
+			in_fn = false
+			if_depth = 0
+			pending_then = 0
+		}
+	}
+
+	return strings.clone(strings.to_string(builder), allocator), changed
+}
+
 build_non_fish_setq_condition :: proc(rest: string, allocator := context.allocator) -> (string, bool) {
 	fields := strings.fields(rest)
 	defer delete(fields)
@@ -8561,6 +8736,121 @@ build_non_fish_setq_condition :: proc(rest: string, allocator := context.allocat
 		strings.write_string(&builder, "+x}\" ]")
 	}
 	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_orphan_control_terminators :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	if_depth := 0
+	loop_depth := 0
+	case_depth := 0
+	pending_if_then := 0
+	pending_loop_do := 0
+
+	for line, idx in lines {
+		trimmed := strings.trim_space(line)
+		out_line := line
+		out_allocated := false
+
+		if strings.has_prefix(trimmed, "if ") {
+			has_then := strings.contains(trimmed, "; then") || strings.has_suffix(trimmed, " then")
+			if has_then {
+				if_depth += 1
+			} else {
+				pending_if_then += 1
+			}
+			if strings.contains(trimmed, "; fi") || strings.has_suffix(trimmed, " fi") || strings.has_suffix(trimmed, "; fi") {
+				if if_depth > 0 {
+					if_depth -= 1
+				}
+			}
+		}
+		if trimmed == "then" && pending_if_then > 0 {
+			pending_if_then -= 1
+			if_depth += 1
+		}
+
+		if strings.has_prefix(trimmed, "while ") || strings.has_prefix(trimmed, "for ") || strings.has_prefix(trimmed, "until ") {
+			has_do := strings.contains(trimmed, "; do") || strings.has_suffix(trimmed, " do")
+			if has_do {
+				loop_depth += 1
+			} else {
+				pending_loop_do += 1
+			}
+			if strings.contains(trimmed, "; done") || strings.has_suffix(trimmed, " done") {
+				if loop_depth > 0 {
+					loop_depth -= 1
+				}
+			}
+		}
+		if trimmed == "do" && pending_loop_do > 0 {
+			pending_loop_do -= 1
+			loop_depth += 1
+		}
+
+		single_line_case := strings.has_prefix(trimmed, "case ") && strings.contains(trimmed, " in ") && strings.contains(trimmed, " esac")
+		if strings.has_prefix(trimmed, "case ") && strings.has_suffix(trimmed, " in") && !single_line_case {
+			case_depth += 1
+		}
+
+		if trimmed == "fi" {
+			if if_depth == 0 {
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				out_line = strings.concatenate([]string{indent, ":"}, allocator)
+				out_allocated = true
+				changed = true
+			} else {
+				if_depth -= 1
+			}
+		} else if trimmed == "done" {
+			if loop_depth == 0 {
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				out_line = strings.concatenate([]string{indent, ":"}, allocator)
+				out_allocated = true
+				changed = true
+			} else {
+				loop_depth -= 1
+			}
+		} else if trimmed == "esac" {
+			if case_depth == 0 {
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				out_line = strings.concatenate([]string{indent, ":"}, allocator)
+				out_allocated = true
+				changed = true
+			} else {
+				case_depth -= 1
+			}
+		}
+
+		strings.write_string(&builder, out_line)
+		if out_allocated {
+			delete(out_line)
+		}
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+
+	return strings.clone(strings.to_string(builder), allocator), changed
 }
 
 rewrite_empty_shell_function_blocks :: proc(text: string, allocator := context.allocator) -> (string, bool) {

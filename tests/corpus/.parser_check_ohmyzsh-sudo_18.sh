@@ -1,0 +1,302 @@
+# shellx capability prelude
+# target: POSIX
+
+# cap: arrays
+__zx_arr_new() {
+  eval "__ZX_ARR_$1=''"
+}
+
+__zx_arr_push() {
+  _zx_var="__ZX_ARR_$1"
+  eval "_zx_cur=\${$_zx_var}"
+  if [ -z "$_zx_cur" ]; then
+    eval "$_zx_var=\$2"
+  else
+    eval "$_zx_var=\${_zx_cur}\${IFS}\$2"
+  fi
+}
+
+__zx_arr_get() {
+  _zx_var="__ZX_ARR_$1"
+  _zx_idx="$2"
+  eval "_zx_vals=\${$_zx_var}"
+  set -- $_zx_vals
+  eval "printf '%s' \"\${$_zx_idx}\""
+}
+
+__zx_arr_len() {
+  _zx_var="__ZX_ARR_$1"
+  eval "_zx_vals=\${$_zx_var}"
+  set -- $_zx_vals
+  printf "%d" "$#"
+}
+
+# cap: set_get
+__zx_set() {
+  _zx_name="$1"
+  _zx_value="$2"
+  _zx_scope="$3"
+  _zx_export="$4"
+  eval "$_zx_name=\$_zx_value"
+  if [ "$_zx_export" = "1" ]; then
+    export "$_zx_name"
+  fi
+}
+
+__zx_get() {
+  _zx_name="$1"
+  eval "printf '%s' \"\${$_zx_name}\""
+}
+
+__zx_unset() {
+  unset "$1"
+}
+
+# cap: warn_die
+__zx_warn() {
+  printf "%s\n" "$1" >&2
+}
+
+__zx_die() {
+  __zx_warn "$1"
+  return 1
+}
+
+# shellx compatibility shims
+
+# shim: arrays_lists
+__shellx_list_set() {
+  _zx_name="$1"
+  shift
+  _zx_acc=""
+  _zx_sep=""
+  for _zx_item in "$@"; do
+    _zx_acc="${_zx_acc}${_zx_sep}${_zx_item}"
+    _zx_sep=" "
+  done
+  eval "$_zx_name=\$_zx_acc"
+}
+
+__shellx_list_append() {
+  _zx_name="$1"
+  shift
+  eval "_zx_cur=\${$_zx_name}"
+  _zx_acc="$_zx_cur"
+  _zx_sep=""
+  if [ -n "$_zx_acc" ]; then
+    _zx_sep=" "
+  fi
+  for _zx_item in "$@"; do
+    _zx_acc="${_zx_acc}${_zx_sep}${_zx_item}"
+    _zx_sep=" "
+  done
+  eval "$_zx_name=\$_zx_acc"
+}
+
+__shellx_list_join() {
+  printf "%s" "$1"
+  shift
+  for _it in "$@"; do
+    printf " %s" "$_it"
+  done
+}
+
+__shellx_list_get() {
+  _zx_name="$1"
+  _zx_idx="$2"
+  eval "_zx_vals=\${$_zx_name}"
+  set -- $_zx_vals
+  if [ -z "$_zx_idx" ]; then
+    return 1
+  fi
+  eval "printf '%s' \"\${$_zx_idx}\""
+}
+
+__shellx_list_len() {
+  _zx_name="$1"
+  eval "_zx_vals=\${$_zx_name}"
+  set -- $_zx_vals
+  printf "%d" "$#"
+}
+
+__shellx_list_has() {
+  _zx_name="$1"
+  _zx_key="$2"
+  eval "_zx_vals=\${$_zx_name}"
+  set -- $_zx_vals
+  for _zx_item in "$@"; do
+    if [ "$_zx_item" = "$_zx_key" ]; then
+      printf "1"
+      return 0
+    fi
+  done
+  printf "0"
+}
+
+__shellx_list_unset_index() {
+  _zx_name="$1"
+  _zx_idx="$2"
+  eval "_zx_vals=\${$_zx_name}"
+  set -- $_zx_vals
+  _zx_len="$#"
+  if [ -z "$_zx_idx" ]; then
+    return 1
+  fi
+  case "$_zx_idx" in
+    -*) _zx_idx=$((_zx_len + _zx_idx + 1)) ;;
+  esac
+  _zx_out=""
+  _zx_sep=""
+  _zx_pos=1
+  for _zx_item in "$@"; do
+    if [ "$_zx_pos" -ne "$_zx_idx" ]; then
+      _zx_out="${_zx_out}${_zx_sep}${_zx_item}"
+      _zx_sep=" "
+    fi
+    _zx_pos=$((_zx_pos + 1))
+  done
+  eval "$_zx_name=\$_zx_out"
+}
+
+__shellx_zsh_subscript_r() {
+  _zx_name="$1"
+  _zx_pattern="$2"
+  eval "_zx_vals=\${$_zx_name}"
+  set -- $_zx_vals
+  _zx_match=""
+  for _zx_item in "$@"; do
+    case "$_zx_item" in
+      $_zx_pattern) _zx_match="$_zx_item" ;;
+    esac
+  done
+  printf "%s" "$_zx_match"
+}
+
+__shellx_zsh_subscript_I() {
+  _zx_name="$1"
+  _zx_pattern="$2"
+  eval "_zx_vals=\${$_zx_name}"
+  set -- $_zx_vals
+  _zx_idx=0
+  _zx_pos=1
+  for _zx_item in "$@"; do
+    case "$_zx_item" in
+      $_zx_pattern) _zx_idx=$_zx_pos ;;
+    esac
+    _zx_pos=$((_zx_pos + 1))
+  done
+  printf "%s" "$_zx_idx"
+}
+
+__shellx_zsh_subscript_Ib() {
+  _zx_name="$1"
+  _zx_needle="$2"
+  _zx_default_var="$3"
+  eval "_zx_vals=\${$_zx_name}"
+  set -- $_zx_vals
+  _zx_idx=0
+  _zx_pos=1
+  for _zx_item in "$@"; do
+    case "$_zx_item" in
+      *"$_zx_needle"*) _zx_idx=$_zx_pos ;;
+    esac
+    _zx_pos=$((_zx_pos + 1))
+  done
+  if [ "$_zx_idx" -gt 0 ]; then
+    printf "%s" "$_zx_idx"
+    return 0
+  fi
+  if [ -n "$_zx_default_var" ]; then
+    eval "printf '%s' \"\${$_zx_default_var}\""
+    return 0
+  fi
+  printf "0"
+}
+
+alias __sudo-replace-buffer=__sudo_replace_buffer
+alias sudo-command-line=sudo_command_line
+
+:
+	  old=$1; new=$2; space=${2:+
+	  # if the cursor is positioned in the $old part of the text, make
+	  # the substitution and leave the cursor after the $new text
+	  if [[ $CURSOR -le ${#old} ]]; then
+	    BUFFER="${new}${space}${BUFFER#$old }"
+	    CURSOR=${#new}
+	  # otherwise just replace $old with $new in the text before the cursor
+	  else
+	    LBUFFER="${new}${space}${LBUFFER#$old }"
+	  fi
+:
+function sudo_command_line() {
+  :
+}
+sudo_command_line() {
+	  [[ -z $BUFFER ]] && LBUFFER="$(fc -ln -1)"
+	  # Save beginning space
+	  local WHITESPACE=""
+	  if [[ ${LBUFFER:0:1} = " " ]]; then
+	    WHITESPACE=" "
+	    LBUFFER="${LBUFFER:1}"
+	  fi
+:
+	    # If $SUDO_EDITOR or $VISUAL are defined, then use that as $EDITOR
+	    # Else use the default $EDITOR
+	    local EDITOR=${SUDO_EDITOR:-${VISUAL:-$EDITOR}}
+	    # If $EDITOR is not set, just toggle the sudo prefix on and off
+	    if [[ -z "$EDITOR" ]]; then
+	      case "$BUFFER" in
+	        sudo\ -e\ *) __sudo-replace-buffer "sudo -e" "" ;;
+	        sudo\ *) __sudo-replace-buffer "sudo" "" ;;
+	        *) LBUFFER="sudo $LBUFFER" ;;
+	      esac
+	      return
+	    fi
+	    # Check if the typed command is really an alias to $EDITOR
+	    # Get the first part of the typed command
+:
+	    # Get the first part of the alias of the same name as $cmd, or $cmd if no alias matches
+:
+	    # Get the first part of the $EDITOR command ($EDITOR may have arguments after it)
+:
+	    # Note: ${var:c} makes a $PATH search and expands $var to the full path
+	    # The if condition is met when:
+	    # - $realcmd is '$EDITOR'
+	    # - $realcmd is "cmd" and $EDITOR is "cmd"
+	    # - $realcmd is "cmd" and $EDITOR is "cmd --with --arguments"
+	    # - $realcmd is "/path/to/cmd" and $EDITOR is "cmd"
+	    # - $realcmd is "/path/to/cmd" and $EDITOR is "/path/to/cmd"
+	    # or
+	    # - $realcmd is "cmd" and $EDITOR is "cmd"
+	    # - $realcmd is "cmd" and $EDITOR is "/path/to/cmd"
+	    # or
+	    # - $realcmd is "cmd" and $EDITOR is /alternative/path/to/cmd that appears in $PATH
+if true; then
+	      || "${realcmd:c}" = ($editorcmd|${editorcmd:c}) ]] \
+:
+	      __sudo-replace-buffer "$cmd" "sudo -e"
+	      return
+	    fi
+	    # Check for editor commands in the typed command and replace accordingly
+	    case "$BUFFER" in
+	      $editorcmd\ *) __sudo-replace-buffer "$editorcmd" "sudo -e" ;;
+	      \$EDITOR\ *) __sudo-replace-buffer '$EDITOR' "sudo -e" ;;
+	      sudo\ -e\ *) __sudo-replace-buffer "sudo -e" "$EDITOR" ;;
+	      sudo\ *) __sudo-replace-buffer "sudo" "" ;;
+	      *) LBUFFER="sudo $LBUFFER" ;;
+	    esac
+:
+	    # Preserve beginning space
+	    LBUFFER="${WHITESPACE}${LBUFFER}"
+	    # Redisplay edit buffer (compatibility with zsh-syntax-highlighting)
+	    zle && zle redisplay # only run redisplay if zle is enabled
+:
+:
+}
+zle -N sudo_command_line
+# Defined shortcut keys: [Esc] [Esc]
+bindkey -M emacs '\e\e' sudo_command_line
+bindkey -M vicmd '\e\e' sudo_command_line
+bindkey -M viins '\e\e' sudo_command_line
+
+:
