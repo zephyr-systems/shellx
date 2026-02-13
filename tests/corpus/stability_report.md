@@ -16,7 +16,7 @@ Cross-dialect runs executed: 126
 | fish->zsh | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 0 | 0 | 1.140 | 5.827 | 11 |
 | zsh->bash | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 0 | 0.822 | 2.050 | 4 |
 | zsh->fish | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 0 | 2.101 | 10.386 | 15 |
-| zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 2 | 2.160 | 9.412 | 14 |
+| zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 0 | 2.139 | 9.442 | 14 |
 
 ## Failures
 
@@ -31,12 +31,7 @@ Cross-dialect runs executed: 126
 
 ## Warning Categories
 
-
-### zsh->posix
-
-- `arrays_maps/indexed_arrays`: 2
-  - zsh-syntax-highlighting (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
-  - ohmyzsh-z (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
+- No warnings recorded.
 
 ## Semantic Parity Matrix
 

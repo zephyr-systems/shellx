@@ -1501,8 +1501,27 @@ rewrite_posix_array_bridge_callsites :: proc(text: string, allocator := context.
 		return strings.clone(text, allocator), false
 	}
 
+	has_trailing_comment_after_array_close :: proc(payload: string) -> bool {
+		close_idx := -1
+		for i := len(payload) - 1; i >= 0; i -= 1 {
+			if payload[i] == ')' {
+				close_idx = i
+				break
+			}
+		}
+		if close_idx < 0 {
+			return false
+		}
+		for i := close_idx + 1; i < len(payload); i += 1 {
+			if payload[i] == '#' {
+				return true
+			}
+		}
+		return false
+	}
+
 	parse_array_assignment_payload :: proc(payload: string) -> (name, items: string, append, block_open, ok: bool) {
-		if strings.contains(payload, "#") {
+		if has_trailing_comment_after_array_close(payload) {
 			return "", "", false, false, false
 		}
 		if strings.contains(payload, "${") &&
@@ -1541,7 +1560,7 @@ rewrite_posix_array_bridge_callsites :: proc(text: string, allocator := context.
 	}
 
 	parse_array_decl_payload :: proc(payload: string) -> (name, items: string, append, block_open, ok, has_items: bool) {
-		if strings.contains(payload, "#") {
+		if has_trailing_comment_after_array_close(payload) {
 			return "", "", false, false, false, false
 		}
 		i := 0
@@ -1669,6 +1688,7 @@ rewrite_posix_array_bridge_callsites :: proc(text: string, allocator := context.
 	changed := false
 
 	in_array_block := false
+	in_dquote_block := false
 	block_name := ""
 	block_append := false
 	block_indent := ""
@@ -1677,6 +1697,17 @@ rewrite_posix_array_bridge_callsites :: proc(text: string, allocator := context.
 
 	for idx := 0; idx < len(lines); idx += 1 {
 		line := lines[idx]
+		line_quote_toggles := count_unescaped_double_quotes(line)%2 == 1
+		if in_dquote_block || line_quote_toggles {
+			strings.write_string(&builder, line)
+			if line_quote_toggles {
+				in_dquote_block = !in_dquote_block
+			}
+			if idx+1 < len(lines) {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
 		if in_array_block {
 			trimmed_block := strings.trim_space(line)
 			if trimmed_block == ")" || trimmed_block == ");" {

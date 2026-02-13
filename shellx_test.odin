@@ -1004,6 +1004,21 @@ test_translate_bash_complex_array_expansion_no_parse_diag :: proc(t: ^testing.T)
 }
 
 @(test)
+test_rewrite_posix_array_bridge_callsites_skips_multiline_quoted_blocks :: proc(t: ^testing.T) {
+	if !should_run_test("test_rewrite_posix_array_bridge_callsites_skips_multiline_quoted_blocks") { return }
+
+	input := `echo "function _wrap {
+  local compl_word=${2?}
+  COMP_WORDS=("$alias_cmd" $(printf "%q " "${alias_arg_words[@]}") "${COMP_WORDS[@]:1}")
+}" >> "$tmp_file"`
+
+	output, changed := rewrite_posix_array_bridge_callsites(input)
+	defer delete(output)
+	testing.expect(t, !changed, "Array bridge rewrite should not touch array-like text inside multiline quoted blocks")
+	testing.expect(t, output == input, "Quoted block content should remain byte-identical")
+}
+
+@(test)
 test_repair_fish_split_echo_param_default :: proc(t: ^testing.T) {
 	if !should_run_test("test_repair_fish_split_echo_param_default") { return }
 
