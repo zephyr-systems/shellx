@@ -738,6 +738,74 @@ find_substring :: proc(s: string, needle: string) -> int {
 	return -1
 }
 
+find_matching_brace :: proc(s: string, open_idx: int) -> int {
+	if open_idx < 0 || open_idx >= len(s) || s[open_idx] != '{' {
+		return -1
+	}
+	depth := 1
+	i := open_idx + 1
+	for i < len(s) {
+		if s[i] == '{' {
+			depth += 1
+		} else if s[i] == '}' {
+			depth -= 1
+			if depth == 0 {
+				return i
+			}
+		}
+		i += 1
+	}
+	return -1
+}
+
+find_top_level_substring :: proc(s: string, needle: string) -> int {
+	if len(needle) == 0 || len(s) < len(needle) {
+		return -1
+	}
+	depth := 0
+	last := len(s) - len(needle)
+	for i in 0 ..< last+1 {
+		if s[i] == '{' {
+			depth += 1
+			continue
+		}
+		if s[i] == '}' {
+			if depth > 0 {
+				depth -= 1
+			}
+			continue
+		}
+		if depth != 0 {
+			continue
+		}
+		matched := true
+		for j in 0 ..< len(needle) {
+			if s[i+j] != needle[j] {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return i
+		}
+	}
+	return -1
+}
+
+leading_basic_name :: proc(s: string) -> string {
+	if len(s) == 0 {
+		return ""
+	}
+	end := 0
+	for end < len(s) && is_basic_name_char(s[end]) {
+		end += 1
+	}
+	if end == 0 {
+		return ""
+	}
+	return s[:end]
+}
+
 escape_double_quoted :: proc(s: string, allocator := context.allocator) -> string {
 	builder := strings.builder_make()
 	defer strings.builder_destroy(&builder)
@@ -770,11 +838,8 @@ rewrite_parameter_expansion_callsites :: proc(
 	for i < len(text) {
 		if i+1 < len(text) && text[i] == '$' && text[i+1] == '{' {
 			inner_start := i + 2
-			j := inner_start
-			for j < len(text) && text[j] != '}' {
-				j += 1
-			}
-			if j < len(text) && text[j] == '}' {
+			j := find_matching_brace(text, i+1)
+			if j > inner_start {
 				inner := strings.trim_space(text[inner_start:j])
 				repl := ""
 
@@ -785,7 +850,7 @@ rewrite_parameter_expansion_callsites :: proc(
 					}
 				} else {
 					// ${var:?message}
-					req_idx := find_substring(inner, ":?")
+					req_idx := find_top_level_substring(inner, ":?")
 					if req_idx > 0 {
 						var_name := strings.trim_space(inner[:req_idx])
 						err_msg := strings.trim_space(inner[req_idx+2:])
@@ -797,9 +862,9 @@ rewrite_parameter_expansion_callsites :: proc(
 					}
 
 					// ${var:-default} / ${var:=default}
-					def_idx := find_substring(inner, ":-")
+					def_idx := find_top_level_substring(inner, ":-")
 					if def_idx < 0 {
-						def_idx = find_substring(inner, ":=")
+						def_idx = find_top_level_substring(inner, ":=")
 					}
 					if repl == "" && def_idx > 0 {
 						var_name := strings.trim_space(inner[:def_idx])
@@ -811,9 +876,42 @@ rewrite_parameter_expansion_callsites :: proc(
 						}
 					}
 
+					// ${var-default}
+					plain_def_idx := find_top_level_substring(inner, "-")
+					if repl == "" && plain_def_idx > 0 {
+						var_name := strings.trim_space(inner[:plain_def_idx])
+						default_value := strings.trim_space(inner[plain_def_idx+1:])
+						if var_name != "" && is_basic_name(var_name) {
+							escaped_default := escape_double_quoted(default_value, allocator)
+							repl = fmt.tprintf("(__shellx_param_default %s \"%s\")", var_name, escaped_default)
+							delete(escaped_default)
+						}
+					}
+
 					// ${var}
 					if repl == "" && is_basic_name(inner) {
 						repl = fmt.tprintf("$%s", inner)
+					}
+
+					// ${arr[@]} / ${arr[*]} / ${arr[idx]}
+					if repl == "" {
+						bracket_idx := find_substring(inner, "[")
+						if bracket_idx > 0 && strings.has_suffix(inner, "]") {
+							var_name := strings.trim_space(inner[:bracket_idx])
+							if is_basic_name(var_name) {
+								repl = fmt.tprintf("$%s", var_name)
+							}
+						}
+					}
+
+					// Fallback for unsupported forms: keep parser-valid fish.
+					if repl == "" {
+						name := leading_basic_name(inner)
+						if name != "" {
+							repl = fmt.tprintf("$%s", name)
+						} else {
+							repl = "\"\""
+						}
 					}
 				}
 
@@ -892,6 +990,50 @@ rewrite_process_substitution_callsites :: proc(
 	return strings.clone(strings.to_string(builder), allocator), changed
 }
 
+rewrite_fish_special_parameters :: proc(line: string, allocator := context.allocator) -> (string, bool) {
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	in_single := false
+	in_double := false
+	i := 0
+	for i < len(line) {
+		c := line[i]
+		if c == '\'' && !in_double {
+			in_single = !in_single
+			strings.write_byte(&builder, c)
+			i += 1
+			continue
+		}
+		if c == '"' && !in_single {
+			in_double = !in_double
+			strings.write_byte(&builder, c)
+			i += 1
+			continue
+		}
+		if !in_single && c == '$' && i+1 < len(line) {
+			switch line[i+1] {
+			case '#':
+				strings.write_string(&builder, "(count $argv)")
+				changed = true
+				i += 2
+				continue
+			case '@', '*':
+				strings.write_string(&builder, "$argv")
+				changed = true
+				i += 2
+				continue
+			}
+		}
+		strings.write_byte(&builder, c)
+		i += 1
+	}
+	if !changed {
+		return strings.clone(line, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
 rewrite_target_callsites :: proc(
 	text: string,
 	from: ShellDialect,
@@ -935,6 +1077,11 @@ __shellx_zsh_expand() {
 
 	if to == .Fish {
 		rewritten, changed := rewrite_shell_to_fish_syntax(out, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
+
+		rewritten, changed = rewrite_fish_connector_assignments(out, allocator)
 		delete(out)
 		out = rewritten
 		changed_any = changed_any || changed
@@ -1192,6 +1339,30 @@ rewrite_shell_to_fish_syntax :: proc(text: string, allocator := context.allocato
 			} else {
 				delete(rewritten)
 			}
+		} else if strings.contains(current_trimmed, " and ") {
+			rewritten, c := rewrite_fish_inline_assignment(out_line, " and ", allocator)
+			if c {
+				if out_allocated {
+					delete(out_line)
+				}
+				out_line = rewritten
+				out_allocated = true
+				changed = true
+			} else {
+				delete(rewritten)
+			}
+		} else if strings.contains(current_trimmed, " or ") {
+			rewritten, c := rewrite_fish_inline_assignment(out_line, " or ", allocator)
+			if c {
+				if out_allocated {
+					delete(out_line)
+				}
+				out_line = rewritten
+				out_allocated = true
+				changed = true
+			} else {
+				delete(rewritten)
+			}
 		} else {
 			eq_idx := find_substring(current_trimmed, "=")
 			if eq_idx > 0 {
@@ -1214,11 +1385,54 @@ rewrite_shell_to_fish_syntax :: proc(text: string, allocator := context.allocato
 				}
 			}
 		}
+		special_rewrite, special_changed := rewrite_fish_special_parameters(out_line, allocator)
+		if special_changed {
+			if out_allocated {
+				delete(out_line)
+			}
+			out_line = special_rewrite
+			out_allocated = true
+			changed = true
+		} else {
+			delete(special_rewrite)
+		}
 
 		strings.write_string(&builder, out_line)
 		if out_allocated {
 			delete(out_line)
 		}
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+
+	return strings.clone(strings.to_string(builder), allocator), changed
+}
+
+rewrite_fish_connector_assignments :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	connectors := []string{"; and ", "; or ", " and ", " or "}
+
+	for line, idx in lines {
+		cur := strings.clone(line, allocator)
+		for connector in connectors {
+			next, c := rewrite_fish_inline_assignment(cur, connector, allocator)
+			delete(cur)
+			cur = next
+			if c {
+				changed = true
+			}
+		}
+		strings.write_string(&builder, cur)
+		delete(cur)
 		if idx+1 < len(lines) {
 			strings.write_byte(&builder, '\n')
 		}
@@ -1237,6 +1451,8 @@ rewrite_fish_to_posix_syntax :: proc(text: string, to: ShellDialect, allocator :
 	builder := strings.builder_make()
 	defer strings.builder_destroy(&builder)
 	changed := false
+	block_stack := make([dynamic]byte, 0, 32, context.temp_allocator) // f=function i=if l=loop c=case
+	defer delete(block_stack)
 
 	for line, idx in lines {
 		indent_len := len(line) - len(strings.trim_left_space(line))
@@ -1255,9 +1471,25 @@ rewrite_fish_to_posix_syntax :: proc(text: string, to: ShellDialect, allocator :
 				out_line = strings.concatenate([]string{indent, name, "() {"}, allocator)
 				out_allocated = true
 				changed = true
+				append(&block_stack, 'f')
 			}
 		} else if trimmed == "end" {
-			out_line = strings.concatenate([]string{indent, "}"}, allocator)
+			closing := ":"
+			if len(block_stack) > 0 {
+				top := block_stack[len(block_stack)-1]
+				resize(&block_stack, len(block_stack)-1)
+				switch top {
+				case 'f':
+					closing = "}"
+				case 'i':
+					closing = "fi"
+				case 'l':
+					closing = "done"
+				case 'c':
+					closing = "esac"
+				}
+			}
+			out_line = strings.concatenate([]string{indent, closing}, allocator)
 			out_allocated = true
 			changed = true
 		} else if strings.has_prefix(trimmed, "else if ") {
@@ -1276,6 +1508,7 @@ rewrite_fish_to_posix_syntax :: proc(text: string, to: ShellDialect, allocator :
 			out_line = strings.concatenate([]string{indent, "if ", cond, "; then"}, allocator)
 			out_allocated = true
 			changed = true
+			append(&block_stack, 'i')
 		} else if strings.has_prefix(trimmed, "while ") && !strings.has_suffix(trimmed, "; do") {
 			cond := strings.trim_space(trimmed[len("while "):])
 			if cond == "" {
@@ -1284,15 +1517,18 @@ rewrite_fish_to_posix_syntax :: proc(text: string, to: ShellDialect, allocator :
 			out_line = strings.concatenate([]string{indent, "while ", cond, "; do"}, allocator)
 			out_allocated = true
 			changed = true
+			append(&block_stack, 'l')
 		} else if strings.has_prefix(trimmed, "for ") && !strings.has_suffix(trimmed, "; do") {
 			out_line = strings.concatenate([]string{indent, trimmed, "; do"}, allocator)
 			out_allocated = true
 			changed = true
+			append(&block_stack, 'l')
 		} else if strings.has_prefix(trimmed, "switch ") {
 			expr := strings.trim_space(trimmed[len("switch "):])
 			out_line = strings.concatenate([]string{indent, "case ", expr, " in"}, allocator)
 			out_allocated = true
 			changed = true
+			append(&block_stack, 'c')
 		} else if strings.has_prefix(trimmed, "case ") && !strings.has_suffix(trimmed, ")") {
 			pats := strings.trim_space(trimmed[len("case "):])
 			pats_repl, pats_changed := replace_simple_all(pats, " ", "|", allocator)
@@ -1409,6 +1645,20 @@ rewrite_fish_to_posix_syntax :: proc(text: string, to: ShellDialect, allocator :
 		if idx+1 < len(lines) {
 			strings.write_byte(&builder, '\n')
 		}
+	}
+	for i := len(block_stack) - 1; i >= 0; i -= 1 {
+		strings.write_byte(&builder, '\n')
+		switch block_stack[i] {
+		case 'f':
+			strings.write_string(&builder, "}")
+		case 'i':
+			strings.write_string(&builder, "fi")
+		case 'l':
+			strings.write_string(&builder, "done")
+		case 'c':
+			strings.write_string(&builder, "esac")
+		}
+		changed = true
 	}
 
 	result := strings.clone(strings.to_string(builder), allocator)
@@ -1553,11 +1803,11 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 		}
 
 		out_trimmed := strings.trim_space(out_line)
-		if strings.has_prefix(out_trimmed, "if ") && strings.has_suffix(out_trimmed, "; then") {
+		if strings.has_prefix(out_trimmed, "if ") && strings.contains(out_trimmed, "; then") {
 			append(&ctrl_stack, 'i')
-		} else if strings.has_prefix(out_trimmed, "while ") && strings.has_suffix(out_trimmed, "; do") {
+		} else if strings.has_prefix(out_trimmed, "while ") && strings.contains(out_trimmed, "; do") {
 			append(&ctrl_stack, 'l')
-		} else if strings.has_prefix(out_trimmed, "for ") && strings.has_suffix(out_trimmed, "; do") {
+		} else if strings.has_prefix(out_trimmed, "for ") && strings.contains(out_trimmed, "; do") {
 			append(&ctrl_stack, 'l')
 		} else if strings.has_prefix(out_trimmed, "case ") && strings.has_suffix(out_trimmed, " in") {
 			append(&ctrl_stack, 'c')
@@ -1711,11 +1961,24 @@ rewrite_fish_parse_hardening :: proc(text: string, allocator := context.allocato
 		} else if strings.has_prefix(trimmed, "for ") && strings.has_suffix(trimmed, "; do") {
 			out_line = strings.trim_space(trimmed[:len(trimmed)-len("; do")])
 			changed = true
+		} else if strings.has_prefix(trimmed, "for ") && strings.has_suffix(trimmed, "(") {
+			out_line = "for _ in 1"
+			changed = true
 		} else if strings.has_prefix(trimmed, "case ") && strings.has_suffix(trimmed, " in") {
 			v := strings.trim_space(trimmed[len("case "):len(trimmed)-len(" in")])
 			out_line = strings.concatenate([]string{"switch ", v}, allocator)
 			out_allocated = true
 			changed = true
+		} else if len(block_stack) > 0 &&
+			block_stack[len(block_stack)-1] == 's' &&
+			!strings.has_prefix(trimmed, "case ") &&
+			strings.has_suffix(trimmed, ")") {
+			pat := strings.trim_space(trimmed[:len(trimmed)-1])
+			if pat != "" {
+				out_line = strings.concatenate([]string{"case ", pat}, allocator)
+				out_allocated = true
+				changed = true
+			}
 		} else if strings.has_suffix(trimmed, "() {") {
 			name := strings.trim_space(trimmed[:len(trimmed)-len("() {")])
 			if strings.has_prefix(name, "function ") {
@@ -1895,13 +2158,15 @@ rewrite_zsh_multiline_for_paren_syntax_for_bash :: proc(text: string, allocator 
 							}
 							strings.write_string(&item_builder, item)
 						}
-						items := strings.trim_space(strings.to_string(item_builder))
+						items_full := strings.clone(strings.to_string(item_builder), allocator)
 						strings.builder_destroy(&item_builder)
+						items := strings.trim_space(items_full)
 						if !safe_items {
 							items = ""
 						}
 						if items == "" {
 							// Skip rewrite when iterator list is not safely recoverable.
+							delete(items_full)
 							strings.write_string(&builder, line)
 							if i+1 < len(lines) {
 								strings.write_byte(&builder, '\n')
@@ -1917,6 +2182,7 @@ rewrite_zsh_multiline_for_paren_syntax_for_bash :: proc(text: string, allocator 
 							strings.write_byte(&builder, '\n')
 						}
 						changed = true
+						delete(items_full)
 						i = close_idx + 1
 						continue
 					}
@@ -2208,6 +2474,31 @@ rewrite_zsh_dynamic_function_line_for_bash :: proc(line: string, allocator := co
 	return rewritten, true
 }
 
+rewrite_zsh_inline_function_body_for_bash :: proc(line: string, allocator := context.allocator) -> (string, bool) {
+	open_idx := find_substring(line, "() {")
+	if open_idx < 0 {
+		return strings.clone(line, allocator), false
+	}
+	close_idx := -1
+	for i := len(line) - 1; i >= 0; i -= 1 {
+		if line[i] == '}' {
+			close_idx = i
+			break
+		}
+	}
+	if close_idx <= open_idx+4 {
+		return strings.clone(line, allocator), false
+	}
+	body := strings.trim_space(line[open_idx+4 : close_idx])
+	if body == "" || strings.has_suffix(body, ";") {
+		return strings.clone(line, allocator), false
+	}
+	prefix := line[:open_idx+4]
+	suffix := line[close_idx:]
+	rewritten := strings.concatenate([]string{prefix, " ", body, "; ", suffix}, allocator)
+	return rewritten, true
+}
+
 rewrite_zsh_syntax_for_bash :: proc(text: string, allocator := context.allocator) -> (string, bool) {
 	lines := strings.split_lines(text)
 	defer delete(lines)
@@ -2298,6 +2589,14 @@ rewrite_zsh_syntax_for_bash :: proc(text: string, allocator := context.allocator
 		delete(cur)
 		cur = next
 		if c10 {
+			changed = true
+		}
+
+		c11 := false
+		next, c11 = rewrite_zsh_inline_function_body_for_bash(cur, allocator)
+		delete(cur)
+		cur = next
+		if c11 {
 			changed = true
 		}
 
