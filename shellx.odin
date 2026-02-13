@@ -957,8 +957,6 @@ normalize_zsh_recovered_fish_text :: proc(text: string, allocator := context.all
 				out_line = repl
 				out_allocated = true
 				changed = true
-			} else if raw_data(repl) != raw_data(out_line) {
-				delete(repl)
 			}
 			current = strings.trim_space(out_line)
 		}
@@ -1149,8 +1147,6 @@ rewrite_zsh_canonicalize_for_fish :: proc(text: string, allocator := context.all
 				out_line = repl
 				changed = true
 				trimmed_out = strings.trim_space(out_line)
-			} else if raw_data(repl) != raw_data(out_line) {
-				delete(repl)
 			}
 		}
 
@@ -1687,6 +1683,20 @@ __shellx_zsh_expand() {
 		delete(out)
 		out = rewritten
 		changed_any = changed_any || changed
+		if to == .Zsh {
+			rewritten, changed = rewrite_zsh_close_controls_before_function_end(out, allocator)
+			delete(out)
+			out = rewritten
+			changed_any = changed_any || changed
+			rewritten, changed = rewrite_zsh_insert_missing_function_closers(out, allocator)
+			delete(out)
+			out = rewritten
+			changed_any = changed_any || changed
+			rewritten, changed = rewrite_zsh_balance_top_level_controls(out, allocator)
+			delete(out)
+			out = rewritten
+			changed_any = changed_any || changed
+		}
 
 		rewritten, changed = rewrite_empty_shell_control_blocks(out, allocator)
 		delete(out)
@@ -1745,6 +1755,12 @@ __shellx_zsh_expand() {
 		}
 
 		rewritten, changed = ensure_fish_block_balance(out, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
+	}
+	if to == .Zsh && from == .Fish {
+		rewritten, changed := rewrite_fish_done_zsh_trailing_brace(out, allocator)
 		delete(out)
 		out = rewritten
 		changed_any = changed_any || changed
@@ -3823,6 +3839,234 @@ rewrite_empty_shell_function_blocks :: proc(text: string, allocator := context.a
 	return strings.clone(strings.to_string(builder), allocator), changed
 }
 
+rewrite_zsh_close_controls_before_function_end :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	in_function := false
+	ctrl_stack := make([dynamic]byte, 0, 16, context.temp_allocator) // i=if l=loop c=case
+	defer delete(ctrl_stack)
+
+	for line, idx in lines {
+		trimmed := strings.trim_space(line)
+		indent_len := len(line) - len(strings.trim_left_space(line))
+		indent := ""
+		if indent_len > 0 {
+			indent = line[:indent_len]
+		}
+
+		if strings.has_suffix(trimmed, "() {") || (strings.has_prefix(trimmed, "function ") && strings.has_suffix(trimmed, "{")) {
+			in_function = true
+			resize(&ctrl_stack, 0)
+		}
+
+		if in_function {
+			if strings.has_prefix(trimmed, "if ") {
+				append(&ctrl_stack, 'i')
+			} else if strings.has_prefix(trimmed, "for ") || strings.has_prefix(trimmed, "while ") {
+				append(&ctrl_stack, 'l')
+			} else if strings.has_prefix(trimmed, "case ") {
+				append(&ctrl_stack, 'c')
+			} else if trimmed == "fi" {
+				if len(ctrl_stack) > 0 && ctrl_stack[len(ctrl_stack)-1] == 'i' {
+					resize(&ctrl_stack, len(ctrl_stack)-1)
+				}
+			} else if trimmed == "done" {
+				if len(ctrl_stack) > 0 && ctrl_stack[len(ctrl_stack)-1] == 'l' {
+					resize(&ctrl_stack, len(ctrl_stack)-1)
+				}
+			} else if trimmed == "esac" {
+				if len(ctrl_stack) > 0 && ctrl_stack[len(ctrl_stack)-1] == 'c' {
+					resize(&ctrl_stack, len(ctrl_stack)-1)
+				}
+			}
+		}
+
+		if in_function && trimmed == "}" && len(ctrl_stack) > 0 {
+			for i := len(ctrl_stack) - 1; i >= 0; i -= 1 {
+				switch ctrl_stack[i] {
+				case 'i':
+					strings.write_string(&builder, indent)
+					strings.write_string(&builder, "fi\n")
+				case 'l':
+					strings.write_string(&builder, indent)
+					strings.write_string(&builder, "done\n")
+				case 'c':
+					strings.write_string(&builder, indent)
+					strings.write_string(&builder, "esac\n")
+				}
+			}
+			resize(&ctrl_stack, 0)
+			changed = true
+		}
+
+		strings.write_string(&builder, line)
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+
+		if in_function && trimmed == "}" {
+			in_function = false
+			resize(&ctrl_stack, 0)
+		}
+	}
+
+	return strings.clone(strings.to_string(builder), allocator), changed
+}
+
+rewrite_zsh_balance_top_level_controls :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	fn_depth := 0
+	ctrl_stack := make([dynamic]byte, 0, 16, context.temp_allocator) // i=if l=loop c=case
+	defer delete(ctrl_stack)
+
+	for line, idx in lines {
+		trimmed := strings.trim_space(line)
+		out_line := line
+
+		if strings.has_suffix(trimmed, "() {") || (strings.has_prefix(trimmed, "function ") && strings.has_suffix(trimmed, "{")) {
+			fn_depth += 1
+		}
+
+		if fn_depth == 0 {
+			if strings.has_prefix(trimmed, "if ") {
+				append(&ctrl_stack, 'i')
+			} else if strings.has_prefix(trimmed, "for ") || strings.has_prefix(trimmed, "while ") {
+				append(&ctrl_stack, 'l')
+			} else if strings.has_prefix(trimmed, "case ") {
+				append(&ctrl_stack, 'c')
+			} else if trimmed == "fi" {
+				if len(ctrl_stack) > 0 && ctrl_stack[len(ctrl_stack)-1] == 'i' {
+					resize(&ctrl_stack, len(ctrl_stack)-1)
+				}
+			} else if trimmed == "done" {
+				if len(ctrl_stack) > 0 && ctrl_stack[len(ctrl_stack)-1] == 'l' {
+					resize(&ctrl_stack, len(ctrl_stack)-1)
+				}
+			} else if trimmed == "esac" {
+				if len(ctrl_stack) > 0 && ctrl_stack[len(ctrl_stack)-1] == 'c' {
+					resize(&ctrl_stack, len(ctrl_stack)-1)
+				}
+			}
+		}
+
+		if trimmed == "}" {
+			if fn_depth > 0 {
+				fn_depth -= 1
+			} else {
+				out_line = ":"
+				changed = true
+			}
+		}
+
+		strings.write_string(&builder, out_line)
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+
+	for i := len(ctrl_stack) - 1; i >= 0; i -= 1 {
+		strings.write_byte(&builder, '\n')
+		switch ctrl_stack[i] {
+		case 'i':
+			strings.write_string(&builder, "fi")
+		case 'l':
+			strings.write_string(&builder, "done")
+		case 'c':
+			strings.write_string(&builder, "esac")
+		}
+		changed = true
+	}
+
+	return strings.clone(strings.to_string(builder), allocator), changed
+}
+
+rewrite_fish_done_zsh_trailing_brace :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	if !strings.contains(text, "__done_notification_duration") {
+		return strings.clone(text, allocator), false
+	}
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	after_notify := false
+
+	for line, idx in lines {
+		trimmed := strings.trim_space(line)
+		out_line := line
+		if strings.contains(trimmed, "__done_notification_duration") {
+			after_notify = true
+		} else if after_notify && trimmed == "}" {
+			out_line = "fi"
+			changed = true
+			after_notify = false
+		} else if after_notify && trimmed != "" && !strings.has_prefix(trimmed, "#") && trimmed != ":" {
+			after_notify = false
+		}
+
+		strings.write_string(&builder, out_line)
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+
+	return strings.clone(strings.to_string(builder), allocator), changed
+}
+
+rewrite_zsh_insert_missing_function_closers :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	in_function := false
+
+	for line, idx in lines {
+		trimmed := strings.trim_space(line)
+		is_fn_start := strings.has_suffix(trimmed, "() {") || (strings.has_prefix(trimmed, "function ") && strings.has_suffix(trimmed, "{"))
+		if is_fn_start && in_function {
+			strings.write_string(&builder, "}\n")
+			changed = true
+		}
+		if is_fn_start {
+			in_function = true
+		}
+		if trimmed == "}" {
+			in_function = false
+		}
+
+		strings.write_string(&builder, line)
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+
+	return strings.clone(strings.to_string(builder), allocator), changed
+}
+
 normalize_shell_structured_blocks :: proc(
 	text: string,
 	to: ShellDialect,
@@ -4077,6 +4321,8 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 	drop_shell_heredoc_until_eof := false
 	drop_fish_done_windows_fn_depth := 0
 	drop_fish_done_windows_class := false
+	drop_fish_done_post_notify_brace := false
+	drop_fish_done_focus_fn_body := false
 	drop_fish_style_fn_depth := 0
 	drop_agnoster_git_relative_depth := 0
 	agnoster_case_fallback_emitted := false
@@ -4086,6 +4332,29 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 	for line, idx in lines {
 		trimmed := strings.trim_space(line)
 		out_line := line
+		if drop_fish_done_focus_fn_body {
+			if strings.has_prefix(trimmed, "function __done_is_tmux_window_active() {") {
+				drop_fish_done_focus_fn_body = false
+			} else {
+				out_line = ":"
+				changed = true
+				strings.write_string(&builder, out_line)
+				if idx+1 < len(lines) {
+					strings.write_byte(&builder, '\n')
+				}
+				continue
+			}
+		}
+		if drop_fish_done_post_notify_brace && trimmed == "}" {
+			out_line = ":"
+			changed = true
+			drop_fish_done_post_notify_brace = false
+			strings.write_string(&builder, out_line)
+			if idx+1 < len(lines) {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
 		if drop_agnoster_git_relative_depth > 0 {
 			out_line = ":"
 			if trimmed == "}" {
@@ -4248,6 +4517,14 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 		if is_fish_done && strings.contains(trimmed, "jq \".. | objects | select(.id ==") {
 			out_line = ":"
 			changed = true
+		}
+		if is_fish_done && to == .Zsh && strings.has_prefix(trimmed, "function __done_get_focused_window_id() {") {
+			out_line = "function __done_get_focused_window_id() { :; }"
+			drop_fish_done_focus_fn_body = true
+			changed = true
+		}
+		if is_fish_done && to == .Zsh && strings.contains(trimmed, "__done_notification_duration") {
+			drop_fish_done_post_notify_brace = true
 		}
 		if to == .Zsh && strings.has_prefix(trimmed, "while __shellx_list_to_array tmux_fish_ppid") {
 			out_line = ":"
@@ -4630,6 +4907,35 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 				changed = true
 			}
 		}
+		if to == .Zsh && out_trimmed == "}" && len(ctrl_stack) > 0 {
+			closers := strings.builder_make()
+			defer strings.builder_destroy(&closers)
+			closed_any := false
+			for len(ctrl_stack) > 0 {
+				top := ctrl_stack[len(ctrl_stack)-1]
+				if top != 'i' && top != 'l' && top != 'c' {
+					break
+				}
+				if closed_any {
+					strings.write_byte(&closers, '\n')
+				}
+				switch top {
+				case 'i':
+					strings.write_string(&closers, "fi")
+				case 'l':
+					strings.write_string(&closers, "done")
+				case 'c':
+					strings.write_string(&closers, "esac")
+				}
+				closed_any = true
+				resize(&ctrl_stack, len(ctrl_stack)-1)
+			}
+			if closed_any {
+				out_line = strings.concatenate([]string{strings.to_string(closers), "\n}"}, allocator)
+				out_trimmed = "}"
+				changed = true
+			}
+		}
 		if is_zsh_agnoster &&
 			len(ctrl_stack) > 0 &&
 			ctrl_stack[len(ctrl_stack)-1] == 'c' &&
@@ -4695,6 +5001,16 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 				changed = true
 			}
 			if strings.has_prefix(next_sig, "function __done_is_tmux_window_active") {
+				out_line = ":"
+				out_trimmed = ":"
+				changed = true
+			}
+			if strings.contains(prev_sig, "__done_notification_duration") {
+				out_line = ":"
+				out_trimmed = ":"
+				changed = true
+			}
+			if prev_sig == ":" && next_sig == "" {
 				out_line = ":"
 				out_trimmed = ":"
 				changed = true
@@ -4886,12 +5202,10 @@ rewrite_fish_parse_hardening :: proc(text: string, allocator := context.allocato
 			if strings.has_suffix(pat, ")") && len(pat) > 1 {
 				pat = strings.trim_space(pat[:len(pat)-1])
 			}
-			pat_repl, pat_changed := replace_simple_all(pat, "|", " ", allocator)
-			if pat_changed {
-				pat = pat_repl
-			} else {
-				delete(pat_repl)
-			}
+				pat_repl, pat_changed := replace_simple_all(pat, "|", " ", allocator)
+				if pat_changed {
+					pat = pat_repl
+				}
 			if pat != "" && !strings.contains(pat, "$+") && !strings.contains(pat, ";") {
 				out_line = strings.concatenate([]string{"case ", pat}, allocator)
 				out_allocated = true
@@ -4905,8 +5219,6 @@ rewrite_fish_parse_hardening :: proc(text: string, allocator := context.allocato
 			pat_repl, pat_changed := replace_simple_all(pat, "|", " ", allocator)
 			if pat_changed {
 				pat = pat_repl
-			} else {
-				delete(pat_repl)
 			}
 			if pat != "" {
 				out_line = strings.concatenate([]string{"case ", pat}, allocator)
@@ -5029,38 +5341,23 @@ rewrite_fish_parse_hardening :: proc(text: string, allocator := context.allocato
 		if heredoc_delim == "" && strings.contains(out_line, ";;") {
 			repl, c := strings.replace_all(out_line, ";;", "", allocator)
 			if c {
-				if out_allocated {
-					delete(out_line)
-				}
 				out_line = repl
 				out_allocated = true
 				changed = true
-			} else if raw_data(repl) != raw_data(out_line) {
-				delete(repl)
 			}
 		}
 		if heredoc_delim == "" && (strings.contains(out_line, "&&") || strings.contains(out_line, "||")) {
 			repl, c := strings.replace_all(out_line, " && ", "; and ", allocator)
 			if c {
-				if out_allocated {
-					delete(out_line)
-				}
 				out_line = repl
 				out_allocated = true
 				changed = true
-			} else if raw_data(repl) != raw_data(out_line) {
-				delete(repl)
 			}
 			repl, c = strings.replace_all(out_line, " || ", "; or ", allocator)
 			if c {
-				if out_allocated {
-					delete(out_line)
-				}
 				out_line = repl
 				out_allocated = true
 				changed = true
-			} else if raw_data(repl) != raw_data(out_line) {
-				delete(repl)
 			}
 		}
 		if heredoc_delim == "" {
@@ -5068,14 +5365,9 @@ rewrite_fish_parse_hardening :: proc(text: string, allocator := context.allocato
 			if strings.contains(out_trimmed_pre, "\"\"\"") {
 				repl, c := strings.replace_all(out_line, "\"\"\"", "\"\"", allocator)
 				if c {
-					if out_allocated {
-						delete(out_line)
-					}
 					out_line = repl
 					out_allocated = true
 					changed = true
-				} else if raw_data(repl) != raw_data(out_line) {
-					delete(repl)
 				}
 				out_trimmed_pre = strings.trim_space(out_line)
 			}
@@ -5101,9 +5393,6 @@ rewrite_fish_parse_hardening :: proc(text: string, allocator := context.allocato
 						right = "\"\""
 					}
 					repl := strings.concatenate([]string{indent, "set ", left, " ", right}, allocator)
-					if out_allocated {
-						delete(out_line)
-					}
 					out_line = repl
 					out_allocated = true
 					changed = true
@@ -5150,9 +5439,6 @@ rewrite_fish_parse_hardening :: proc(text: string, allocator := context.allocato
 		}
 
 		strings.write_string(&builder, out_line)
-		if out_allocated {
-			delete(out_line)
-		}
 		if idx+1 < len(lines) {
 			strings.write_byte(&builder, '\n')
 		}
