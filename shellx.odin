@@ -1074,6 +1074,12 @@ __shellx_zsh_expand() {
 		}
 		changed_any = changed_any || zero_changed || zero_b_changed || first_changed || second_changed || secondb_changed || third_changed
 	}
+	if from == .Zsh && to == .Fish {
+		rewritten, changed := rewrite_zsh_multiline_for_paren_syntax_for_bash(out, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
+	}
 
 	if to == .Fish {
 		rewritten, changed := rewrite_shell_to_fish_syntax(out, allocator)
@@ -1090,6 +1096,9 @@ __shellx_zsh_expand() {
 		delete(out)
 		out = rewritten
 		changed_any = changed_any || changed
+
+		out, changed_any = replace_with_flag(out, "$)", "\\$)", changed_any, allocator)
+		out, changed_any = replace_with_flag(out, "builtin which", "command which", changed_any, allocator)
 	}
 
 	if from == .Fish && (to == .Bash || to == .POSIX) {
@@ -1104,10 +1113,25 @@ __shellx_zsh_expand() {
 		delete(out)
 		out = rewritten
 		changed_any = changed_any || changed
+
+		rewritten, changed = rewrite_empty_shell_control_blocks(out, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
 	}
 
 	if to == .Fish {
 		rewritten, changed := rewrite_fish_parse_hardening(out, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
+
+		rewritten, changed = normalize_fish_case_patterns(out, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
+
+		rewritten, changed = normalize_fish_simple_assignments(out, allocator)
 		delete(out)
 		out = rewritten
 		changed_any = changed_any || changed
@@ -1256,6 +1280,18 @@ rewrite_shell_to_fish_syntax :: proc(text: string, allocator := context.allocato
 			changed = true
 		} else if current_trimmed == ";;" {
 			out_line = ""
+			changed = true
+		} else if strings.has_prefix(current_trimmed, "if ((") {
+			out_line = strings.concatenate([]string{indent, "if true"}, allocator)
+			out_allocated = true
+			changed = true
+		} else if strings.has_prefix(current_trimmed, "elif ((") {
+			out_line = strings.concatenate([]string{indent, "else if true"}, allocator)
+			out_allocated = true
+			changed = true
+		} else if strings.has_prefix(current_trimmed, "while ((") {
+			out_line = strings.concatenate([]string{indent, "while true"}, allocator)
+			out_allocated = true
 			changed = true
 		} else if strings.has_prefix(current_trimmed, "if ") && strings.has_suffix(current_trimmed, "; then") {
 			cond := strings.trim_space(current_trimmed[3 : len(current_trimmed)-6])
@@ -1419,7 +1455,7 @@ rewrite_fish_connector_assignments :: proc(text: string, allocator := context.al
 	builder := strings.builder_make()
 	defer strings.builder_destroy(&builder)
 	changed := false
-	connectors := []string{"; and ", "; or ", " and ", " or "}
+	connectors := []string{"; and ", "; or ", " and ", " or ", "; "}
 
 	for line, idx in lines {
 		cur := strings.clone(line, allocator)
@@ -1438,6 +1474,100 @@ rewrite_fish_connector_assignments :: proc(text: string, allocator := context.al
 		}
 	}
 
+	return strings.clone(strings.to_string(builder), allocator), changed
+}
+
+normalize_fish_case_patterns :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	for line, idx in lines {
+		trimmed := strings.trim_space(line)
+		out_line := line
+		out_allocated := false
+		if strings.has_prefix(trimmed, "case ( $+commands[") || strings.has_prefix(trimmed, "case ($+commands[") {
+			out_line = ":"
+			changed = true
+		} else if strings.has_prefix(trimmed, "case ") && strings.contains(trimmed, "|") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			pat := strings.trim_space(trimmed[len("case "):])
+			repl, c := strings.replace_all(pat, "|", " ", allocator)
+			if c {
+				out_line = strings.concatenate([]string{indent, "case ", repl}, allocator)
+				out_allocated = true
+				changed = true
+				delete(repl)
+			} else if raw_data(repl) != raw_data(pat) {
+				delete(repl)
+			}
+		}
+		strings.write_string(&builder, out_line)
+		if out_allocated {
+			delete(out_line)
+		}
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+	return strings.clone(strings.to_string(builder), allocator), changed
+}
+
+normalize_fish_simple_assignments :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	for line, idx in lines {
+		trimmed := strings.trim_space(line)
+		out_line := line
+		out_allocated := false
+		eq_idx := find_substring(trimmed, "=")
+		if eq_idx > 0 &&
+			!strings.has_prefix(trimmed, "set ") &&
+			!strings.has_prefix(trimmed, "if ") &&
+			!strings.has_prefix(trimmed, "else if ") &&
+			!strings.has_prefix(trimmed, "while ") &&
+			!strings.has_prefix(trimmed, "for ") &&
+			!strings.has_prefix(trimmed, "case ") &&
+			!strings.contains(trimmed, "==") &&
+			!strings.contains(trimmed, "!=") {
+			left := strings.trim_space(trimmed[:eq_idx])
+			right := strings.trim_space(trimmed[eq_idx+1:])
+			if is_basic_name(left) {
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				if right == "" {
+					right = "\"\""
+				}
+				out_line = strings.concatenate([]string{indent, "set ", left, " ", right}, allocator)
+				out_allocated = true
+				changed = true
+			}
+		}
+		strings.write_string(&builder, out_line)
+		if out_allocated {
+			delete(out_line)
+		}
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
 	return strings.clone(strings.to_string(builder), allocator), changed
 }
 
@@ -1756,6 +1886,64 @@ fix_empty_fish_if_blocks :: proc(text: string, allocator := context.allocator) -
 	return result, changed
 }
 
+rewrite_empty_shell_control_blocks :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	for i := 0; i < len(lines); i += 1 {
+		line := lines[i]
+		trimmed := strings.trim_space(line)
+		strings.write_string(&builder, line)
+		if i+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+
+		is_if := strings.has_prefix(trimmed, "if ") && strings.contains(trimmed, "; then")
+		is_loop := (strings.has_prefix(trimmed, "while ") || strings.has_prefix(trimmed, "for ")) && strings.contains(trimmed, "; do")
+		if !is_if && !is_loop {
+			continue
+		}
+
+		j := i + 1
+		for j < len(lines) {
+			next_trim := strings.trim_space(lines[j])
+			if next_trim == "" || strings.has_prefix(next_trim, "#") {
+				j += 1
+				continue
+			}
+			needs_noop := false
+			if is_if {
+				needs_noop = next_trim == "fi" || next_trim == "else" || strings.has_prefix(next_trim, "elif ")
+			} else if is_loop {
+				needs_noop = next_trim == "done"
+			}
+			if needs_noop {
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				strings.write_string(&builder, indent)
+				strings.write_string(&builder, "  :")
+				if i+1 < len(lines) {
+					strings.write_byte(&builder, '\n')
+				}
+				changed = true
+			}
+			break
+		}
+	}
+
+	return strings.clone(strings.to_string(builder), allocator), changed
+}
+
 rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator := context.allocator) -> (string, bool) {
 	lines := strings.split_lines(text)
 	defer delete(lines)
@@ -1914,27 +2102,62 @@ rewrite_fish_parse_hardening :: proc(text: string, allocator := context.allocato
 	changed := false
 	block_stack := make([dynamic]byte, 0, 32, context.temp_allocator) // f=function i=if l=loop s=switch
 	defer delete(block_stack)
+	heredoc_delim := ""
 
 	for line, idx in lines {
 		trimmed := strings.trim_space(line)
 		out_line := line
 		out_allocated := false
-		if trimmed == "if" {
-			out_line = "if true"
-			changed = true
-		} else if trimmed == "while" {
-			out_line = "while true"
-			changed = true
-		} else if trimmed == "for" {
-			out_line = "for _ in 1"
-			changed = true
-		} else if trimmed == "fi" || trimmed == "done" || trimmed == "esac" || trimmed == "}" {
-			out_line = "end"
-			changed = true
-		} else if trimmed == "then" || trimmed == "do" || trimmed == "{" || trimmed == ";;" {
+		if heredoc_delim != "" {
 			out_line = ":"
 			changed = true
-		} else if strings.has_prefix(trimmed, "if ") && strings.has_suffix(trimmed, "; then") {
+			if trimmed == heredoc_delim {
+				heredoc_delim = ""
+			}
+		} else if strings.contains(trimmed, "<<") {
+			hd_idx := find_substring(trimmed, "<<")
+			if hd_idx >= 0 {
+				delim := strings.trim_space(trimmed[hd_idx+2:])
+				if strings.has_prefix(delim, "'") && strings.has_suffix(delim, "'") && len(delim) >= 2 {
+					delim = delim[1 : len(delim)-1]
+				}
+				if strings.has_prefix(delim, "\"") && strings.has_suffix(delim, "\"") && len(delim) >= 2 {
+					delim = delim[1 : len(delim)-1]
+				}
+				if delim != "" {
+					heredoc_delim = delim
+					out_line = ":"
+					changed = true
+				}
+			}
+		}
+		if trimmed == "if" && heredoc_delim == "" {
+			out_line = "if true"
+			changed = true
+		} else if trimmed == "while" && heredoc_delim == "" {
+			out_line = "while true"
+			changed = true
+		} else if trimmed == "for" && heredoc_delim == "" {
+			out_line = "for _ in 1"
+			changed = true
+		} else if heredoc_delim == "" && (trimmed == "fi" || trimmed == "done" || trimmed == "esac" || trimmed == "}") {
+			out_line = "end"
+			changed = true
+		} else if heredoc_delim == "" &&
+			((strings.has_prefix(trimmed, "fi") || strings.has_prefix(trimmed, "done") || strings.has_prefix(trimmed, "esac")) &&
+				strings.contains(trimmed, ";;")) {
+			out_line = "end"
+			changed = true
+		} else if heredoc_delim == "" && strings.contains(trimmed, "always") && strings.contains(trimmed, "{") {
+			out_line = ":"
+			changed = true
+		} else if heredoc_delim == "" && (strings.contains(trimmed, "} ;;") || strings.contains(trimmed, "};;")) {
+			out_line = ":"
+			changed = true
+		} else if heredoc_delim == "" && (trimmed == "then" || trimmed == "do" || trimmed == "{" || trimmed == ";;") {
+			out_line = ":"
+			changed = true
+		} else if heredoc_delim == "" && strings.has_prefix(trimmed, "if ") && strings.has_suffix(trimmed, "; then") {
 			cond := strings.trim_space(trimmed[len("if "):len(trimmed)-len("; then")])
 			if cond == "" {
 				cond = "true"
@@ -1942,7 +2165,7 @@ rewrite_fish_parse_hardening :: proc(text: string, allocator := context.allocato
 			out_line = strings.concatenate([]string{"if ", cond}, allocator)
 			out_allocated = true
 			changed = true
-		} else if strings.has_prefix(trimmed, "elif ") && strings.has_suffix(trimmed, "; then") {
+		} else if heredoc_delim == "" && strings.has_prefix(trimmed, "elif ") && strings.has_suffix(trimmed, "; then") {
 			cond := strings.trim_space(trimmed[len("elif "):len(trimmed)-len("; then")])
 			if cond == "" {
 				cond = "true"
@@ -1950,7 +2173,7 @@ rewrite_fish_parse_hardening :: proc(text: string, allocator := context.allocato
 			out_line = strings.concatenate([]string{"else if ", cond}, allocator)
 			out_allocated = true
 			changed = true
-		} else if strings.has_prefix(trimmed, "while ") && strings.has_suffix(trimmed, "; do") {
+		} else if heredoc_delim == "" && strings.has_prefix(trimmed, "while ") && strings.has_suffix(trimmed, "; do") {
 			cond := strings.trim_space(trimmed[len("while "):len(trimmed)-len("; do")])
 			if cond == "" {
 				cond = "true"
@@ -1958,28 +2181,138 @@ rewrite_fish_parse_hardening :: proc(text: string, allocator := context.allocato
 			out_line = strings.concatenate([]string{"while ", cond}, allocator)
 			out_allocated = true
 			changed = true
-		} else if strings.has_prefix(trimmed, "for ") && strings.has_suffix(trimmed, "; do") {
+		} else if heredoc_delim == "" && strings.has_prefix(trimmed, "for ") && strings.has_suffix(trimmed, "; do") {
 			out_line = strings.trim_space(trimmed[:len(trimmed)-len("; do")])
 			changed = true
-		} else if strings.has_prefix(trimmed, "for ") && strings.has_suffix(trimmed, "(") {
+		} else if heredoc_delim == "" && strings.has_prefix(trimmed, "for ") && strings.has_suffix(trimmed, "(") {
 			out_line = "for _ in 1"
 			changed = true
-		} else if strings.has_prefix(trimmed, "case ") && strings.has_suffix(trimmed, " in") {
+		} else if heredoc_delim == "" && strings.has_prefix(trimmed, "case ") && strings.has_suffix(trimmed, " in") {
 			v := strings.trim_space(trimmed[len("case "):len(trimmed)-len(" in")])
 			out_line = strings.concatenate([]string{"switch ", v}, allocator)
 			out_allocated = true
 			changed = true
 		} else if len(block_stack) > 0 &&
+			heredoc_delim == "" &&
 			block_stack[len(block_stack)-1] == 's' &&
-			!strings.has_prefix(trimmed, "case ") &&
-			strings.has_suffix(trimmed, ")") {
-			pat := strings.trim_space(trimmed[:len(trimmed)-1])
+			strings.has_prefix(trimmed, "case (") {
+			pat := strings.trim_space(trimmed[len("case ("):])
+			if strings.contains(pat, "$+commands[") {
+				out_line = ":"
+				changed = true
+			} else {
+			if strings.has_suffix(pat, ")") && len(pat) > 1 {
+				pat = strings.trim_space(pat[:len(pat)-1])
+			}
+			pat_repl, pat_changed := replace_simple_all(pat, "|", " ", allocator)
+			if pat_changed {
+				pat = pat_repl
+			} else {
+				delete(pat_repl)
+			}
+			if pat != "" && !strings.contains(pat, "$+") && !strings.contains(pat, ";") {
+				out_line = strings.concatenate([]string{"case ", pat}, allocator)
+				out_allocated = true
+				changed = true
+			}
+			}
+		} else if heredoc_delim == "" &&
+			strings.has_prefix(trimmed, "case ") &&
+			strings.contains(trimmed, "|") {
+			pat := strings.trim_space(trimmed[len("case "):])
+			pat_repl, pat_changed := replace_simple_all(pat, "|", " ", allocator)
+			if pat_changed {
+				pat = pat_repl
+			} else {
+				delete(pat_repl)
+			}
 			if pat != "" {
 				out_line = strings.concatenate([]string{"case ", pat}, allocator)
 				out_allocated = true
 				changed = true
 			}
-		} else if strings.has_suffix(trimmed, "() {") {
+		} else if len(block_stack) > 0 &&
+			heredoc_delim == "" &&
+			block_stack[len(block_stack)-1] == 's' &&
+			strings.contains(trimmed, ")") &&
+			strings.contains(trimmed, ";;") &&
+			!strings.has_prefix(trimmed, "if ") &&
+			!strings.has_prefix(trimmed, "else") &&
+			!strings.has_prefix(trimmed, "elif ") &&
+			!strings.has_prefix(trimmed, "while ") &&
+			!strings.has_prefix(trimmed, "for ") {
+			close_idx := find_substring(trimmed, ")")
+			pat := strings.trim_space(trimmed[:close_idx])
+			body := strings.trim_space(trimmed[close_idx+1:])
+			semi_idx := find_substring(body, ";;")
+			if semi_idx >= 0 {
+				body = strings.trim_space(body[:semi_idx])
+			}
+			if strings.has_prefix(pat, "(") {
+				pat = strings.trim_space(pat[1:])
+			}
+			if pat != "" {
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				if body != "" {
+					out_line = strings.concatenate([]string{"case ", pat, "\n", indent, "  ", body}, allocator)
+				} else {
+					out_line = strings.concatenate([]string{"case ", pat}, allocator)
+				}
+				out_allocated = true
+				changed = true
+			}
+		} else if len(block_stack) > 0 &&
+			heredoc_delim == "" &&
+			block_stack[len(block_stack)-1] == 's' &&
+			!strings.has_prefix(trimmed, "case ") &&
+			!strings.has_prefix(trimmed, "if ") &&
+			!strings.has_prefix(trimmed, "else") &&
+			!strings.has_prefix(trimmed, "elif ") &&
+			!strings.has_prefix(trimmed, "while ") &&
+			!strings.has_prefix(trimmed, "for ") &&
+			strings.has_suffix(trimmed, ")") {
+			pat := strings.trim_space(trimmed[:len(trimmed)-1])
+			if pat != "" {
+				if strings.has_prefix(pat, "(") {
+					pat = strings.trim_space(pat[1:])
+				}
+				if !strings.contains(pat, "$+") &&
+					!strings.contains(pat, ";") &&
+					!strings.contains(pat, "&&") &&
+					!strings.contains(pat, "||") {
+					out_line = strings.concatenate([]string{"case ", pat}, allocator)
+					out_allocated = true
+					changed = true
+				}
+			}
+		} else if len(block_stack) > 0 &&
+			heredoc_delim == "" &&
+			block_stack[len(block_stack)-1] == 's' &&
+			!strings.has_prefix(trimmed, "if ") &&
+			!strings.has_prefix(trimmed, "else") &&
+			!strings.has_prefix(trimmed, "elif ") &&
+			!strings.has_prefix(trimmed, "while ") &&
+			!strings.has_prefix(trimmed, "for ") &&
+			!strings.has_prefix(trimmed, "((") &&
+			strings.has_prefix(trimmed, "(") {
+			pat := strings.trim_space(trimmed[1:])
+			if strings.has_suffix(pat, ")") && len(pat) > 1 {
+				pat = strings.trim_space(pat[:len(pat)-1])
+			}
+			if pat != "" &&
+				!strings.contains(pat, "$+") &&
+				!strings.contains(pat, ";") &&
+				!strings.contains(pat, "&&") &&
+				!strings.contains(pat, "||") {
+				out_line = strings.concatenate([]string{"case ", pat}, allocator)
+				out_allocated = true
+				changed = true
+			}
+		} else if heredoc_delim == "" && strings.has_suffix(trimmed, "() {") {
 			name := strings.trim_space(trimmed[:len(trimmed)-len("() {")])
 			if strings.has_prefix(name, "function ") {
 				name = strings.trim_space(name[len("function "):])
@@ -1989,6 +2322,81 @@ rewrite_fish_parse_hardening :: proc(text: string, allocator := context.allocato
 				out_line = strings.concatenate([]string{"function ", name}, allocator)
 				out_allocated = true
 				changed = true
+			}
+		} else if heredoc_delim == "" &&
+			strings.has_prefix(trimmed, "((") &&
+			strings.contains(trimmed, "))") {
+			out_line = ":"
+			changed = true
+		}
+		if heredoc_delim == "" && strings.contains(out_line, ";;") {
+			repl, c := strings.replace_all(out_line, ";;", "", allocator)
+			if c {
+				if out_allocated {
+					delete(out_line)
+				}
+				out_line = repl
+				out_allocated = true
+				changed = true
+			} else if raw_data(repl) != raw_data(out_line) {
+				delete(repl)
+			}
+		}
+		if heredoc_delim == "" && (strings.contains(out_line, "&&") || strings.contains(out_line, "||")) {
+			repl, c := strings.replace_all(out_line, " && ", "; and ", allocator)
+			if c {
+				if out_allocated {
+					delete(out_line)
+				}
+				out_line = repl
+				out_allocated = true
+				changed = true
+			} else if raw_data(repl) != raw_data(out_line) {
+				delete(repl)
+			}
+			repl, c = strings.replace_all(out_line, " || ", "; or ", allocator)
+			if c {
+				if out_allocated {
+					delete(out_line)
+				}
+				out_line = repl
+				out_allocated = true
+				changed = true
+			} else if raw_data(repl) != raw_data(out_line) {
+				delete(repl)
+			}
+		}
+		if heredoc_delim == "" {
+			out_trimmed_pre := strings.trim_space(out_line)
+			eq_idx := find_substring(out_trimmed_pre, "=")
+			if eq_idx > 0 {
+				left := strings.trim_space(out_trimmed_pre[:eq_idx])
+				right := strings.trim_space(out_trimmed_pre[eq_idx+1:])
+				if is_basic_name(left) &&
+					!strings.has_prefix(out_trimmed_pre, "set ") &&
+					!strings.has_prefix(out_trimmed_pre, "if ") &&
+					!strings.has_prefix(out_trimmed_pre, "else if ") &&
+					!strings.has_prefix(out_trimmed_pre, "while ") &&
+					!strings.has_prefix(out_trimmed_pre, "for ") &&
+					!strings.has_prefix(out_trimmed_pre, "case ") &&
+					!strings.contains(out_trimmed_pre, "==") &&
+					!strings.contains(out_trimmed_pre, "!=") {
+					indent_len := len(out_line) - len(strings.trim_left_space(out_line))
+					indent := ""
+					if indent_len > 0 {
+						indent = out_line[:indent_len]
+					}
+					if right == "" {
+						right = "\"\""
+					}
+					repl := strings.concatenate([]string{indent, "set ", left, " ", right}, allocator)
+					if out_allocated {
+						delete(out_line)
+					}
+					out_line = repl
+					out_allocated = true
+					changed = true
+				}
 			}
 		}
 
