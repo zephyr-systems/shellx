@@ -192,13 +192,25 @@ translate :: proc(
 		}
 		omitted_parse_warns := 0
 		emitted_parse_warns := 0
+		parse_lines := strings.split_lines(parse_source)
+		defer delete(parse_lines)
 		for diag in parse_diags {
-			if from == .Zsh && to != .Zsh &&
-				diag.location.line == 1 &&
-				diag.location.column == 0 &&
-				strings.contains(diag.message, "Syntax error") {
-				omitted_parse_warns += 1
-				continue
+			if from == .Zsh && to != .Zsh {
+				line_text := ""
+				if diag.location.line >= 1 && diag.location.line <= len(parse_lines) {
+					line_text = strings.trim_space(parse_lines[diag.location.line-1])
+				}
+				if line_text == "" ||
+					strings.has_prefix(line_text, "#") ||
+					line_text == "}" ||
+					line_text == "*)" ||
+					strings.has_prefix(line_text, "autoload -Uz ") ||
+					strings.has_prefix(line_text, "typeset -g ") ||
+					strings.has_prefix(line_text, "completion:*) zle -C ") ||
+					strings.has_prefix(line_text, "builtin) eval \"_zsh_highlight_widget_") {
+					omitted_parse_warns += 1
+					continue
+				}
 			}
 			if emitted_parse_warns >= parse_warn_limit {
 				omitted_parse_warns += 1

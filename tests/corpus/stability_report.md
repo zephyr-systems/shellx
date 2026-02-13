@@ -14,9 +14,9 @@ Cross-dialect runs executed: 126
 | fish->bash | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 19 | 1.012 | 7.679 | 11 |
 | fish->posix | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 18 | 0.954 | 7.225 | 11 |
 | fish->zsh | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 19 | 1.100 | 5.528 | 11 |
-| zsh->bash | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 39 | 4 | 0.816 | 1.949 | 4 |
-| zsh->fish | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 39 | 0 | 2.119 | 10.303 | 15 |
-| zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 39 | 22 | 1.257 | 6.342 | 14 |
+| zsh->bash | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 32 | 4 | 0.816 | 1.949 | 4 |
+| zsh->fish | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 33 | 0 | 2.119 | 10.303 | 15 |
+| zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 32 | 22 | 1.257 | 6.342 | 14 |
 
 ## Failures
 
@@ -113,21 +113,21 @@ Cross-dialect runs executed: 126
   - zsh-syntax-highlighting (plugin) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
   - ohmyzsh-z (plugin) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
   - zsh-spaceship (theme) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
-- `parse_recovery/parse_diagnostic`: 39
-  - zsh-autosuggestions (plugin) Parse diagnostic at <input>:853:1: Syntax error
-  - zsh-autosuggestions (plugin) Parse diagnostic at <input>:856:11: Syntax error
-  - zsh-autosuggestions (plugin) Parse diagnostic at <input>:863:11: Syntax error
-  - zsh-autosuggestions (plugin) Parse diagnostic at <input>:0:0: 1 additional diagnostics suppressed
-  - zsh-syntax-highlighting (plugin) Parse diagnostic at <input>:478:21: Syntax error
+- `parse_recovery/parse_diagnostic`: 32
+  - zsh-autosuggestions (plugin) Parse diagnostic at <input>:0:0: 4 additional diagnostics suppressed
+  - zsh-syntax-highlighting (plugin) Parse diagnostic at <input>:0:0: 6 additional diagnostics suppressed
+  - ohmyzsh-git (plugin) Parse diagnostic at <input>:3:12: Syntax error
+  - ohmyzsh-git (plugin) Parse diagnostic at <input>:176:14: Syntax error
+  - ohmyzsh-git (plugin) Parse diagnostic at <input>:337:29: Syntax error
 
 ### zsh->fish
 
-- `parse_recovery/parse_diagnostic`: 39
-  - zsh-autosuggestions (plugin) Parse diagnostic at <input>:853:1: Syntax error
-  - zsh-autosuggestions (plugin) Parse diagnostic at <input>:856:11: Syntax error
-  - zsh-autosuggestions (plugin) Parse diagnostic at <input>:863:11: Syntax error
-  - zsh-autosuggestions (plugin) Parse diagnostic at <input>:0:0: 1 additional diagnostics suppressed
-  - zsh-syntax-highlighting (plugin) Parse diagnostic at <input>:478:21: Syntax error
+- `parse_recovery/parse_diagnostic`: 33
+  - zsh-autosuggestions (plugin) Parse diagnostic at <input>:0:0: 4 additional diagnostics suppressed
+  - zsh-syntax-highlighting (plugin) Parse diagnostic at <input>:0:0: 6 additional diagnostics suppressed
+  - ohmyzsh-git (plugin) Parse diagnostic at <input>:3:12: Syntax error
+  - ohmyzsh-git (plugin) Parse diagnostic at <input>:176:14: Syntax error
+  - ohmyzsh-git (plugin) Parse diagnostic at <input>:337:29: Syntax error
 
 ### zsh->posix
 
@@ -147,12 +147,12 @@ Cross-dialect runs executed: 126
   - zsh-syntax-highlighting (plugin) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
   - ohmyzsh-z (plugin) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
   - zsh-spaceship (theme) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
-- `parse_recovery/parse_diagnostic`: 39
-  - zsh-autosuggestions (plugin) Parse diagnostic at <input>:853:1: Syntax error
-  - zsh-autosuggestions (plugin) Parse diagnostic at <input>:856:11: Syntax error
-  - zsh-autosuggestions (plugin) Parse diagnostic at <input>:863:11: Syntax error
-  - zsh-autosuggestions (plugin) Parse diagnostic at <input>:0:0: 1 additional diagnostics suppressed
-  - zsh-syntax-highlighting (plugin) Parse diagnostic at <input>:478:21: Syntax error
+- `parse_recovery/parse_diagnostic`: 32
+  - zsh-autosuggestions (plugin) Parse diagnostic at <input>:0:0: 4 additional diagnostics suppressed
+  - zsh-syntax-highlighting (plugin) Parse diagnostic at <input>:0:0: 6 additional diagnostics suppressed
+  - ohmyzsh-git (plugin) Parse diagnostic at <input>:3:12: Syntax error
+  - ohmyzsh-git (plugin) Parse diagnostic at <input>:176:14: Syntax error
+  - ohmyzsh-git (plugin) Parse diagnostic at <input>:337:29: Syntax error
 
 ## Semantic Parity Matrix
 
