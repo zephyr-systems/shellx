@@ -470,9 +470,13 @@ generate_shim_code :: proc(feature: string, from: ir.ShellDialect, to: ir.ShellD
 		if to == .Fish {
 			return strings.trim_space(`
 function __shellx_param_default --argument var_name default_value
-    set -q $var_name
-    and eval echo \$$var_name
-    or echo $default_value
+    if set -q $var_name
+        if eval "test -n \"\$$var_name\""
+            eval echo \$$var_name
+            return 0
+        end
+    end
+    echo $default_value
 end
 
 function __shellx_param_length --argument var_name
@@ -482,16 +486,18 @@ function __shellx_param_length --argument var_name
 end
 
 function __shellx_param_required --argument var_name message
-    set -q $var_name
-    and eval echo \$$var_name
-    or begin
-        if test -n "$message"
-            echo "$message" >&2
-        else
-            echo "$var_name: parameter required" >&2
+    if set -q $var_name
+        if eval "test -n \"\$$var_name\""
+            eval echo \$$var_name
+            return 0
         end
-        return 1
     end
+    if test -n "$message"
+        echo "$message" >&2
+    else
+        echo "$var_name: parameter required" >&2
+    end
+    return 1
 end
 `)
 		}

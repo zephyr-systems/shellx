@@ -8,15 +8,15 @@ Cross-dialect runs executed: 126
 
 | Pair | Cases | Translate | Parse | Parser Matrix | Parser Skipped | Plugin Parse | Theme Parse | Parse Warn | Compat Warn | Avg Size Ratio | Avg Fn Ratio | With Shims |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| bash->fish | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 42 | 1.556 | 8.235 | 15 |
+| bash->fish | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 42 | 1.621 | 8.235 | 15 |
 | bash->posix | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 12 | 0.713 | 4.659 | 12 |
 | bash->zsh | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 0 | 0.346 | 0.945 | 0 |
 | fish->bash | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 19 | 1.008 | 7.679 | 11 |
 | fish->posix | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 18 | 0.948 | 7.225 | 11 |
 | fish->zsh | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 19 | 1.029 | 4.088 | 11 |
-| zsh->bash | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 76 | 4 | 0.802 | 1.949 | 4 |
-| zsh->fish | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 76 | 58 | 1.782 | 9.812 | 15 |
-| zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 76 | 22 | 1.243 | 6.342 | 14 |
+| zsh->bash | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 76 | 4 | 0.814 | 1.949 | 4 |
+| zsh->fish | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 76 | 58 | 1.847 | 9.812 | 15 |
+| zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 76 | 22 | 1.254 | 6.342 | 14 |
 
 ## Failures
 
@@ -50,9 +50,9 @@ Cross-dialect runs executed: 126
 
 ## Semantic Differential Checks
 
-Cases: 4, Passed: 1, Skipped: 0
+Cases: 4, Passed: 4, Skipped: 0
 
 - [PASS] fish_gitnow_branch_compare fish->bash exit=0 out="SAME"
-- [FAIL] zsh_git_cmdsub_if_compare zsh->fish src_exit=0 dst_exit=0 src_out="ok" dst_out="ACLOCAL_PATH '/opt/homebrew/share/aclocal' '/opt/homebrew/share/aclocal' ''\nBASH_SILENCE_DEPRECATION_WARNING 1\nBAT_STYLE numbers,changes,header\nBAT_THEME TwoDark\nBROWSER firefox\nCARGO_HOME /Users/z3robit/.cargo\nCGO_EN..." src_err="" dst_err=""
-- [FAIL] zsh_param_default_callsite zsh->fish src_exit=0 dst_exit=0 src_out="/tmp/cache" dst_out="" src_err="" dst_err=""
-- [FAIL] zsh_repo_root_cmdsub zsh->fish src_exit=0 dst_exit=0 src_out="/tmp/repo" dst_out="ACLOCAL_PATH '/opt/homebrew/share/aclocal' '/opt/homebrew/share/aclocal' ''\nBASH_SILENCE_DEPRECATION_WARNING 1\nBAT_STYLE numbers,changes,header\nBAT_THEME TwoDark\nBROWSER firefox\nCARGO_HOME /Users/z3robit/.cargo\nCGO_EN..." src_err="" dst_err=""
+- [PASS] zsh_git_cmdsub_if_compare zsh->fish exit=0 out="ok"
+- [PASS] zsh_param_default_callsite zsh->fish exit=0 out="/tmp/cache"
+- [PASS] zsh_repo_root_cmdsub zsh->fish exit=0 out="/tmp/repo"

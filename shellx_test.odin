@@ -838,6 +838,31 @@ test_repair_fish_malformed_command_substitutions_signatures :: proc(t: ^testing.
 }
 
 @(test)
+test_normalize_zsh_preparse_local_cmdsubs :: proc(t: ^testing.T) {
+	if !should_run_test("test_normalize_zsh_preparse_local_cmdsubs") { return }
+
+	input := "f() {\n  local _commit=$(echo abc)\n  typeset -g root=$(pwd)\n}"
+	output, changed := normalize_zsh_preparse_local_cmdsubs(input)
+	defer delete(output)
+
+	testing.expect(t, changed, "zsh local/typeset command substitutions should be normalized for parse")
+	testing.expect(t, strings.contains(output, "  _commit=$(echo abc)"), "local cmdsub should drop local keyword in preparse normalization")
+	testing.expect(t, strings.contains(output, "  root=$(pwd)"), "typeset cmdsub should drop typeset keyword in preparse normalization")
+}
+
+@(test)
+test_repair_fish_split_echo_param_default :: proc(t: ^testing.T) {
+	if !should_run_test("test_repair_fish_split_echo_param_default") { return }
+
+	input := "set XDG_CACHE_HOME \necho\n__shellx_param_default XDG_CACHE_HOME \"/tmp/cache\""
+	output, changed := repair_fish_split_echo_param_default(input)
+	defer delete(output)
+
+	testing.expect(t, changed, "split echo + param-default should be repaired")
+	testing.expect(t, strings.contains(output, "echo (__shellx_param_default XDG_CACHE_HOME \"/tmp/cache\")"), "repair should combine echo and shim call into fish command substitution form")
+}
+
+@(test)
 test_semantic_array_list_fish_to_bash_runtime :: proc(t: ^testing.T) {
 	if !should_run_test("test_semantic_array_list_fish_to_bash_runtime") { return }
 	source := `set arr one two three
@@ -890,6 +915,16 @@ echo ${name:u}`
 	out, ok := run_translated_script_runtime(t, source, .Zsh, .Bash, "param_modifiers_zsh_to_bash_runtime")
 	if !ok { return }
 	testing.expect(t, out == "hello\nHELLO", "Zsh lower/upper parameter modifiers should preserve output semantics in Bash")
+}
+
+@(test)
+test_semantic_param_default_zsh_to_fish_runtime :: proc(t: ^testing.T) {
+	if !should_run_test("test_semantic_param_default_zsh_to_fish_runtime") { return }
+	source := `XDG_CACHE_HOME=""
+echo ${XDG_CACHE_HOME:-/tmp/cache}`
+	out, ok := run_translated_script_runtime(t, source, .Zsh, .Fish, "param_default_zsh_to_fish_runtime")
+	if !ok { return }
+	testing.expect(t, out == "/tmp/cache", "Zsh :- default should use fallback when variable is empty")
 }
 
 @(test)

@@ -90,7 +90,22 @@ translate :: proc(
 	fe := frontend.create_frontend(from)
 	defer frontend.destroy_frontend(&fe)
 
-	tree, parse_err := frontend.parse(&fe, source_code)
+	parse_source := source_code
+	parse_source_allocated := false
+	if from == .Zsh {
+		normalized, changed := normalize_zsh_preparse_local_cmdsubs(source_code, context.allocator)
+		if changed {
+			parse_source = normalized
+			parse_source_allocated = true
+		} else {
+			delete(normalized)
+		}
+	}
+	defer if parse_source_allocated {
+		delete(parse_source)
+	}
+
+	tree, parse_err := frontend.parse(&fe, parse_source)
 	if parse_err.error != .None {
 		result.success = false
 		add_error_context(
@@ -104,7 +119,7 @@ translate :: proc(
 	}
 	defer frontend.destroy_tree(tree)
 
-	parse_diags := frontend.collect_parse_diagnostics(tree, source_code, source_name)
+	parse_diags := frontend.collect_parse_diagnostics(tree, parse_source, source_name)
 	defer delete(parse_diags)
 
 	// Parse diagnostics are fatal in strict mode and same-dialect mode.
@@ -137,7 +152,7 @@ translate :: proc(
 		}
 	}
 
-	program, conv_err := convert_to_ir(&arena, from, tree, source_code)
+	program, conv_err := convert_to_ir(&arena, from, tree, parse_source)
 	if conv_err.error != .None {
 		result.success = false
 		add_error_context(
@@ -865,6 +880,68 @@ replace_with_flag :: proc(
 		delete(replaced)
 	}
 	return text, changed_any
+}
+
+normalize_zsh_preparse_local_cmdsubs :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	for line, idx in lines {
+		out_line := line
+		out_allocated := false
+		trimmed := strings.trim_space(line)
+		if strings.has_prefix(trimmed, "local ") || strings.has_prefix(trimmed, "typeset ") || strings.has_prefix(trimmed, "integer ") {
+			kw_len := 0
+			if strings.has_prefix(trimmed, "local ") {
+				kw_len = len("local ")
+			} else if strings.has_prefix(trimmed, "typeset ") {
+				kw_len = len("typeset ")
+			} else {
+				kw_len = len("integer ")
+			}
+			rest := strings.trim_space(trimmed[kw_len:])
+			tokens := strings.fields(rest)
+			defer delete(tokens)
+			start := 0
+			for start < len(tokens) && strings.has_prefix(tokens[start], "-") {
+				start += 1
+			}
+			if start < len(tokens) {
+				decl := strings.join(tokens[start:], " ", allocator)
+				if strings.contains(decl, "$(") && strings.contains(decl, "=") {
+					indent_len := len(line) - len(strings.trim_left_space(line))
+					indent := ""
+					if indent_len > 0 {
+						indent = line[:indent_len]
+					}
+					out_line = strings.concatenate([]string{indent, decl}, allocator)
+					out_allocated = true
+					changed = true
+				}
+				delete(decl)
+			}
+		}
+
+		strings.write_string(&builder, out_line)
+		if out_allocated {
+			delete(out_line)
+		}
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
 }
 
 find_substring :: proc(s: string, needle: string) -> int {
@@ -1869,6 +1946,11 @@ __shellx_zsh_expand() {
 		changed_any = changed_any || changed
 
 		rewritten, changed = repair_fish_malformed_command_substitutions(out, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
+
+		rewritten, changed = repair_fish_split_echo_param_default(out, allocator)
 		delete(out)
 		out = rewritten
 		changed_any = changed_any || changed
@@ -3554,7 +3636,7 @@ rewrite_shellx_param_subshells_to_vars :: proc(text: string, allocator := contex
 	i := 0
 	for i < len(text) {
 		matched := false
-		prefixes := []string{"(__shellx_param_default ", "(__shellx_param_required ", "(__shellx_param_length "}
+		prefixes := []string{"(__shellx_param_length "}
 		for p in prefixes {
 			if i+len(p) <= len(text) && text[i:i+len(p)] == p {
 				name, name_end := read_name(text, i+len(p))
@@ -3729,6 +3811,55 @@ repair_fish_malformed_command_substitutions :: proc(text: string, allocator := c
 			delete(out_line)
 		}
 		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+repair_fish_split_echo_param_default :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	i := 0
+	for i < len(lines) {
+		line := lines[i]
+		trimmed := strings.trim_space(line)
+		if i+1 < len(lines) && trimmed == "echo" {
+			next := lines[i+1]
+			next_trimmed := strings.trim_space(next)
+			if strings.has_prefix(next_trimmed, "__shellx_param_default ") {
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				combined := strings.concatenate([]string{indent, "echo (", next_trimmed, ")"}, allocator)
+				strings.write_string(&builder, combined)
+				delete(combined)
+				changed = true
+				i += 2
+				if i < len(lines) {
+					strings.write_byte(&builder, '\n')
+				}
+				continue
+			}
+		}
+
+		strings.write_string(&builder, line)
+		i += 1
+		if i < len(lines) {
 			strings.write_byte(&builder, '\n')
 		}
 	}
