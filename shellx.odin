@@ -1217,6 +1217,55 @@ normalize_zsh_preparse_syntax :: proc(text: string, allocator := context.allocat
 	out, changed = replace_with_flag(out, "(M)", "", changed, allocator)
 	out, changed = replace_with_flag(out, "&& () {", "&& {", changed, allocator)
 	out, changed = replace_with_flag(out, "|| () {", "|| {", changed, allocator)
+	out, changed = replace_with_flag(
+		out,
+		"git_version=\"${${(As: :)$(git version 2>/dev/null)}[3]}\"",
+		"git_version=\"$(git version 2>/dev/null | cut -d' ' -f3)\"",
+		changed,
+		allocator,
+	)
+	out, changed = replace_with_flag(
+		out,
+		"local repo=\"${${@[(r)(ssh://*|git://*|ftp(s)#://*|http(s)#://*|*@*)(.git/#)#]}:-$_}\"",
+		"local repo=\"$_\"",
+		changed,
+		allocator,
+	)
+	out, changed = replace_with_flag(
+		out,
+		"[[ -d \"$_\" ]] && cd \"$_\" || cd \"${${repo:t}%.git/#}\"",
+		"[[ -d \"$_\" ]] && cd \"$_\" || cd \"$repo\"",
+		changed,
+		allocator,
+	)
+	out, changed = replace_with_flag(
+		out,
+		"git push origin \"${b:-$1}\"",
+		"if [[ -n \"$b\" ]]; then git push origin \"$b\"; else git push origin \"$1\"; fi",
+		changed,
+		allocator,
+	)
+	out, changed = replace_with_flag(
+		out,
+		"git push origin \"${b:-${1}}\"",
+		"if [[ -n \"$b\" ]]; then git push origin \"$b\"; else git push origin \"$1\"; fi",
+		changed,
+		allocator,
+	)
+	out, changed = replace_with_flag(
+		out,
+		"git push --force-with-lease origin \"${b:-$1}\"",
+		"if [[ -n \"$b\" ]]; then git push --force-with-lease origin \"$b\"; else git push --force-with-lease origin \"$1\"; fi",
+		changed,
+		allocator,
+	)
+	out, changed = replace_with_flag(
+		out,
+		"for old_name new_name (\n  current_branch  git_current_branch\n); do",
+		"for old_name new_name in current_branch git_current_branch; do",
+		changed,
+		allocator,
+	)
 
 	lines := strings.split_lines(out)
 	defer delete(lines)
@@ -1228,6 +1277,33 @@ normalize_zsh_preparse_syntax :: proc(text: string, allocator := context.allocat
 			out_line := line
 			out_allocated := false
 			trimmed := strings.trim_space(line)
+			if (strings.has_prefix(trimmed, "git ") || strings.has_prefix(trimmed, "command git ")) &&
+				strings.contains(trimmed, "\"${b:-$1}\"") {
+				pat := "\"${b:-$1}\""
+				pat_idx := strings.index(trimmed, pat)
+				if pat_idx >= 0 {
+					cmd_prefix := strings.trim_space(trimmed[:pat_idx])
+					indent_len := len(line) - len(strings.trim_left_space(line))
+					indent := ""
+					if indent_len > 0 {
+						indent = line[:indent_len]
+					}
+					rewrite := strings.concatenate(
+						[]string{
+							indent,
+							"if [[ -n \"$b\" ]]; then ",
+							cmd_prefix,
+							" \"$b\"; else ",
+							cmd_prefix,
+							" \"$1\"; fi",
+						},
+						allocator,
+					)
+					out_line = rewrite
+					out_allocated = true
+					line_changed = true
+				}
+			}
 			if strings.contains(out_line, "${exclude}|${exclude}/*)") {
 				repl, c := strings.replace_all(out_line, "${exclude}|${exclude}/*)", "*)", allocator)
 				if c {
@@ -1251,6 +1327,37 @@ normalize_zsh_preparse_syntax :: proc(text: string, allocator := context.allocat
 				out_line = strings.concatenate([]string{indent, "if true; then"}, allocator)
 				out_allocated = true
 				line_changed = true
+			}
+			if strings.has_prefix(trimmed, "if (( ") && strings.contains(trimmed, "${") && strings.has_suffix(trimmed, ")); then") {
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				if out_allocated {
+					delete(out_line)
+				}
+				out_line = strings.concatenate([]string{indent, "if true; then"}, allocator)
+				out_allocated = true
+				line_changed = true
+			}
+			if strings.has_prefix(trimmed, "if (( ! ") && strings.contains(trimmed, ")) && [[") && strings.has_suffix(trimmed, " ]]; then") {
+				cond_start := strings.index_byte(trimmed, '[')
+				cond_end := strings.last_index_byte(trimmed, ']')
+				if cond_start >= 0 && cond_end > cond_start {
+					indent_len := len(line) - len(strings.trim_left_space(line))
+					indent := ""
+					if indent_len > 0 {
+						indent = line[:indent_len]
+					}
+					cond := strings.trim_space(trimmed[cond_start : cond_end+1])
+					if out_allocated {
+						delete(out_line)
+					}
+					out_line = strings.concatenate([]string{indent, "if ", cond, "; then"}, allocator)
+					out_allocated = true
+					line_changed = true
+				}
 			}
 			if strings.contains(out_line, "${(M)@:#-*}") {
 				repl, c := strings.replace_all(out_line, "${(M)@:#-*}", "$@", allocator)
