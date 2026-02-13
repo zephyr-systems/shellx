@@ -638,6 +638,28 @@ has_hook_bridge_shim :: proc(required_shims: []string) -> bool {
 		has_required_shim(required_shims, "prompt_hooks")
 }
 
+contains_fish_index_reference :: proc(text: string) -> bool {
+	if text == "" {
+		return false
+	}
+	for i := 0; i+1 < len(text); i += 1 {
+		if text[i] != '$' {
+			continue
+		}
+		j := i + 1
+		if j < len(text) && text[j] == '{' {
+			j += 1
+		}
+		for j < len(text) && is_basic_name_char(text[j]) {
+			j += 1
+		}
+		if j < len(text) && text[j] == '[' {
+			return true
+		}
+	}
+	return false
+}
+
 extract_compat_warning_feature :: proc(warning: string) -> string {
 	if !strings.has_prefix(warning, "Compat[") {
 		return ""
@@ -656,35 +678,64 @@ is_compat_warning_resolved :: proc(
 	from: ShellDialect,
 	to: ShellDialect,
 ) -> bool {
-	if to != .Fish {
-		return false
-	}
 	out := result.output
 	switch feature {
 	case "parameter_expansion":
+		if to != .Fish {
+			return false
+		}
 		return has_required_shim(result.required_shims[:], "parameter_expansion") &&
 			strings.contains(out, "function __shellx_param_default") &&
 			!strings.contains(out, "${(")
 	case "condition_semantics":
-		return has_required_shim(result.required_shims[:], "condition_semantics") &&
-			(strings.contains(out, "__shellx_test") || strings.contains(out, "__shellx_match")) &&
-			!strings.contains(out, "[[")
+		if !has_required_shim(result.required_shims[:], "condition_semantics") {
+			return false
+		}
+		if to == .Fish {
+			return (strings.contains(out, "__shellx_test") || strings.contains(out, "__shellx_match")) &&
+				!strings.contains(out, "[[")
+		}
+		if from == .Fish && (to == .Bash || to == .Zsh || to == .POSIX) {
+			return strings.contains(out, "__shellx_test") &&
+				(strings.contains(out, "if __shellx_test") || strings.contains(out, "__shellx_match")) &&
+				!strings.contains(out, "if string match")
+		}
+		return false
 	case "indexed_arrays", "assoc_arrays", "fish_list_indexing":
-		return (has_required_shim(result.required_shims[:], "indexed_arrays") ||
+		if !(has_required_shim(result.required_shims[:], "indexed_arrays") ||
 			has_required_shim(result.required_shims[:], "assoc_arrays") ||
 			has_required_shim(result.required_shims[:], "arrays_lists") ||
-			has_required_shim(result.required_shims[:], "fish_list_indexing")) &&
-			strings.contains(out, "function __shellx_array_get")
+			has_required_shim(result.required_shims[:], "fish_list_indexing")) {
+			return false
+		}
+		if to == .Fish {
+			return strings.contains(out, "function __shellx_array_get")
+		}
+		if from == .Fish && (to == .Bash || to == .Zsh || to == .POSIX) {
+			return strings.contains(out, "__shellx_list_get") &&
+				!contains_fish_index_reference(out)
+		}
+		return false
 	case "process_substitution":
 		return has_required_shim(result.required_shims[:], "process_substitution") &&
 			(strings.contains(out, "__shellx_psub_in") || strings.contains(out, "__shellx_psub_out")) &&
 			!strings.contains(out, "<(") &&
 			!strings.contains(out, ">(")
-	case "zsh_hooks", "prompt_hooks":
-		return from == .Zsh &&
-			has_hook_bridge_shim(result.required_shims[:]) &&
-			strings.contains(out, "function __shellx_register_hook") &&
-			!strings.contains(out, "add-zsh-hook ")
+	case "zsh_hooks", "fish_events", "prompt_hooks":
+		if !has_hook_bridge_shim(result.required_shims[:]) {
+			return false
+		}
+		if to == .Fish {
+			return from == .Zsh &&
+				strings.contains(out, "function __shellx_register_hook") &&
+				!strings.contains(out, "add-zsh-hook ")
+		}
+		if to == .Bash || to == .Zsh {
+			return strings.contains(out, "__shellx_register_hook") &&
+				strings.contains(out, "__shellx_run_precmd") &&
+				!strings.contains(out, "add-zsh-hook ")
+		}
+		return false
 	}
 	return false
 }
@@ -763,6 +814,27 @@ rewrite_condition_command_text_for_shim :: proc(expr: ^ir.TestCondition, arena: 
 	expr.syntax = .Command
 }
 
+rewrite_condition_fish_test_text_for_shim :: proc(expr: ^ir.TestCondition, arena: ^ir.Arena_IR) {
+	if expr == nil {
+		return
+	}
+	cond := strings.trim_space(expr.text)
+	if strings.has_prefix(cond, "test ") {
+		cond = strings.trim_space(cond[len("test "):])
+	}
+	if strings.has_prefix(cond, "__shellx_test ") || cond == "__shellx_test" {
+		expr.text = cond
+		expr.syntax = .Command
+		return
+	}
+	if cond == "" {
+		expr.text = "__shellx_test"
+	} else {
+		expr.text = strings.concatenate([]string{"__shellx_test ", cond}, mem.arena_allocator(&arena.arena))
+	}
+	expr.syntax = .Command
+}
+
 rewrite_expr_for_shims :: proc(
 	expr: ir.Expression,
 	required_shims: []string,
@@ -787,7 +859,7 @@ rewrite_expr_for_shims :: proc(
 			} else if from == .Fish && to != .Fish {
 				rewrite_condition_command_text_for_shim(e, arena)
 				if e.syntax == .FishTest {
-					e.syntax = .TestBuiltin
+					rewrite_condition_fish_test_text_for_shim(e, arena)
 				}
 			} else if to == .POSIX && e.syntax == .DoubleBracket {
 				e.syntax = .TestBuiltin
@@ -970,6 +1042,17 @@ apply_shim_callsite_rewrites :: proc(
 		}
 	}
 
+	if has_required_shim(required_shims, "condition_semantics") && from == .Fish && to != .Fish {
+		rewritten, changed := rewrite_fish_test_callsites_to_shim(out, allocator)
+		if changed {
+			delete(out)
+			out = rewritten
+			changed_any = true
+		} else {
+			delete(rewritten)
+		}
+	}
+
 	if has_required_shim(required_shims, "process_substitution") {
 		rewritten, changed := rewrite_process_substitution_callsites(out, to, allocator)
 		if changed {
@@ -982,6 +1065,56 @@ apply_shim_callsite_rewrites :: proc(
 	}
 
 	return out, changed_any
+}
+
+rewrite_fish_test_callsites_to_shim :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	for line, i in lines {
+		out_line := line
+		out_allocated := false
+		trimmed := strings.trim_space(line)
+		indent_len := len(line) - len(strings.trim_left_space(line))
+		indent := ""
+		if indent_len > 0 {
+			indent = line[:indent_len]
+		}
+
+		if strings.has_prefix(trimmed, "if test ") {
+			out_line = strings.concatenate([]string{indent, "if __shellx_test ", strings.trim_space(trimmed[len("if test "):])}, allocator)
+			out_allocated = true
+			changed = true
+		} else if strings.has_prefix(trimmed, "elif test ") {
+			out_line = strings.concatenate([]string{indent, "elif __shellx_test ", strings.trim_space(trimmed[len("elif test "):])}, allocator)
+			out_allocated = true
+			changed = true
+		} else if strings.has_prefix(trimmed, "while test ") {
+			out_line = strings.concatenate([]string{indent, "while __shellx_test ", strings.trim_space(trimmed[len("while test "):])}, allocator)
+			out_allocated = true
+			changed = true
+		}
+
+		strings.write_string(&builder, out_line)
+		if out_allocated {
+			delete(out_line)
+		}
+		if i+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
 }
 
 rewrite_add_zsh_hook_callsites :: proc(text: string, allocator := context.allocator) -> (string, bool) {
@@ -2552,7 +2685,7 @@ __shellx_zsh_expand() {
 		changed_any = changed_any || changed
 	}
 	if from == .Fish && to == .Zsh {
-		rewritten, changed := rewrite_fish_to_posix_syntax(out, .POSIX, allocator)
+		rewritten, changed := rewrite_fish_to_posix_syntax(out, .Zsh, allocator)
 		delete(out)
 		out = rewritten
 		changed_any = changed_any || changed
@@ -5451,7 +5584,7 @@ rewrite_fish_to_posix_syntax :: proc(text: string, to: ShellDialect, allocator :
 							} else if start+2 == len(parts) {
 								out_line = strings.concatenate([]string{indent, name, "=", parts[start+1]}, allocator)
 								out_allocated = true
-							} else if to == .Bash {
+							} else if to == .Bash || to == .Zsh {
 							val_builder := strings.builder_make()
 							defer strings.builder_destroy(&val_builder)
 							for i := start + 1; i < len(parts); i += 1 {
@@ -5667,6 +5800,14 @@ fix_fish_command_substitution :: proc(text: string, allocator := context.allocat
 			if j < len(text) && depth == 0 && j > i+1 {
 				inner := strings.trim_space(text[i+1 : j])
 				if inner != "" {
+					if strings.has_prefix(inner, "|| ") {
+						inner = strings.trim_space(inner[len("|| "):])
+					} else if strings.has_prefix(inner, "&& ") {
+						inner = strings.trim_space(inner[len("&& "):])
+					}
+					if inner == "" {
+						inner = "true"
+					}
 					strings.write_string(&builder, "$(")
 					strings.write_string(&builder, inner)
 					strings.write_byte(&builder, ')')
@@ -5690,6 +5831,12 @@ fix_fish_command_substitution :: proc(text: string, allocator := context.allocat
 is_assignment_array_literal_open :: proc(text: string, open_idx: int) -> bool {
 	if open_idx <= 0 || open_idx > len(text) {
 		return false
+	}
+	if open_idx+1 < len(text) {
+		next := text[open_idx+1]
+		if next == '|' || next == '&' || next == ')' {
+			return false
+		}
 	}
 	prev := open_idx - 1
 	for prev >= 0 && (text[prev] == ' ' || text[prev] == '\t') {

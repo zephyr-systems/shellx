@@ -324,7 +324,31 @@ function __shellx_array_get
     return 1
 end
 `)
-	case .Bash, .Zsh:
+	case .Bash:
+		return strings.trim_space(`
+__shellx_list_to_array() {
+  local __name="$1"; shift
+  eval "$__name=(\"$@\")"
+}
+
+__shellx_list_get() {
+  local __name="$1"
+  local __idx="$2"
+  local __adj="$__idx"
+  case "$__idx" in
+    ''|*[!0-9]*) __adj="$__idx" ;;
+    0) __adj=0 ;;
+    *) __adj="$((__idx - 1))" ;;
+  esac
+  eval "printf '%s' \"\${$__name[$__adj]}\""
+}
+
+__shellx_list_len() {
+  local __name="$1"
+  eval "printf '%s' \"\${#$__name[@]}\""
+}
+`)
+	case .Zsh:
 		return strings.trim_space(`
 __shellx_list_to_array() {
   local __name="$1"; shift
@@ -409,8 +433,23 @@ end
 `)
 	case .Bash, .Zsh, .POSIX:
 		return strings.trim_space(`
-SHELLX_PRECMD_HOOK="${SHELLX_PRECMD_HOOK-}"
-SHELLX_PREEXEC_HOOK="${SHELLX_PREEXEC_HOOK-}"
+SHELLX_PRECMD_HOOKS="${SHELLX_PRECMD_HOOKS-}"
+SHELLX_PREEXEC_HOOKS="${SHELLX_PREEXEC_HOOKS-}"
+
+__shellx_append_hook() {
+  _zx_list="$1"
+  _zx_fn="$2"
+  case " $_zx_list " in
+    *" $_zx_fn "*) printf "%s" "$_zx_list" ;;
+    *)
+      if [ -n "$_zx_list" ]; then
+        printf "%s %s" "$_zx_list" "$_zx_fn"
+      else
+        printf "%s" "$_zx_fn"
+      fi
+      ;;
+  esac
+}
 
 __shellx_run_precmd() {
   if command -v fish_prompt >/dev/null 2>&1; then
@@ -419,20 +458,21 @@ __shellx_run_precmd() {
   if command -v fish_right_prompt >/dev/null 2>&1; then
     RPROMPT="$(fish_right_prompt 2>/dev/null || true)"
   fi
-  [ -n "${SHELLX_PRECMD_HOOK-}" ] || return 0
-  command -v "$SHELLX_PRECMD_HOOK" >/dev/null 2>&1 || return 0
-  "$SHELLX_PRECMD_HOOK"
+  [ -n "${SHELLX_PRECMD_HOOKS-}" ] || return 0
+  for _fn in $SHELLX_PRECMD_HOOKS; do
+    command -v "$_fn" >/dev/null 2>&1 || continue
+    "$_fn"
+  done
 }
 
 __shellx_run_preexec() {
-  [ -n "${SHELLX_PREEXEC_HOOK-}" ] || return 0
+  [ -n "${SHELLX_PREEXEC_HOOKS-}" ] || return 0
   [ -n "${__shellx_in_preexec-}" ] && return 0
   __shellx_in_preexec=1
-  command -v "$SHELLX_PREEXEC_HOOK" >/dev/null 2>&1 || {
-    __shellx_in_preexec=
-    return 0
-  }
-  "$SHELLX_PREEXEC_HOOK" "$@"
+  for _fn in $SHELLX_PREEXEC_HOOKS; do
+    command -v "$_fn" >/dev/null 2>&1 || continue
+    "$_fn" "$@"
+  done
   __shellx_in_preexec=
 }
 
@@ -440,8 +480,8 @@ __shellx_register_hook() {
   : "${1:?hook required}"
   : "${2:?callback required}"
   case "$1" in
-    precmd) SHELLX_PRECMD_HOOK="$2" ;;
-    preexec) SHELLX_PREEXEC_HOOK="$2" ;;
+    precmd) SHELLX_PRECMD_HOOKS="$(__shellx_append_hook "${SHELLX_PRECMD_HOOKS-}" "$2")" ;;
+    preexec) SHELLX_PREEXEC_HOOKS="$(__shellx_append_hook "${SHELLX_PREEXEC_HOOKS-}" "$2")" ;;
   esac
 }
 

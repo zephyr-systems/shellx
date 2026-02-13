@@ -632,6 +632,22 @@ test_translate_insert_shims_fish_string_match_api :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_translate_insert_shims_fish_test_builtin_api :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_insert_shims_fish_test_builtin_api") { return }
+
+	options := DEFAULT_TRANSLATION_OPTIONS
+	options.insert_shims = true
+
+	src := "set x 5\nif test $x -eq 5\n\techo ok\nend\n"
+	result := translate(src, .Fish, .Bash, options)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, result.success, "Fish test builtin should translate with shims")
+	testing.expect(t, strings.contains(result.output, "__shellx_test"), "Output should include condition test shim")
+	testing.expect(t, strings.contains(result.output, "if __shellx_test"), "Fish test condition should lower to __shellx_test callsite")
+}
+
+@(test)
 test_translate_corpus_fisher_to_bash_api :: proc(t: ^testing.T) {
 	if !should_run_test("test_translate_corpus_fisher_to_bash_api") { return }
 
@@ -825,6 +841,20 @@ test_fish_command_substitution_rewrite_keeps_array_literal_but_rewrites_comparis
 }
 
 @(test)
+test_fish_command_substitution_rewrite_strips_leading_connector :: proc(t: ^testing.T) {
+	if !should_run_test("test_fish_command_substitution_rewrite_strips_leading_connector") { return }
+
+	input := `_tide_transient=(|| string unescape "$prompt_var[1][2]$color_normal")`
+	output, changed := fix_fish_command_substitution(input)
+	defer delete(output)
+
+	testing.expect(t, changed, "Malformed connector-leading command substitution should be rewritten")
+	testing.expect(t, !strings.contains(output, "$(||"), "Leading connector should be stripped from rewritten command substitution")
+	testing.expect(t, strings.contains(output, "$(string unescape"), "Command substitution body should remain intact after connector strip")
+	parser_check_snippet(t, output, .Zsh, "fish_cmdsub_strip_leading_connector")
+}
+
+@(test)
 test_repair_fish_malformed_command_substitutions_signatures :: proc(t: ^testing.T) {
 	if !should_run_test("test_repair_fish_malformed_command_substitutions_signatures") { return }
 
@@ -974,6 +1004,16 @@ echo $arr[2]`
 }
 
 @(test)
+test_semantic_array_list_fish_to_zsh_runtime :: proc(t: ^testing.T) {
+	if !should_run_test("test_semantic_array_list_fish_to_zsh_runtime") { return }
+	source := `set arr one two three
+echo $arr[2]`
+	out, ok := run_translated_script_runtime(t, source, .Fish, .Zsh, "array_list_fish_to_zsh_runtime")
+	if !ok { return }
+	testing.expect(t, out == "two", "Fish list indexing should preserve semantic value in Zsh output")
+}
+
+@(test)
 test_semantic_assoc_map_zsh_to_bash_runtime :: proc(t: ^testing.T) {
 	if !should_run_test("test_semantic_assoc_map_zsh_to_bash_runtime") { return }
 	source := `typeset -A m
@@ -1009,6 +1049,19 @@ __shellx_run_precmd`
 	out, ok := run_translated_script_runtime(t, source, .Zsh, .Bash, "hook_precmd_zsh_to_bash_runtime")
 	if !ok { return }
 	testing.expect(t, out == "hook", "Hook registration shim should dispatch precmd function")
+}
+
+@(test)
+test_semantic_hook_multi_precmd_zsh_to_bash_runtime :: proc(t: ^testing.T) {
+	if !should_run_test("test_semantic_hook_multi_precmd_zsh_to_bash_runtime") { return }
+	source := `h1() { echo one; }
+h2() { echo two; }
+add-zsh-hook precmd h1
+add-zsh-hook precmd h2
+__shellx_run_precmd`
+	out, ok := run_translated_script_runtime(t, source, .Zsh, .Bash, "hook_multi_precmd_zsh_to_bash_runtime")
+	if !ok { return }
+	testing.expect(t, out == "one\ntwo", "Hook bridge should preserve multiple precmd registrations in order")
 }
 
 @(test)

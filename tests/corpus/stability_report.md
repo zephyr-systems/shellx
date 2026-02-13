@@ -11,12 +11,12 @@ Cross-dialect runs executed: 126
 | bash->fish | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 1 | 0 | 1.781 | 8.563 | 15 |
 | bash->posix | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 12 | 0.713 | 4.659 | 12 |
 | bash->zsh | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 0 | 0.346 | 0.945 | 0 |
-| fish->bash | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 19 | 1.012 | 7.679 | 11 |
-| fish->posix | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 18 | 0.954 | 7.225 | 11 |
-| fish->zsh | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 19 | 1.100 | 5.528 | 11 |
-| zsh->bash | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 4 | 0.816 | 1.949 | 4 |
+| fish->bash | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 8 | 1.046 | 7.721 | 11 |
+| fish->posix | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 2 | 0.969 | 7.267 | 11 |
+| fish->zsh | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 8 | 1.139 | 5.588 | 11 |
+| zsh->bash | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 4 | 0.822 | 2.050 | 4 |
 | zsh->fish | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 0 | 2.101 | 10.386 | 15 |
-| zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 22 | 1.257 | 6.342 | 14 |
+| zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 22 | 1.262 | 6.444 | 14 |
 
 ## Failures
 
@@ -54,12 +54,6 @@ Cross-dialect runs executed: 126
   - fish-autopair (plugin) Compat[fish_list_indexing]: Fish list behavior may not map one-to-one to Bash/Zsh arrays
   - fish-gitnow (plugin) Compat[fish_list_indexing]: Fish list behavior may not map one-to-one to Bash/Zsh arrays
   - fish-fisher (plugin) Compat[fish_list_indexing]: Fish list behavior may not map one-to-one to Bash/Zsh arrays
-- `condition_test/condition_semantics`: 11
-  - fish-z (plugin) Compat[condition_semantics]: Fish condition syntax differs from Bash/Zsh test syntax
-  - fish-fzf (plugin) Compat[condition_semantics]: Fish condition syntax differs from Bash/Zsh test syntax
-  - fish-tide (plugin) Compat[condition_semantics]: Fish condition syntax differs from Bash/Zsh test syntax
-  - fish-done (plugin) Compat[condition_semantics]: Fish condition syntax differs from Bash/Zsh test syntax
-  - fish-replay (plugin) Compat[condition_semantics]: Fish condition syntax differs from Bash/Zsh test syntax
 - `hook_event/fish_events`: 2
   - fish-done (plugin) Compat[fish_events]: Fish event functions do not directly map to Bash/Zsh hooks
   - fish-tide-theme (theme) Compat[fish_events]: Fish event functions do not directly map to Bash/Zsh hooks
@@ -68,18 +62,6 @@ Cross-dialect runs executed: 126
 
 ### fish->posix
 
-- `arrays_maps/indexed_arrays`: 5
-  - fish-done (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
-  - fish-replay (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
-  - fish-gitnow (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
-  - fish-fisher (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
-  - fish-tide-theme (theme) Compat[indexed_arrays]: Array features are not POSIX portable
-- `condition_test/condition_semantics`: 11
-  - fish-z (plugin) Compat[condition_semantics]: Fish test semantics can differ from POSIX test
-  - fish-fzf (plugin) Compat[condition_semantics]: Fish test semantics can differ from POSIX test
-  - fish-tide (plugin) Compat[condition_semantics]: Fish test semantics can differ from POSIX test
-  - fish-done (plugin) Compat[condition_semantics]: Fish test semantics can differ from POSIX test
-  - fish-replay (plugin) Compat[condition_semantics]: Fish test semantics can differ from POSIX test
 - `hook_event/prompt_hooks`: 2
   - fish-done (plugin) Compat[prompt_hooks]: Shell hook/event behavior is not standardized in POSIX sh
   - fish-tide-theme (theme) Compat[prompt_hooks]: Shell hook/event behavior is not standardized in POSIX sh
@@ -94,12 +76,6 @@ Cross-dialect runs executed: 126
   - fish-autopair (plugin) Compat[fish_list_indexing]: Fish list behavior may not map one-to-one to Bash/Zsh arrays
   - fish-gitnow (plugin) Compat[fish_list_indexing]: Fish list behavior may not map one-to-one to Bash/Zsh arrays
   - fish-fisher (plugin) Compat[fish_list_indexing]: Fish list behavior may not map one-to-one to Bash/Zsh arrays
-- `condition_test/condition_semantics`: 11
-  - fish-z (plugin) Compat[condition_semantics]: Fish condition syntax differs from Bash/Zsh test syntax
-  - fish-fzf (plugin) Compat[condition_semantics]: Fish condition syntax differs from Bash/Zsh test syntax
-  - fish-tide (plugin) Compat[condition_semantics]: Fish condition syntax differs from Bash/Zsh test syntax
-  - fish-done (plugin) Compat[condition_semantics]: Fish condition syntax differs from Bash/Zsh test syntax
-  - fish-replay (plugin) Compat[condition_semantics]: Fish condition syntax differs from Bash/Zsh test syntax
 - `hook_event/fish_events`: 2
   - fish-done (plugin) Compat[fish_events]: Fish event functions do not directly map to Bash/Zsh hooks
   - fish-tide-theme (theme) Compat[fish_events]: Fish event functions do not directly map to Bash/Zsh hooks
