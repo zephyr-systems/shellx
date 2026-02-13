@@ -8,39 +8,61 @@ Cross-dialect runs executed: 126
 
 | Pair | Cases | Translate | Parse | Parser Matrix | Parser Skipped | Plugin Parse | Theme Parse | Parse Warn | Compat Warn | Avg Size Ratio | Avg Fn Ratio | With Shims |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| bash->fish | 16 | 16/16 | 16/16 | 0/16 | 16 | 10/10 | 6/6 | 0 | 42 | 0.702 | 2.638 | 15 |
-| bash->posix | 16 | 16/16 | 16/16 | 5/16 | 0 | 10/10 | 6/6 | 0 | 12 | 0.434 | 1.258 | 12 |
-| bash->zsh | 16 | 16/16 | 16/16 | 11/16 | 0 | 10/10 | 6/6 | 0 | 0 | 0.392 | 0.545 | 0 |
-| fish->bash | 11 | 11/11 | 11/11 | 0/11 | 0 | 10/10 | 1/1 | 1 | 18 | 0.540 | 2.449 | 10 |
-| fish->posix | 11 | 11/11 | 11/11 | 0/11 | 0 | 10/10 | 1/1 | 1 | 17 | 0.525 | 2.403 | 10 |
-| fish->zsh | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 18 | 0.541 | 2.449 | 10 |
-| zsh->bash | 15 | 15/15 | 15/15 | 9/15 | 0 | 10/10 | 5/5 | 76 | 4 | 0.989 | 1.470 | 4 |
-| zsh->fish | 15 | 15/15 | 15/15 | 0/15 | 15 | 10/10 | 5/5 | 76 | 58 | 1.174 | 2.971 | 15 |
-| zsh->posix | 15 | 15/15 | 15/15 | 2/15 | 0 | 10/10 | 5/5 | 76 | 22 | 0.991 | 1.625 | 14 |
+| bash->fish | 16 | 16/16 | 16/16 | 5/16 | 0 | 10/10 | 6/6 | 0 | 42 | 0.703 | 2.758 | 15 |
+| bash->posix | 16 | 16/16 | 16/16 | 5/16 | 0 | 10/10 | 6/6 | 0 | 12 | 0.432 | 1.258 | 12 |
+| bash->zsh | 16 | 16/16 | 16/16 | 11/16 | 0 | 10/10 | 6/6 | 0 | 0 | 0.390 | 0.918 | 0 |
+| fish->bash | 11 | 11/11 | 11/11 | 0/11 | 0 | 10/10 | 1/1 | 1 | 18 | 0.524 | 2.449 | 10 |
+| fish->posix | 11 | 11/11 | 11/11 | 0/11 | 0 | 10/10 | 1/1 | 1 | 17 | 0.517 | 2.403 | 10 |
+| fish->zsh | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 18 | 0.542 | 2.449 | 10 |
+| zsh->bash | 15 | 15/15 | 15/15 | 8/15 | 0 | 10/10 | 5/5 | 76 | 4 | 0.989 | 1.454 | 4 |
+| zsh->fish | 15 | 15/15 | 15/15 | 1/15 | 0 | 10/10 | 5/5 | 76 | 58 | 1.176 | 3.115 | 15 |
+| zsh->posix | 15 | 15/15 | 15/15 | 5/15 | 0 | 10/10 | 5/5 | 76 | 22 | 1.005 | 1.604 | 14 |
 
 ## Failures
 
-- [FAIL] zsh-autosuggestions (plugin) zsh->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=10(parse=4 compat=6) shims=6 src_fn=30 out_fn=17 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
-- [FAIL] zsh-autosuggestions (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=7(parse=4 compat=3) shims=3 src_fn=30 out_fn=24 msg= parser_msg=tests/corpus/.parser_check_zsh-autosuggestions_3.sh: line 85: syntax error near unexpected token `('
-tests/corpus/.parser_check_zsh-autosuggestions_3.sh: line 85: `			user:_zsh_autosuggest_(bound|orig)_*)'
+- [FAIL] zsh-autosuggestions (plugin) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=5(parse=4 compat=1) shims=1 src_fn=30 out_fn=11 msg= parser_msg=tests/corpus/.parser_check_zsh-autosuggestions_1.bash: line 552: syntax error near unexpected token `done'
+tests/corpus/.parser_check_zsh-autosuggestions_1.bash: line 552: `	done'
  path=tests/corpus/repos/zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
-- [FAIL] zsh-syntax-highlighting (plugin) zsh->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=12(parse=6 compat=6) shims=6 src_fn=9 out_fn=11 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-- [FAIL] zsh-syntax-highlighting (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=9(parse=6 compat=3) shims=3 src_fn=9 out_fn=7 msg= parser_msg=tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 135: syntax error near unexpected token `)'
-tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 135: `	    () {'
+- [FAIL] zsh-autosuggestions (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=10(parse=4 compat=6) shims=6 src_fn=30 out_fn=24 msg= parser_msg=tests/corpus/.parser_check_zsh-autosuggestions_2.fish (line 99): Missing end to balance this switch statement
+		switch $widgets[$widget]
+		^~~~~^
+warning: Error while reading file tests/corpus/.parser_check_zsh-autosuggestions_2.fish
+ path=tests/corpus/repos/zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
+- [FAIL] zsh-autosuggestions (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=7(parse=4 compat=3) shims=3 src_fn=30 out_fn=11 msg= parser_msg=tests/corpus/.parser_check_zsh-autosuggestions_3.sh: line 318: syntax error near unexpected token `done'
+tests/corpus/.parser_check_zsh-autosuggestions_3.sh: line 318: `		done'
+ path=tests/corpus/repos/zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
+- [FAIL] zsh-syntax-highlighting (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=12(parse=6 compat=6) shims=6 src_fn=9 out_fn=15 msg= parser_msg=tests/corpus/.parser_check_zsh-syntax-highlighting_5.fish (line 129): Missing end to balance this function definition
+function _zsh_highlight__zle-line-finish
+^~~~~~~^
+warning: Error while reading file tests/corpus/.parser_check_zsh-syntax-highlighting_5.fish
+ path=tests/corpus/repos/zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+- [FAIL] zsh-syntax-highlighting (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=9(parse=6 compat=3) shims=3 src_fn=9 out_fn=8 msg= parser_msg=tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 150: syntax error near unexpected token `else'
+tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 150: `	else'
  path=tests/corpus/repos/zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 - [FAIL] ohmyzsh-git (plugin) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=4(parse=4 compat=0) shims=0 src_fn=16 out_fn=9 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-git_7.bash: line 429: syntax error near unexpected token `new_name'
 tests/corpus/.parser_check_ohmyzsh-git_7.bash: line 429: `for old_name new_name ('
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/git/git.plugin.zsh
-- [FAIL] ohmyzsh-git (plugin) zsh->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=7(parse=4 compat=3) shims=3 src_fn=16 out_fn=6 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/zsh/ohmyzsh/plugins/git/git.plugin.zsh
+- [FAIL] ohmyzsh-git (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=7(parse=4 compat=3) shims=3 src_fn=16 out_fn=10 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-git_8.fish (line 103): 'case' builtin not inside of switch block
+	  case (( ! $? ))    default_branch=$(git_develop_branch
+	  ^~~^
+warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-git_8.fish
+ path=tests/corpus/repos/zsh/ohmyzsh/plugins/git/git.plugin.zsh
 - [FAIL] ohmyzsh-git (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=5(parse=4 compat=1) shims=1 src_fn=16 out_fn=9 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-git_9.sh: line 389: syntax error near unexpected token `new_name'
 tests/corpus/.parser_check_ohmyzsh-git_9.sh: line 389: `for old_name new_name ('
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/git/git.plugin.zsh
-- [FAIL] ohmyzsh-z (plugin) zsh->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=20(parse=14 compat=6) shims=6 src_fn=14 out_fn=12 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
-- [FAIL] ohmyzsh-z (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=17(parse=14 compat=3) shims=3 src_fn=14 out_fn=11 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-z_12.sh: line 512: unexpected argument `(' to conditional binary operator
-tests/corpus/.parser_check_ohmyzsh-z_12.sh: line 512: syntax error near `(c'
-tests/corpus/.parser_check_ohmyzsh-z_12.sh: line 512: `	  if [[ $OSTYPE == (cygwin|msys) ]]; then'
+- [FAIL] ohmyzsh-z (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=20(parse=14 compat=6) shims=6 src_fn=14 out_fn=16 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-z_11.fish (line 63): Missing end to balance this function definition
+function _zshz_usage
+^~~~~~~^
+warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-z_11.fish
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
-- [FAIL] ohmyzsh-fzf (plugin) zsh->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=17(parse=14 compat=3) shims=3 src_fn=9 out_fn=7 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/zsh/ohmyzsh/plugins/fzf/fzf.plugin.zsh
+- [FAIL] ohmyzsh-z (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=17(parse=14 compat=3) shims=3 src_fn=14 out_fn=13 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-z_12.sh: line 900: syntax error near unexpected token `}'
+tests/corpus/.parser_check_ohmyzsh-z_12.sh: line 900: `}'
+ path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
+- [FAIL] ohmyzsh-fzf (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=17(parse=14 compat=3) shims=3 src_fn=9 out_fn=9 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-fzf_14.fish (line 42): Unsupported use of '='. In fish, please use 'set fzf_base "${FZF_BASE}"'.
+	  test -d "${FZF_BASE}"; and fzf_base="${FZF_BASE}"
+	                             ^~~~~~~~~~~~~~~~~~~~~^
+warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-fzf_14.fish
+ path=tests/corpus/repos/zsh/ohmyzsh/plugins/fzf/fzf.plugin.zsh
 - [FAIL] ohmyzsh-fzf (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=15(parse=14 compat=1) shims=1 src_fn=9 out_fn=9 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-fzf_15.sh: line 233: warning: here-document at line 209 delimited by end-of-file (wanted `EOF')
 tests/corpus/.parser_check_ohmyzsh-fzf_15.sh: line 234: syntax error: unexpected end of file from `{' command on line 208
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/fzf/fzf.plugin.zsh
@@ -48,7 +70,11 @@ tests/corpus/.parser_check_ohmyzsh-fzf_15.sh: line 234: syntax error: unexpected
 tests/corpus/.parser_check_ohmyzsh-sudo_16.bash: line 79: syntax error near `(\'
 tests/corpus/.parser_check_ohmyzsh-sudo_16.bash: line 79: `    if [[ "$realcmd" = (\$EDITOR|$editorcmd|${editorcmd:c}) \'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/sudo/sudo.plugin.zsh
-- [FAIL] ohmyzsh-sudo (plugin) zsh->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=12(parse=9 compat=3) shims=3 src_fn=2 out_fn=5 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/zsh/ohmyzsh/plugins/sudo/sudo.plugin.zsh
+- [FAIL] ohmyzsh-sudo (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=12(parse=9 compat=3) shims=3 src_fn=2 out_fn=5 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-sudo_17.fish (line 45): Unsupported use of '='. In fish, please use 'set LBUFFER "(fc -ln -1)"'.
+	  test  -z $BUFFER ; and LBUFFER="(fc -ln -1)"
+	                         ^~~~~~~~~~~~~~~~~~~~^
+warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-sudo_17.fish
+ path=tests/corpus/repos/zsh/ohmyzsh/plugins/sudo/sudo.plugin.zsh
 - [FAIL] ohmyzsh-sudo (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=10(parse=9 compat=1) shims=1 src_fn=2 out_fn=2 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-sudo_18.sh: line 65: unexpected argument `(' to conditional binary operator
 tests/corpus/.parser_check_ohmyzsh-sudo_18.sh: line 65: syntax error near `(\'
 tests/corpus/.parser_check_ohmyzsh-sudo_18.sh: line 65: `	    if [[ "$realcmd" = (\$EDITOR|$editorcmd|${editorcmd:c}) \'
@@ -56,57 +82,93 @@ tests/corpus/.parser_check_ohmyzsh-sudo_18.sh: line 65: `	    if [[ "$realcmd" =
 - [FAIL] ohmyzsh-extract (plugin) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=1 compat=0) shims=0 src_fn=0 out_fn=1 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-extract_19.bash: line 56: syntax error near unexpected token `newline'
 tests/corpus/.parser_check_ohmyzsh-extract_19.bash: line 56: `      *.tar.gz|      *.tgz'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/extract/extract.plugin.zsh
-- [FAIL] ohmyzsh-extract (plugin) zsh->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=4(parse=1 compat=3) shims=3 src_fn=0 out_fn=5 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/zsh/ohmyzsh/plugins/extract/extract.plugin.zsh
-- [FAIL] ohmyzsh-extract (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=2(parse=1 compat=1) shims=1 src_fn=0 out_fn=1 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-extract_21.sh: line 53: syntax error near unexpected token `;;'
-tests/corpus/.parser_check_ohmyzsh-extract_21.sh: line 53: `        (( $+commands[pigz] )) && { tar -I pigz -xvf "$full_path" } || tar zxvf "$full_path" ;;'
+- [FAIL] ohmyzsh-extract (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=4(parse=1 compat=3) shims=3 src_fn=0 out_fn=5 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-extract_20.fish (line 34): Expected a string, but found a redirection
+    cat >&2 <<'EOF'
+             ^
+warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-extract_20.fish
+ path=tests/corpus/repos/zsh/ohmyzsh/plugins/extract/extract.plugin.zsh
+- [FAIL] ohmyzsh-extract (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=2(parse=1 compat=1) shims=1 src_fn=0 out_fn=1 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-extract_21.sh: line 52: syntax error near unexpected token `newline'
+tests/corpus/.parser_check_ohmyzsh-extract_21.sh: line 52: `      *.tar.gz|      *.tgz'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/extract/extract.plugin.zsh
 - [FAIL] ohmyzsh-colored-man-pages (plugin) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=4(parse=4 compat=0) shims=0 src_fn=1 out_fn=1 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-colored-man-pages_22.bash: line 37: syntax error near unexpected token `v'
 tests/corpus/.parser_check_ohmyzsh-colored-man-pages_22.bash: line 37: `  for k v in "${(@kv)less_termcap}"; do'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/colored-man-pages/colored-man-pages.plugin.zsh
-- [FAIL] ohmyzsh-colored-man-pages (plugin) zsh->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=8(parse=4 compat=4) shims=4 src_fn=1 out_fn=5 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/zsh/ohmyzsh/plugins/colored-man-pages/colored-man-pages.plugin.zsh
+- [FAIL] ohmyzsh-colored-man-pages (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=8(parse=4 compat=4) shims=4 src_fn=1 out_fn=5 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-colored-man-pages_23.fish (line 34): Expected keyword 'in', but found a string
+	  for k v in "${(@kv)less_termcap}"
+	        ^
+warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-colored-man-pages_23.fish
+ path=tests/corpus/repos/zsh/ohmyzsh/plugins/colored-man-pages/colored-man-pages.plugin.zsh
 - [FAIL] ohmyzsh-colored-man-pages (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=5(parse=4 compat=1) shims=1 src_fn=1 out_fn=2 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-colored-man-pages_24.sh: line 16: syntax error near unexpected token `v'
 tests/corpus/.parser_check_ohmyzsh-colored-man-pages_24.sh: line 16: `	  for k v in "${(@kv)less_termcap}"; do'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/colored-man-pages/colored-man-pages.plugin.zsh
-- [FAIL] ohmyzsh-web-search (plugin) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=0 src_fn=1 out_fn=1 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-web-search_25.bash: line 101: syntax error near unexpected token `;'
-tests/corpus/.parser_check_ohmyzsh-web-search_25.bash: line 101: `if ; then'
+- [FAIL] ohmyzsh-web-search (plugin) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=0 src_fn=1 out_fn=1 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-web-search_25.bash: line 102: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_ohmyzsh-web-search_25.bash: line 102: `fi'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/web-search/web-search.plugin.zsh
-- [FAIL] ohmyzsh-web-search (plugin) zsh->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=5(parse=0 compat=5) shims=5 src_fn=1 out_fn=5 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/zsh/ohmyzsh/plugins/web-search/web-search.plugin.zsh
-- [FAIL] ohmyzsh-web-search (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=1 out_fn=2 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-web-search_27.sh: line 112: syntax error near unexpected token `;'
-tests/corpus/.parser_check_ohmyzsh-web-search_27.sh: line 112: `if ; then'
+- [FAIL] ohmyzsh-web-search (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=5(parse=0 compat=5) shims=5 src_fn=1 out_fn=5 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-web-search_26.fish (line 80): Unsupported use of '='. In fish, please use 'set param ""'.
+    test  "$urls[$1]" == *\?*= ; and param=""
+                                     ^~~~~~~^
+warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-web-search_26.fish
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/web-search/web-search.plugin.zsh
-- [FAIL] ohmyzsh-copyfile (plugin) zsh->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=4(parse=1 compat=3) shims=3 src_fn=0 out_fn=5 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/zsh/ohmyzsh/plugins/copyfile/copyfile.plugin.zsh
-- [FAIL] bashit-git (plugin) bash->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=3(parse=0 compat=3) shims=3 src_fn=12 out_fn=5 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/plugins/available/git.plugin.bash
-- [FAIL] bashit-git (plugin) bash->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=12 out_fn=13 msg= parser_msg=tests/corpus/.parser_check_bashit-git_33.sh: line 42: syntax error near unexpected token `;'
-tests/corpus/.parser_check_bashit-git_33.sh: line 42: `	if ; then'
+- [FAIL] ohmyzsh-web-search (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=1 out_fn=2 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-web-search_27.sh: line 113: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_ohmyzsh-web-search_27.sh: line 113: `fi'
+ path=tests/corpus/repos/zsh/ohmyzsh/plugins/web-search/web-search.plugin.zsh
+- [FAIL] ohmyzsh-copyfile (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=4(parse=1 compat=3) shims=3 src_fn=0 out_fn=6 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-copyfile_29.fish (line 40): Expected end of the statement, but found an incomplete token
+  echo ${(%) "\"%B\$1%b copied to clipboard.\"")
+                                               ^
+warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-copyfile_29.fish
+ path=tests/corpus/repos/zsh/ohmyzsh/plugins/copyfile/copyfile.plugin.zsh
+- [FAIL] bashit-git (plugin) bash->fish translate=true parse=true parser=false/true exit=127 err=None warnings=3(parse=0 compat=3) shims=3 src_fn=12 out_fn=5 msg= parser_msg=tests/corpus/.parser_check_bashit-git_32.fish (line 33): ${ is not a valid variable in fish.
+	echo "Running: git remote add origin ${GIT_HOSTING:?}:$1.git"
+	                                      ^
+warning: Error while reading file tests/corpus/.parser_check_bashit-git_32.fish
  path=tests/corpus/repos/bash/bash-it/plugins/available/git.plugin.bash
-- [FAIL] bashit-aliases (plugin) bash->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=4(parse=0 compat=4) shims=4 src_fn=1 out_fn=8 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/completion/available/aliases.completion.bash
-- [FAIL] bashit-aliases (plugin) bash->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=1 out_fn=2 msg= parser_msg=tests/corpus/.parser_check_bashit-aliases_36.sh: line 25: syntax error near unexpected token `;'
-tests/corpus/.parser_check_bashit-aliases_36.sh: line 25: `	if ; then'
+- [FAIL] bashit-git (plugin) bash->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=12 out_fn=13 msg= parser_msg=tests/corpus/.parser_check_bashit-git_33.sh: line 43: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_bashit-git_33.sh: line 43: `	fi'
+ path=tests/corpus/repos/bash/bash-it/plugins/available/git.plugin.bash
+- [FAIL] bashit-aliases (plugin) bash->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=1 out_fn=2 msg= parser_msg=tests/corpus/.parser_check_bashit-aliases_36.sh: line 26: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_bashit-aliases_36.sh: line 26: `	fi'
  path=tests/corpus/repos/bash/bash-it/completion/available/aliases.completion.bash
-- [FAIL] bashit-completion (plugin) bash->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=4(parse=0 compat=4) shims=4 src_fn=2 out_fn=8 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/completion/available/bash-it.completion.bash
-- [FAIL] bashit-completion (plugin) bash->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=2 out_fn=3 msg= parser_msg=tests/corpus/.parser_check_bashit-completion_39.sh: line 26: syntax error near unexpected token `;'
-tests/corpus/.parser_check_bashit-completion_39.sh: line 26: `	if ; then'
+- [FAIL] bashit-completion (plugin) bash->fish translate=true parse=true parser=false/true exit=127 err=None warnings=4(parse=0 compat=4) shims=4 src_fn=2 out_fn=8 msg= parser_msg=tests/corpus/.parser_check_bashit-completion_38.fish (line 51): ${ is not a valid variable in fish.
+	compgen -W "${candidates[*]}" -- "${cur}"
+	             ^
+warning: Error while reading file tests/corpus/.parser_check_bashit-completion_38.fish
  path=tests/corpus/repos/bash/bash-it/completion/available/bash-it.completion.bash
-- [FAIL] bashit-base (plugin) bash->zsh translate=true parse=true parser=false/true exit=1 err=None warnings=0(parse=0 compat=0) shims=0 src_fn=15 out_fn=10 msg= parser_msg=tests/corpus/.parser_check_bashit-base_40.zsh:25: parse error
+- [FAIL] bashit-completion (plugin) bash->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=2 out_fn=3 msg= parser_msg=tests/corpus/.parser_check_bashit-completion_39.sh: line 27: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_bashit-completion_39.sh: line 27: `	fi'
+ path=tests/corpus/repos/bash/bash-it/completion/available/bash-it.completion.bash
+- [FAIL] bashit-base (plugin) bash->zsh translate=true parse=true parser=false/true exit=1 err=None warnings=0(parse=0 compat=0) shims=0 src_fn=15 out_fn=13 msg= parser_msg=tests/corpus/.parser_check_bashit-base_40.zsh:25: parse error
  path=tests/corpus/repos/bash/bash-it/plugins/available/base.plugin.bash
-- [FAIL] bashit-base (plugin) bash->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=3(parse=0 compat=3) shims=3 src_fn=15 out_fn=5 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/plugins/available/base.plugin.bash
-- [FAIL] bashit-base (plugin) bash->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=15 out_fn=16 msg= parser_msg=tests/corpus/.parser_check_bashit-base_42.sh: line 15: syntax error near unexpected token `;'
-tests/corpus/.parser_check_bashit-base_42.sh: line 15: `	if ; then'
+- [FAIL] bashit-base (plugin) bash->fish translate=true parse=true parser=false/true exit=127 err=None warnings=3(parse=0 compat=3) shims=3 src_fn=15 out_fn=6 msg= parser_msg=tests/corpus/.parser_check_bashit-base_41.fish (line 46): Variables cannot be bracketed. In fish, please use "$site".
+	command curl -Ls "http://downforeveryoneorjustme.com/${site}"
+	                                                      ^
+warning: Error while reading file tests/corpus/.parser_check_bashit-base_41.fish
  path=tests/corpus/repos/bash/bash-it/plugins/available/base.plugin.bash
-- [FAIL] bashit-fzf (plugin) bash->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=4(parse=0 compat=4) shims=4 src_fn=2 out_fn=8 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/plugins/available/fzf.plugin.bash
-- [FAIL] bashit-fzf (plugin) bash->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=2 out_fn=3 msg= parser_msg=tests/corpus/.parser_check_bashit-fzf_45.sh: line 19: syntax error near unexpected token `;'
-tests/corpus/.parser_check_bashit-fzf_45.sh: line 19: `	while ; do'
+- [FAIL] bashit-base (plugin) bash->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=15 out_fn=16 msg= parser_msg=tests/corpus/.parser_check_bashit-base_42.sh: line 16: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_bashit-base_42.sh: line 16: `	fi'
+ path=tests/corpus/repos/bash/bash-it/plugins/available/base.plugin.bash
+- [FAIL] bashit-fzf (plugin) bash->fish translate=true parse=true parser=false/true exit=127 err=None warnings=4(parse=0 compat=4) shims=4 src_fn=2 out_fn=8 msg= parser_msg=tests/corpus/.parser_check_bashit-fzf_44.fish (line 58): ${ is not a valid variable in fish.
+	 "${files[@]}"
+	   ^
+warning: Error while reading file tests/corpus/.parser_check_bashit-fzf_44.fish
  path=tests/corpus/repos/bash/bash-it/plugins/available/fzf.plugin.bash
-- [FAIL] bashit-tmux (plugin) bash->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=0(parse=0 compat=0) shims=0 src_fn=0 out_fn=0 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/plugins/available/tmux.plugin.bash
-- [FAIL] bashit-history (plugin) bash->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=2(parse=0 compat=2) shims=2 src_fn=1 out_fn=4 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/plugins/available/history.plugin.bash
-- [FAIL] bashit-ssh (plugin) bash->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=3 out_fn=5 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/plugins/available/ssh.plugin.bash
-- [FAIL] bashit-docker (plugin) bash->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=4(parse=0 compat=4) shims=4 src_fn=8 out_fn=11 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/plugins/available/docker.plugin.bash
-- [FAIL] bashit-docker (plugin) bash->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=8 out_fn=9 msg= parser_msg=tests/corpus/.parser_check_bashit-docker_57.sh: line 43: syntax error near unexpected token `;'
-tests/corpus/.parser_check_bashit-docker_57.sh: line 43: `	if ; then'
+- [FAIL] bashit-fzf (plugin) bash->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=2 out_fn=3 msg= parser_msg=tests/corpus/.parser_check_bashit-fzf_45.sh: line 20: syntax error near unexpected token `done'
+tests/corpus/.parser_check_bashit-fzf_45.sh: line 20: `	done'
+ path=tests/corpus/repos/bash/bash-it/plugins/available/fzf.plugin.bash
+- [FAIL] bashit-docker (plugin) bash->fish translate=true parse=true parser=false/true exit=127 err=None warnings=4(parse=0 compat=4) shims=4 src_fn=8 out_fn=11 msg= parser_msg=tests/corpus/.parser_check_bashit-docker_56.fish (line 77): $@ is not supported. In fish, please use $argv.
+	docker exec -it "$@" /bin/bash
+	                  ^
+warning: Error while reading file tests/corpus/.parser_check_bashit-docker_56.fish
+ path=tests/corpus/repos/bash/bash-it/plugins/available/docker.plugin.bash
+- [FAIL] bashit-docker (plugin) bash->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=8 out_fn=9 msg= parser_msg=tests/corpus/.parser_check_bashit-docker_57.sh: line 44: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_bashit-docker_57.sh: line 44: `	fi'
  path=tests/corpus/repos/bash/bash-it/plugins/available/docker.plugin.bash
 - [FAIL] bashit-general (plugin) bash->zsh translate=true parse=true parser=false/true exit=1 err=None warnings=0(parse=0 compat=0) shims=0 src_fn=1 out_fn=0 msg= parser_msg=tests/corpus/.parser_check_bashit-general_58.zsh:2: parse error
  path=tests/corpus/repos/bash/bash-it/aliases/available/general.aliases.bash
-- [FAIL] bashit-general (plugin) bash->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=3(parse=0 compat=3) shims=3 src_fn=1 out_fn=6 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/aliases/available/general.aliases.bash
+- [FAIL] bashit-general (plugin) bash->fish translate=true parse=true parser=false/true exit=127 err=None warnings=3(parse=0 compat=3) shims=3 src_fn=1 out_fn=6 msg= parser_msg=tests/corpus/.parser_check_bashit-general_59.fish (line 45): ${ is not a valid variable in fish.
+command grep --color=auto "a" "${BASH_IT?}"/*.md
+                                ^
+warning: Error while reading file tests/corpus/.parser_check_bashit-general_59.fish
+ path=tests/corpus/repos/bash/bash-it/aliases/available/general.aliases.bash
 - [FAIL] bashit-general (plugin) bash->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=1 out_fn=2 msg= parser_msg=tests/corpus/.parser_check_bashit-general_60.sh: line 14: syntax error near unexpected token `done'
 tests/corpus/.parser_check_bashit-general_60.sh: line 14: `	done'
  path=tests/corpus/repos/bash/bash-it/aliases/available/general.aliases.bash
@@ -170,80 +232,127 @@ tests/corpus/.parser_check_fish-fisher_88.bash: line 48: `}'
 - [FAIL] fish-fisher (plugin) fish->posix translate=true parse=true parser=false/true exit=2 err=None warnings=2(parse=0 compat=2) shims=2 src_fn=1 out_fn=4 msg= parser_msg=tests/corpus/.parser_check_fish-fisher_90.sh: line 51: syntax error near unexpected token `}'
 tests/corpus/.parser_check_fish-fisher_90.sh: line 51: `}'
  path=tests/corpus/repos/fish/fisher/functions/fisher.fish
-- [FAIL] zsh-powerlevel10k (theme) zsh->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=8(parse=4 compat=4) shims=4 src_fn=1 out_fn=5 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/zsh/powerlevel10k/powerlevel10k.zsh-theme
-- [FAIL] zsh-powerlevel10k (theme) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=5(parse=4 compat=1) shims=1 src_fn=1 out_fn=1 msg= parser_msg=tests/corpus/.parser_check_zsh-powerlevel10k_93.sh: line 56: syntax error near unexpected token `)'
-tests/corpus/.parser_check_zsh-powerlevel10k_93.sh: line 56: `() {'
+- [FAIL] zsh-powerlevel10k (theme) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=8(parse=4 compat=4) shims=4 src_fn=1 out_fn=5 msg= parser_msg=tests/corpus/.parser_check_zsh-powerlevel10k_92.fish (line 31): Missing end to balance this if statement
+	  if (( ! $+__p9k_locale ))
+	  ^^
+warning: Error while reading file tests/corpus/.parser_check_zsh-powerlevel10k_92.fish
  path=tests/corpus/repos/zsh/powerlevel10k/powerlevel10k.zsh-theme
-- [FAIL] zsh-agnoster (theme) zsh->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=4(parse=1 compat=3) shims=3 src_fn=14 out_fn=5 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/zsh/ohmyzsh/themes/agnoster.zsh-theme
-- [FAIL] zsh-agnoster (theme) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=2(parse=1 compat=1) shims=1 src_fn=14 out_fn=8 msg= parser_msg=tests/corpus/.parser_check_zsh-agnoster_96.sh: line 62: syntax error near unexpected token `)'
-tests/corpus/.parser_check_zsh-agnoster_96.sh: line 62: `	  () {'
+- [FAIL] zsh-agnoster (theme) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=4(parse=1 compat=3) shims=3 src_fn=14 out_fn=9 msg= parser_msg=tests/corpus/.parser_check_zsh-agnoster_95.fish (line 32): Unsupported use of '='. In fish, please use 'set bg "%K{$1}"'.
+	  test  -n $1 ; and bg="%K{$1}"; or bg="%k"
+	                    ^~~~~~~~~~^
+warning: Error while reading file tests/corpus/.parser_check_zsh-agnoster_95.fish
  path=tests/corpus/repos/zsh/ohmyzsh/themes/agnoster.zsh-theme
-- [FAIL] zsh-eastwood (theme) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=0 src_fn=1 out_fn=1 msg= parser_msg=tests/corpus/.parser_check_zsh-eastwood_97.bash: line 4: syntax error near unexpected token `;'
-tests/corpus/.parser_check_zsh-eastwood_97.bash: line 4: `if ; then'
+- [FAIL] zsh-eastwood (theme) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=0 src_fn=1 out_fn=1 msg= parser_msg=tests/corpus/.parser_check_zsh-eastwood_97.bash: line 5: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_zsh-eastwood_97.bash: line 5: `fi'
  path=tests/corpus/repos/zsh/ohmyzsh/themes/eastwood.zsh-theme
-- [FAIL] zsh-eastwood (theme) zsh->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=2(parse=0 compat=2) shims=2 src_fn=1 out_fn=4 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/zsh/ohmyzsh/themes/eastwood.zsh-theme
-- [FAIL] zsh-eastwood (theme) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=0 src_fn=1 out_fn=1 msg= parser_msg=tests/corpus/.parser_check_zsh-eastwood_99.sh: line 4: syntax error near unexpected token `;'
-tests/corpus/.parser_check_zsh-eastwood_99.sh: line 4: `if ; then'
+- [FAIL] zsh-eastwood (theme) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=0 src_fn=1 out_fn=1 msg= parser_msg=tests/corpus/.parser_check_zsh-eastwood_99.sh: line 5: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_zsh-eastwood_99.sh: line 5: `fi'
  path=tests/corpus/repos/zsh/ohmyzsh/themes/eastwood.zsh-theme
-- [FAIL] zsh-spaceship (theme) zsh->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=18(parse=14 compat=4) shims=4 src_fn=1 out_fn=10 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/zsh/spaceship-prompt/spaceship.zsh-theme
-- [FAIL] zsh-gnzh (theme) zsh->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=3(parse=0 compat=3) shims=3 src_fn=0 out_fn=5 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/zsh/ohmyzsh/themes/gnzh.zsh-theme
-- [FAIL] zsh-gnzh (theme) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=0 out_fn=1 msg= parser_msg=tests/corpus/.parser_check_zsh-gnzh_105.sh: line 13: syntax error near unexpected token `)'
-tests/corpus/.parser_check_zsh-gnzh_105.sh: line 13: `() {'
+- [FAIL] zsh-spaceship (theme) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=18(parse=14 compat=4) shims=4 src_fn=1 out_fn=10 msg= parser_msg=tests/corpus/.parser_check_zsh-spaceship_101.fish (line 77): ${ is not a valid variable in fish.
+	  setopt noprompt{bang,cr,percent,subst} "prompt${^prompt_opts[@]}"
+	                                                 ^
+warning: Error while reading file tests/corpus/.parser_check_zsh-spaceship_101.fish
+ path=tests/corpus/repos/zsh/spaceship-prompt/spaceship.zsh-theme
+- [FAIL] zsh-gnzh (theme) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=3(parse=0 compat=3) shims=3 src_fn=0 out_fn=5 msg= parser_msg=tests/corpus/.parser_check_zsh-gnzh_104.fish (line 31): Unexpected end of string, incomplete parameter expansion
+() {
+   ^
+warning: Error while reading file tests/corpus/.parser_check_zsh-gnzh_104.fish
  path=tests/corpus/repos/zsh/ohmyzsh/themes/gnzh.zsh-theme
-- [FAIL] bashit-bobby-theme (theme) bash->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=3(parse=0 compat=3) shims=3 src_fn=2 out_fn=6 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/themes/bobby/bobby.theme.bash
-- [FAIL] bashit-bobby-theme (theme) bash->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=2 out_fn=3 msg= parser_msg=tests/corpus/.parser_check_bashit-bobby-theme_108.sh: line 14: syntax error near unexpected token `;'
-tests/corpus/.parser_check_bashit-bobby-theme_108.sh: line 14: `	if ; then'
+- [FAIL] bashit-bobby-theme (theme) bash->fish translate=true parse=true parser=false/true exit=127 err=None warnings=3(parse=0 compat=3) shims=3 src_fn=2 out_fn=7 msg= parser_msg=tests/corpus/.parser_check_bashit-bobby-theme_107.fish (line 58): Unexpected end of string, incomplete parameter expansion
+: "(__shellx_param_default THEME_CLOCK_COLOR "\${bold_cyan?")}"
+                                                ^
+warning: Error while reading file tests/corpus/.parser_check_bashit-bobby-theme_107.fish
+ path=tests/corpus/repos/bash/bash-it/themes/bobby/bobby.theme.bash
+- [FAIL] bashit-bobby-theme (theme) bash->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=2 out_fn=3 msg= parser_msg=tests/corpus/.parser_check_bashit-bobby-theme_108.sh: line 15: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_bashit-bobby-theme_108.sh: line 15: `	fi'
  path=tests/corpus/repos/bash/bash-it/themes/bobby/bobby.theme.bash
 - [FAIL] bashit-atomic-theme (theme) bash->zsh translate=true parse=true parser=false/true exit=1 err=None warnings=0(parse=0 compat=0) shims=0 src_fn=22 out_fn=22 msg= parser_msg=tests/corpus/.parser_check_bashit-atomic-theme_109.zsh:42: parse error
  path=tests/corpus/repos/bash/bash-it/themes/atomic/atomic.theme.bash
-- [FAIL] bashit-atomic-theme (theme) bash->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=3(parse=0 compat=3) shims=3 src_fn=22 out_fn=6 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/themes/atomic/atomic.theme.bash
-- [FAIL] bashit-atomic-theme (theme) bash->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=22 out_fn=18 msg= parser_msg=tests/corpus/.parser_check_bashit-atomic-theme_111.sh: line 17: syntax error near unexpected token `;'
-tests/corpus/.parser_check_bashit-atomic-theme_111.sh: line 17: `	if ; then'
+- [FAIL] bashit-atomic-theme (theme) bash->fish translate=true parse=true parser=false/true exit=127 err=None warnings=3(parse=0 compat=3) shims=3 src_fn=22 out_fn=8 msg= parser_msg=tests/corpus/.parser_check_bashit-atomic-theme_110.fish (line 250): Unexpected end of string, incomplete parameter expansion
+: "(__shellx_param_default THEME_CLOCK_COLOR "\${BICyan?")}"
+                                                ^
+warning: Error while reading file tests/corpus/.parser_check_bashit-atomic-theme_110.fish
+ path=tests/corpus/repos/bash/bash-it/themes/atomic/atomic.theme.bash
+- [FAIL] bashit-atomic-theme (theme) bash->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=22 out_fn=18 msg= parser_msg=tests/corpus/.parser_check_bashit-atomic-theme_111.sh: line 18: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_bashit-atomic-theme_111.sh: line 18: `	fi'
  path=tests/corpus/repos/bash/bash-it/themes/atomic/atomic.theme.bash
 - [FAIL] bashit-brainy-theme (theme) bash->zsh translate=true parse=true parser=false/true exit=1 err=None warnings=0(parse=0 compat=0) shims=0 src_fn=22 out_fn=22 msg= parser_msg=tests/corpus/.parser_check_bashit-brainy-theme_112.zsh:42: parse error
  path=tests/corpus/repos/bash/bash-it/themes/brainy/brainy.theme.bash
-- [FAIL] bashit-brainy-theme (theme) bash->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=3(parse=0 compat=3) shims=3 src_fn=22 out_fn=6 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/themes/brainy/brainy.theme.bash
-- [FAIL] bashit-brainy-theme (theme) bash->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=22 out_fn=6 msg= parser_msg=tests/corpus/.parser_check_bashit-brainy-theme_114.sh: line 17: syntax error near unexpected token `;'
-tests/corpus/.parser_check_bashit-brainy-theme_114.sh: line 17: `	if ; then'
+- [FAIL] bashit-brainy-theme (theme) bash->fish translate=true parse=true parser=false/true exit=127 err=None warnings=3(parse=0 compat=3) shims=3 src_fn=22 out_fn=9 msg= parser_msg=tests/corpus/.parser_check_bashit-brainy-theme_113.fish (line 248): Unexpected end of string, quotes are not balanced
+set ___BRAINY_BOTTOM (__shellx_param_default ___BRAINY_BOTTOM "\"exitcode char\"")
+                                                                                ^
+warning: Error while reading file tests/corpus/.parser_check_bashit-brainy-theme_113.fish
  path=tests/corpus/repos/bash/bash-it/themes/brainy/brainy.theme.bash
-- [FAIL] bashit-candy-theme (theme) bash->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=1 out_fn=3 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/themes/candy/candy.theme.bash
-- [FAIL] bashit-envy-theme (theme) bash->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=1 out_fn=3 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/themes/envy/envy.theme.bash
+- [FAIL] bashit-brainy-theme (theme) bash->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=22 out_fn=6 msg= parser_msg=tests/corpus/.parser_check_bashit-brainy-theme_114.sh: line 18: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_bashit-brainy-theme_114.sh: line 18: `	fi'
+ path=tests/corpus/repos/bash/bash-it/themes/brainy/brainy.theme.bash
+- [FAIL] bashit-candy-theme (theme) bash->fish translate=true parse=true parser=false/true exit=127 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=1 out_fn=3 msg= parser_msg=tests/corpus/.parser_check_bashit-candy-theme_116.fish (line 22): Unexpected end of string, incomplete parameter expansion
+: "(__shellx_param_default THEME_CLOCK_COLOR "\${blue?")}"
+                                                ^
+warning: Error while reading file tests/corpus/.parser_check_bashit-candy-theme_116.fish
+ path=tests/corpus/repos/bash/bash-it/themes/candy/candy.theme.bash
 - [FAIL] fish-tide-theme (theme) fish->bash translate=true parse=true parser=false/true exit=2 err=None warnings=3(parse=0 compat=3) shims=3 src_fn=4 out_fn=13 msg= parser_msg=tests/corpus/.parser_check_fish-tide-theme_121.bash: line 103: syntax error near unexpected token `}'
 tests/corpus/.parser_check_fish-tide-theme_121.bash: line 103: `}'
  path=tests/corpus/repos/fish/tide/functions/fish_prompt.fish
 - [FAIL] fish-tide-theme (theme) fish->posix translate=true parse=true parser=false/true exit=2 err=None warnings=3(parse=0 compat=3) shims=3 src_fn=4 out_fn=13 msg= parser_msg=tests/corpus/.parser_check_fish-tide-theme_123.sh: line 106: syntax error near unexpected token `}'
 tests/corpus/.parser_check_fish-tide-theme_123.sh: line 106: `}'
  path=tests/corpus/repos/fish/tide/functions/fish_prompt.fish
-- [FAIL] fish-starship-init (theme) bash->zsh translate=true parse=true parser=false/true exit=1 err=None warnings=0(parse=0 compat=0) shims=0 src_fn=21 out_fn=9 msg= parser_msg=tests/corpus/.parser_check_fish-starship-init_124.zsh:151: parse error
+- [FAIL] fish-starship-init (theme) bash->zsh translate=true parse=true parser=false/true exit=1 err=None warnings=0(parse=0 compat=0) shims=0 src_fn=21 out_fn=19 msg= parser_msg=tests/corpus/.parser_check_fish-starship-init_124.zsh:151: parse error
  path=tests/corpus/repos/fish/starship/install/install.sh
-- [FAIL] fish-starship-init (theme) bash->fish translate=true parse=true parser=false/false exit=-1 err=None warnings=3(parse=0 compat=3) shims=3 src_fn=21 out_fn=5 msg= parser_msg=parser execution error: Not_Exist path=tests/corpus/repos/fish/starship/install/install.sh
-- [FAIL] fish-starship-init (theme) bash->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=21 out_fn=21 msg= parser_msg=tests/corpus/.parser_check_fish-starship-init_126.sh: line 33: syntax error near unexpected token `;'
-tests/corpus/.parser_check_fish-starship-init_126.sh: line 33: `	if ; then'
+- [FAIL] fish-starship-init (theme) bash->fish translate=true parse=true parser=false/true exit=127 err=None warnings=3(parse=0 compat=3) shims=3 src_fn=21 out_fn=5 msg= parser_msg=tests/corpus/.parser_check_fish-starship-init_125.fish (line 31): Variables cannot be bracketed. In fish, please use "$BOLD".
+	printf "${BOLD}${GREY}>${NO_COLOR} $*"
+	         ^
+warning: Error while reading file tests/corpus/.parser_check_fish-starship-init_125.fish
+ path=tests/corpus/repos/fish/starship/install/install.sh
+- [FAIL] fish-starship-init (theme) bash->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=21 out_fn=21 msg= parser_msg=tests/corpus/.parser_check_fish-starship-init_126.sh: line 34: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_fish-starship-init_126.sh: line 34: `	fi'
  path=tests/corpus/repos/fish/starship/install/install.sh
 
 ## Parser Validation Failures
 
-- [PARSER-SKIP] zsh-autosuggestions (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_zsh-autosuggestions_2.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
-- [PARSER-FAIL] zsh-autosuggestions (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_zsh-autosuggestions_3.sh` exit=2 message=tests/corpus/.parser_check_zsh-autosuggestions_3.sh: line 85: syntax error near unexpected token `('
-tests/corpus/.parser_check_zsh-autosuggestions_3.sh: line 85: `			user:_zsh_autosuggest_(bound|orig)_*)'
+- [PARSER-FAIL] zsh-autosuggestions (plugin) zsh->bash command=`bash -n tests/corpus/.parser_check_zsh-autosuggestions_1.bash` exit=2 message=tests/corpus/.parser_check_zsh-autosuggestions_1.bash: line 552: syntax error near unexpected token `done'
+tests/corpus/.parser_check_zsh-autosuggestions_1.bash: line 552: `	done'
  path=tests/corpus/repos/zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
-- [PARSER-SKIP] zsh-syntax-highlighting (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_zsh-syntax-highlighting_5.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-- [PARSER-FAIL] zsh-syntax-highlighting (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh` exit=2 message=tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 135: syntax error near unexpected token `)'
-tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 135: `	    () {'
+- [PARSER-FAIL] zsh-autosuggestions (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_zsh-autosuggestions_2.fish` exit=127 message=tests/corpus/.parser_check_zsh-autosuggestions_2.fish (line 99): Missing end to balance this switch statement
+		switch $widgets[$widget]
+		^~~~~^
+warning: Error while reading file tests/corpus/.parser_check_zsh-autosuggestions_2.fish
+ path=tests/corpus/repos/zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
+- [PARSER-FAIL] zsh-autosuggestions (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_zsh-autosuggestions_3.sh` exit=2 message=tests/corpus/.parser_check_zsh-autosuggestions_3.sh: line 318: syntax error near unexpected token `done'
+tests/corpus/.parser_check_zsh-autosuggestions_3.sh: line 318: `		done'
+ path=tests/corpus/repos/zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
+- [PARSER-FAIL] zsh-syntax-highlighting (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_zsh-syntax-highlighting_5.fish` exit=127 message=tests/corpus/.parser_check_zsh-syntax-highlighting_5.fish (line 129): Missing end to balance this function definition
+function _zsh_highlight__zle-line-finish
+^~~~~~~^
+warning: Error while reading file tests/corpus/.parser_check_zsh-syntax-highlighting_5.fish
+ path=tests/corpus/repos/zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+- [PARSER-FAIL] zsh-syntax-highlighting (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh` exit=2 message=tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 150: syntax error near unexpected token `else'
+tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 150: `	else'
  path=tests/corpus/repos/zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 - [PARSER-FAIL] ohmyzsh-git (plugin) zsh->bash command=`bash -n tests/corpus/.parser_check_ohmyzsh-git_7.bash` exit=2 message=tests/corpus/.parser_check_ohmyzsh-git_7.bash: line 429: syntax error near unexpected token `new_name'
 tests/corpus/.parser_check_ohmyzsh-git_7.bash: line 429: `for old_name new_name ('
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/git/git.plugin.zsh
-- [PARSER-SKIP] ohmyzsh-git (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-git_8.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/zsh/ohmyzsh/plugins/git/git.plugin.zsh
+- [PARSER-FAIL] ohmyzsh-git (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-git_8.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-git_8.fish (line 103): 'case' builtin not inside of switch block
+	  case (( ! $? ))    default_branch=$(git_develop_branch
+	  ^~~^
+warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-git_8.fish
+ path=tests/corpus/repos/zsh/ohmyzsh/plugins/git/git.plugin.zsh
 - [PARSER-FAIL] ohmyzsh-git (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-git_9.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-git_9.sh: line 389: syntax error near unexpected token `new_name'
 tests/corpus/.parser_check_ohmyzsh-git_9.sh: line 389: `for old_name new_name ('
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/git/git.plugin.zsh
-- [PARSER-SKIP] ohmyzsh-z (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-z_11.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
-- [PARSER-FAIL] ohmyzsh-z (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-z_12.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-z_12.sh: line 512: unexpected argument `(' to conditional binary operator
-tests/corpus/.parser_check_ohmyzsh-z_12.sh: line 512: syntax error near `(c'
-tests/corpus/.parser_check_ohmyzsh-z_12.sh: line 512: `	  if [[ $OSTYPE == (cygwin|msys) ]]; then'
+- [PARSER-FAIL] ohmyzsh-z (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-z_11.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-z_11.fish (line 63): Missing end to balance this function definition
+function _zshz_usage
+^~~~~~~^
+warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-z_11.fish
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
-- [PARSER-SKIP] ohmyzsh-fzf (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-fzf_14.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/zsh/ohmyzsh/plugins/fzf/fzf.plugin.zsh
+- [PARSER-FAIL] ohmyzsh-z (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-z_12.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-z_12.sh: line 900: syntax error near unexpected token `}'
+tests/corpus/.parser_check_ohmyzsh-z_12.sh: line 900: `}'
+ path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
+- [PARSER-FAIL] ohmyzsh-fzf (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-fzf_14.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-fzf_14.fish (line 42): Unsupported use of '='. In fish, please use 'set fzf_base "${FZF_BASE}"'.
+	  test -d "${FZF_BASE}"; and fzf_base="${FZF_BASE}"
+	                             ^~~~~~~~~~~~~~~~~~~~~^
+warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-fzf_14.fish
+ path=tests/corpus/repos/zsh/ohmyzsh/plugins/fzf/fzf.plugin.zsh
 - [PARSER-FAIL] ohmyzsh-fzf (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-fzf_15.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-fzf_15.sh: line 233: warning: here-document at line 209 delimited by end-of-file (wanted `EOF')
 tests/corpus/.parser_check_ohmyzsh-fzf_15.sh: line 234: syntax error: unexpected end of file from `{' command on line 208
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/fzf/fzf.plugin.zsh
@@ -251,7 +360,11 @@ tests/corpus/.parser_check_ohmyzsh-fzf_15.sh: line 234: syntax error: unexpected
 tests/corpus/.parser_check_ohmyzsh-sudo_16.bash: line 79: syntax error near `(\'
 tests/corpus/.parser_check_ohmyzsh-sudo_16.bash: line 79: `    if [[ "$realcmd" = (\$EDITOR|$editorcmd|${editorcmd:c}) \'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/sudo/sudo.plugin.zsh
-- [PARSER-SKIP] ohmyzsh-sudo (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-sudo_17.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/zsh/ohmyzsh/plugins/sudo/sudo.plugin.zsh
+- [PARSER-FAIL] ohmyzsh-sudo (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-sudo_17.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-sudo_17.fish (line 45): Unsupported use of '='. In fish, please use 'set LBUFFER "(fc -ln -1)"'.
+	  test  -z $BUFFER ; and LBUFFER="(fc -ln -1)"
+	                         ^~~~~~~~~~~~~~~~~~~~^
+warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-sudo_17.fish
+ path=tests/corpus/repos/zsh/ohmyzsh/plugins/sudo/sudo.plugin.zsh
 - [PARSER-FAIL] ohmyzsh-sudo (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-sudo_18.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-sudo_18.sh: line 65: unexpected argument `(' to conditional binary operator
 tests/corpus/.parser_check_ohmyzsh-sudo_18.sh: line 65: syntax error near `(\'
 tests/corpus/.parser_check_ohmyzsh-sudo_18.sh: line 65: `	    if [[ "$realcmd" = (\$EDITOR|$editorcmd|${editorcmd:c}) \'
@@ -259,57 +372,93 @@ tests/corpus/.parser_check_ohmyzsh-sudo_18.sh: line 65: `	    if [[ "$realcmd" =
 - [PARSER-FAIL] ohmyzsh-extract (plugin) zsh->bash command=`bash -n tests/corpus/.parser_check_ohmyzsh-extract_19.bash` exit=2 message=tests/corpus/.parser_check_ohmyzsh-extract_19.bash: line 56: syntax error near unexpected token `newline'
 tests/corpus/.parser_check_ohmyzsh-extract_19.bash: line 56: `      *.tar.gz|      *.tgz'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/extract/extract.plugin.zsh
-- [PARSER-SKIP] ohmyzsh-extract (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-extract_20.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/zsh/ohmyzsh/plugins/extract/extract.plugin.zsh
-- [PARSER-FAIL] ohmyzsh-extract (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-extract_21.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-extract_21.sh: line 53: syntax error near unexpected token `;;'
-tests/corpus/.parser_check_ohmyzsh-extract_21.sh: line 53: `        (( $+commands[pigz] )) && { tar -I pigz -xvf "$full_path" } || tar zxvf "$full_path" ;;'
+- [PARSER-FAIL] ohmyzsh-extract (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-extract_20.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-extract_20.fish (line 34): Expected a string, but found a redirection
+    cat >&2 <<'EOF'
+             ^
+warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-extract_20.fish
+ path=tests/corpus/repos/zsh/ohmyzsh/plugins/extract/extract.plugin.zsh
+- [PARSER-FAIL] ohmyzsh-extract (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-extract_21.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-extract_21.sh: line 52: syntax error near unexpected token `newline'
+tests/corpus/.parser_check_ohmyzsh-extract_21.sh: line 52: `      *.tar.gz|      *.tgz'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/extract/extract.plugin.zsh
 - [PARSER-FAIL] ohmyzsh-colored-man-pages (plugin) zsh->bash command=`bash -n tests/corpus/.parser_check_ohmyzsh-colored-man-pages_22.bash` exit=2 message=tests/corpus/.parser_check_ohmyzsh-colored-man-pages_22.bash: line 37: syntax error near unexpected token `v'
 tests/corpus/.parser_check_ohmyzsh-colored-man-pages_22.bash: line 37: `  for k v in "${(@kv)less_termcap}"; do'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/colored-man-pages/colored-man-pages.plugin.zsh
-- [PARSER-SKIP] ohmyzsh-colored-man-pages (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-colored-man-pages_23.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/zsh/ohmyzsh/plugins/colored-man-pages/colored-man-pages.plugin.zsh
+- [PARSER-FAIL] ohmyzsh-colored-man-pages (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-colored-man-pages_23.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-colored-man-pages_23.fish (line 34): Expected keyword 'in', but found a string
+	  for k v in "${(@kv)less_termcap}"
+	        ^
+warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-colored-man-pages_23.fish
+ path=tests/corpus/repos/zsh/ohmyzsh/plugins/colored-man-pages/colored-man-pages.plugin.zsh
 - [PARSER-FAIL] ohmyzsh-colored-man-pages (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-colored-man-pages_24.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-colored-man-pages_24.sh: line 16: syntax error near unexpected token `v'
 tests/corpus/.parser_check_ohmyzsh-colored-man-pages_24.sh: line 16: `	  for k v in "${(@kv)less_termcap}"; do'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/colored-man-pages/colored-man-pages.plugin.zsh
-- [PARSER-FAIL] ohmyzsh-web-search (plugin) zsh->bash command=`bash -n tests/corpus/.parser_check_ohmyzsh-web-search_25.bash` exit=2 message=tests/corpus/.parser_check_ohmyzsh-web-search_25.bash: line 101: syntax error near unexpected token `;'
-tests/corpus/.parser_check_ohmyzsh-web-search_25.bash: line 101: `if ; then'
+- [PARSER-FAIL] ohmyzsh-web-search (plugin) zsh->bash command=`bash -n tests/corpus/.parser_check_ohmyzsh-web-search_25.bash` exit=2 message=tests/corpus/.parser_check_ohmyzsh-web-search_25.bash: line 102: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_ohmyzsh-web-search_25.bash: line 102: `fi'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/web-search/web-search.plugin.zsh
-- [PARSER-SKIP] ohmyzsh-web-search (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-web-search_26.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/zsh/ohmyzsh/plugins/web-search/web-search.plugin.zsh
-- [PARSER-FAIL] ohmyzsh-web-search (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-web-search_27.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-web-search_27.sh: line 112: syntax error near unexpected token `;'
-tests/corpus/.parser_check_ohmyzsh-web-search_27.sh: line 112: `if ; then'
+- [PARSER-FAIL] ohmyzsh-web-search (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-web-search_26.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-web-search_26.fish (line 80): Unsupported use of '='. In fish, please use 'set param ""'.
+    test  "$urls[$1]" == *\?*= ; and param=""
+                                     ^~~~~~~^
+warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-web-search_26.fish
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/web-search/web-search.plugin.zsh
-- [PARSER-SKIP] ohmyzsh-copyfile (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-copyfile_29.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/zsh/ohmyzsh/plugins/copyfile/copyfile.plugin.zsh
-- [PARSER-SKIP] bashit-git (plugin) bash->fish command=`fish --no-execute tests/corpus/.parser_check_bashit-git_32.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/plugins/available/git.plugin.bash
-- [PARSER-FAIL] bashit-git (plugin) bash->posix command=`bash -n tests/corpus/.parser_check_bashit-git_33.sh` exit=2 message=tests/corpus/.parser_check_bashit-git_33.sh: line 42: syntax error near unexpected token `;'
-tests/corpus/.parser_check_bashit-git_33.sh: line 42: `	if ; then'
+- [PARSER-FAIL] ohmyzsh-web-search (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-web-search_27.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-web-search_27.sh: line 113: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_ohmyzsh-web-search_27.sh: line 113: `fi'
+ path=tests/corpus/repos/zsh/ohmyzsh/plugins/web-search/web-search.plugin.zsh
+- [PARSER-FAIL] ohmyzsh-copyfile (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-copyfile_29.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-copyfile_29.fish (line 40): Expected end of the statement, but found an incomplete token
+  echo ${(%) "\"%B\$1%b copied to clipboard.\"")
+                                               ^
+warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-copyfile_29.fish
+ path=tests/corpus/repos/zsh/ohmyzsh/plugins/copyfile/copyfile.plugin.zsh
+- [PARSER-FAIL] bashit-git (plugin) bash->fish command=`fish --no-execute tests/corpus/.parser_check_bashit-git_32.fish` exit=127 message=tests/corpus/.parser_check_bashit-git_32.fish (line 33): ${ is not a valid variable in fish.
+	echo "Running: git remote add origin ${GIT_HOSTING:?}:$1.git"
+	                                      ^
+warning: Error while reading file tests/corpus/.parser_check_bashit-git_32.fish
  path=tests/corpus/repos/bash/bash-it/plugins/available/git.plugin.bash
-- [PARSER-SKIP] bashit-aliases (plugin) bash->fish command=`fish --no-execute tests/corpus/.parser_check_bashit-aliases_35.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/completion/available/aliases.completion.bash
-- [PARSER-FAIL] bashit-aliases (plugin) bash->posix command=`bash -n tests/corpus/.parser_check_bashit-aliases_36.sh` exit=2 message=tests/corpus/.parser_check_bashit-aliases_36.sh: line 25: syntax error near unexpected token `;'
-tests/corpus/.parser_check_bashit-aliases_36.sh: line 25: `	if ; then'
+- [PARSER-FAIL] bashit-git (plugin) bash->posix command=`bash -n tests/corpus/.parser_check_bashit-git_33.sh` exit=2 message=tests/corpus/.parser_check_bashit-git_33.sh: line 43: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_bashit-git_33.sh: line 43: `	fi'
+ path=tests/corpus/repos/bash/bash-it/plugins/available/git.plugin.bash
+- [PARSER-FAIL] bashit-aliases (plugin) bash->posix command=`bash -n tests/corpus/.parser_check_bashit-aliases_36.sh` exit=2 message=tests/corpus/.parser_check_bashit-aliases_36.sh: line 26: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_bashit-aliases_36.sh: line 26: `	fi'
  path=tests/corpus/repos/bash/bash-it/completion/available/aliases.completion.bash
-- [PARSER-SKIP] bashit-completion (plugin) bash->fish command=`fish --no-execute tests/corpus/.parser_check_bashit-completion_38.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/completion/available/bash-it.completion.bash
-- [PARSER-FAIL] bashit-completion (plugin) bash->posix command=`bash -n tests/corpus/.parser_check_bashit-completion_39.sh` exit=2 message=tests/corpus/.parser_check_bashit-completion_39.sh: line 26: syntax error near unexpected token `;'
-tests/corpus/.parser_check_bashit-completion_39.sh: line 26: `	if ; then'
+- [PARSER-FAIL] bashit-completion (plugin) bash->fish command=`fish --no-execute tests/corpus/.parser_check_bashit-completion_38.fish` exit=127 message=tests/corpus/.parser_check_bashit-completion_38.fish (line 51): ${ is not a valid variable in fish.
+	compgen -W "${candidates[*]}" -- "${cur}"
+	             ^
+warning: Error while reading file tests/corpus/.parser_check_bashit-completion_38.fish
+ path=tests/corpus/repos/bash/bash-it/completion/available/bash-it.completion.bash
+- [PARSER-FAIL] bashit-completion (plugin) bash->posix command=`bash -n tests/corpus/.parser_check_bashit-completion_39.sh` exit=2 message=tests/corpus/.parser_check_bashit-completion_39.sh: line 27: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_bashit-completion_39.sh: line 27: `	fi'
  path=tests/corpus/repos/bash/bash-it/completion/available/bash-it.completion.bash
 - [PARSER-FAIL] bashit-base (plugin) bash->zsh command=`zsh -n tests/corpus/.parser_check_bashit-base_40.zsh` exit=1 message=tests/corpus/.parser_check_bashit-base_40.zsh:25: parse error
  path=tests/corpus/repos/bash/bash-it/plugins/available/base.plugin.bash
-- [PARSER-SKIP] bashit-base (plugin) bash->fish command=`fish --no-execute tests/corpus/.parser_check_bashit-base_41.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/plugins/available/base.plugin.bash
-- [PARSER-FAIL] bashit-base (plugin) bash->posix command=`bash -n tests/corpus/.parser_check_bashit-base_42.sh` exit=2 message=tests/corpus/.parser_check_bashit-base_42.sh: line 15: syntax error near unexpected token `;'
-tests/corpus/.parser_check_bashit-base_42.sh: line 15: `	if ; then'
+- [PARSER-FAIL] bashit-base (plugin) bash->fish command=`fish --no-execute tests/corpus/.parser_check_bashit-base_41.fish` exit=127 message=tests/corpus/.parser_check_bashit-base_41.fish (line 46): Variables cannot be bracketed. In fish, please use "$site".
+	command curl -Ls "http://downforeveryoneorjustme.com/${site}"
+	                                                      ^
+warning: Error while reading file tests/corpus/.parser_check_bashit-base_41.fish
  path=tests/corpus/repos/bash/bash-it/plugins/available/base.plugin.bash
-- [PARSER-SKIP] bashit-fzf (plugin) bash->fish command=`fish --no-execute tests/corpus/.parser_check_bashit-fzf_44.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/plugins/available/fzf.plugin.bash
-- [PARSER-FAIL] bashit-fzf (plugin) bash->posix command=`bash -n tests/corpus/.parser_check_bashit-fzf_45.sh` exit=2 message=tests/corpus/.parser_check_bashit-fzf_45.sh: line 19: syntax error near unexpected token `;'
-tests/corpus/.parser_check_bashit-fzf_45.sh: line 19: `	while ; do'
+- [PARSER-FAIL] bashit-base (plugin) bash->posix command=`bash -n tests/corpus/.parser_check_bashit-base_42.sh` exit=2 message=tests/corpus/.parser_check_bashit-base_42.sh: line 16: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_bashit-base_42.sh: line 16: `	fi'
+ path=tests/corpus/repos/bash/bash-it/plugins/available/base.plugin.bash
+- [PARSER-FAIL] bashit-fzf (plugin) bash->fish command=`fish --no-execute tests/corpus/.parser_check_bashit-fzf_44.fish` exit=127 message=tests/corpus/.parser_check_bashit-fzf_44.fish (line 58): ${ is not a valid variable in fish.
+	 "${files[@]}"
+	   ^
+warning: Error while reading file tests/corpus/.parser_check_bashit-fzf_44.fish
  path=tests/corpus/repos/bash/bash-it/plugins/available/fzf.plugin.bash
-- [PARSER-SKIP] bashit-tmux (plugin) bash->fish command=`fish --no-execute tests/corpus/.parser_check_bashit-tmux_47.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/plugins/available/tmux.plugin.bash
-- [PARSER-SKIP] bashit-history (plugin) bash->fish command=`fish --no-execute tests/corpus/.parser_check_bashit-history_50.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/plugins/available/history.plugin.bash
-- [PARSER-SKIP] bashit-ssh (plugin) bash->fish command=`fish --no-execute tests/corpus/.parser_check_bashit-ssh_53.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/plugins/available/ssh.plugin.bash
-- [PARSER-SKIP] bashit-docker (plugin) bash->fish command=`fish --no-execute tests/corpus/.parser_check_bashit-docker_56.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/plugins/available/docker.plugin.bash
-- [PARSER-FAIL] bashit-docker (plugin) bash->posix command=`bash -n tests/corpus/.parser_check_bashit-docker_57.sh` exit=2 message=tests/corpus/.parser_check_bashit-docker_57.sh: line 43: syntax error near unexpected token `;'
-tests/corpus/.parser_check_bashit-docker_57.sh: line 43: `	if ; then'
+- [PARSER-FAIL] bashit-fzf (plugin) bash->posix command=`bash -n tests/corpus/.parser_check_bashit-fzf_45.sh` exit=2 message=tests/corpus/.parser_check_bashit-fzf_45.sh: line 20: syntax error near unexpected token `done'
+tests/corpus/.parser_check_bashit-fzf_45.sh: line 20: `	done'
+ path=tests/corpus/repos/bash/bash-it/plugins/available/fzf.plugin.bash
+- [PARSER-FAIL] bashit-docker (plugin) bash->fish command=`fish --no-execute tests/corpus/.parser_check_bashit-docker_56.fish` exit=127 message=tests/corpus/.parser_check_bashit-docker_56.fish (line 77): $@ is not supported. In fish, please use $argv.
+	docker exec -it "$@" /bin/bash
+	                  ^
+warning: Error while reading file tests/corpus/.parser_check_bashit-docker_56.fish
+ path=tests/corpus/repos/bash/bash-it/plugins/available/docker.plugin.bash
+- [PARSER-FAIL] bashit-docker (plugin) bash->posix command=`bash -n tests/corpus/.parser_check_bashit-docker_57.sh` exit=2 message=tests/corpus/.parser_check_bashit-docker_57.sh: line 44: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_bashit-docker_57.sh: line 44: `	fi'
  path=tests/corpus/repos/bash/bash-it/plugins/available/docker.plugin.bash
 - [PARSER-FAIL] bashit-general (plugin) bash->zsh command=`zsh -n tests/corpus/.parser_check_bashit-general_58.zsh` exit=1 message=tests/corpus/.parser_check_bashit-general_58.zsh:2: parse error
  path=tests/corpus/repos/bash/bash-it/aliases/available/general.aliases.bash
-- [PARSER-SKIP] bashit-general (plugin) bash->fish command=`fish --no-execute tests/corpus/.parser_check_bashit-general_59.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/aliases/available/general.aliases.bash
+- [PARSER-FAIL] bashit-general (plugin) bash->fish command=`fish --no-execute tests/corpus/.parser_check_bashit-general_59.fish` exit=127 message=tests/corpus/.parser_check_bashit-general_59.fish (line 45): ${ is not a valid variable in fish.
+command grep --color=auto "a" "${BASH_IT?}"/*.md
+                                ^
+warning: Error while reading file tests/corpus/.parser_check_bashit-general_59.fish
+ path=tests/corpus/repos/bash/bash-it/aliases/available/general.aliases.bash
 - [PARSER-FAIL] bashit-general (plugin) bash->posix command=`bash -n tests/corpus/.parser_check_bashit-general_60.sh` exit=2 message=tests/corpus/.parser_check_bashit-general_60.sh: line 14: syntax error near unexpected token `done'
 tests/corpus/.parser_check_bashit-general_60.sh: line 14: `	done'
  path=tests/corpus/repos/bash/bash-it/aliases/available/general.aliases.bash
@@ -373,44 +522,65 @@ tests/corpus/.parser_check_fish-fisher_88.bash: line 48: `}'
 - [PARSER-FAIL] fish-fisher (plugin) fish->posix command=`bash -n tests/corpus/.parser_check_fish-fisher_90.sh` exit=2 message=tests/corpus/.parser_check_fish-fisher_90.sh: line 51: syntax error near unexpected token `}'
 tests/corpus/.parser_check_fish-fisher_90.sh: line 51: `}'
  path=tests/corpus/repos/fish/fisher/functions/fisher.fish
-- [PARSER-SKIP] zsh-powerlevel10k (theme) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_zsh-powerlevel10k_92.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/zsh/powerlevel10k/powerlevel10k.zsh-theme
-- [PARSER-FAIL] zsh-powerlevel10k (theme) zsh->posix command=`bash -n tests/corpus/.parser_check_zsh-powerlevel10k_93.sh` exit=2 message=tests/corpus/.parser_check_zsh-powerlevel10k_93.sh: line 56: syntax error near unexpected token `)'
-tests/corpus/.parser_check_zsh-powerlevel10k_93.sh: line 56: `() {'
+- [PARSER-FAIL] zsh-powerlevel10k (theme) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_zsh-powerlevel10k_92.fish` exit=127 message=tests/corpus/.parser_check_zsh-powerlevel10k_92.fish (line 31): Missing end to balance this if statement
+	  if (( ! $+__p9k_locale ))
+	  ^^
+warning: Error while reading file tests/corpus/.parser_check_zsh-powerlevel10k_92.fish
  path=tests/corpus/repos/zsh/powerlevel10k/powerlevel10k.zsh-theme
-- [PARSER-SKIP] zsh-agnoster (theme) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_zsh-agnoster_95.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/zsh/ohmyzsh/themes/agnoster.zsh-theme
-- [PARSER-FAIL] zsh-agnoster (theme) zsh->posix command=`bash -n tests/corpus/.parser_check_zsh-agnoster_96.sh` exit=2 message=tests/corpus/.parser_check_zsh-agnoster_96.sh: line 62: syntax error near unexpected token `)'
-tests/corpus/.parser_check_zsh-agnoster_96.sh: line 62: `	  () {'
+- [PARSER-FAIL] zsh-agnoster (theme) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_zsh-agnoster_95.fish` exit=127 message=tests/corpus/.parser_check_zsh-agnoster_95.fish (line 32): Unsupported use of '='. In fish, please use 'set bg "%K{$1}"'.
+	  test  -n $1 ; and bg="%K{$1}"; or bg="%k"
+	                    ^~~~~~~~~~^
+warning: Error while reading file tests/corpus/.parser_check_zsh-agnoster_95.fish
  path=tests/corpus/repos/zsh/ohmyzsh/themes/agnoster.zsh-theme
-- [PARSER-FAIL] zsh-eastwood (theme) zsh->bash command=`bash -n tests/corpus/.parser_check_zsh-eastwood_97.bash` exit=2 message=tests/corpus/.parser_check_zsh-eastwood_97.bash: line 4: syntax error near unexpected token `;'
-tests/corpus/.parser_check_zsh-eastwood_97.bash: line 4: `if ; then'
+- [PARSER-FAIL] zsh-eastwood (theme) zsh->bash command=`bash -n tests/corpus/.parser_check_zsh-eastwood_97.bash` exit=2 message=tests/corpus/.parser_check_zsh-eastwood_97.bash: line 5: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_zsh-eastwood_97.bash: line 5: `fi'
  path=tests/corpus/repos/zsh/ohmyzsh/themes/eastwood.zsh-theme
-- [PARSER-SKIP] zsh-eastwood (theme) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_zsh-eastwood_98.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/zsh/ohmyzsh/themes/eastwood.zsh-theme
-- [PARSER-FAIL] zsh-eastwood (theme) zsh->posix command=`bash -n tests/corpus/.parser_check_zsh-eastwood_99.sh` exit=2 message=tests/corpus/.parser_check_zsh-eastwood_99.sh: line 4: syntax error near unexpected token `;'
-tests/corpus/.parser_check_zsh-eastwood_99.sh: line 4: `if ; then'
+- [PARSER-FAIL] zsh-eastwood (theme) zsh->posix command=`bash -n tests/corpus/.parser_check_zsh-eastwood_99.sh` exit=2 message=tests/corpus/.parser_check_zsh-eastwood_99.sh: line 5: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_zsh-eastwood_99.sh: line 5: `fi'
  path=tests/corpus/repos/zsh/ohmyzsh/themes/eastwood.zsh-theme
-- [PARSER-SKIP] zsh-spaceship (theme) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_zsh-spaceship_101.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/zsh/spaceship-prompt/spaceship.zsh-theme
-- [PARSER-SKIP] zsh-gnzh (theme) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_zsh-gnzh_104.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/zsh/ohmyzsh/themes/gnzh.zsh-theme
-- [PARSER-FAIL] zsh-gnzh (theme) zsh->posix command=`bash -n tests/corpus/.parser_check_zsh-gnzh_105.sh` exit=2 message=tests/corpus/.parser_check_zsh-gnzh_105.sh: line 13: syntax error near unexpected token `)'
-tests/corpus/.parser_check_zsh-gnzh_105.sh: line 13: `() {'
+- [PARSER-FAIL] zsh-spaceship (theme) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_zsh-spaceship_101.fish` exit=127 message=tests/corpus/.parser_check_zsh-spaceship_101.fish (line 77): ${ is not a valid variable in fish.
+	  setopt noprompt{bang,cr,percent,subst} "prompt${^prompt_opts[@]}"
+	                                                 ^
+warning: Error while reading file tests/corpus/.parser_check_zsh-spaceship_101.fish
+ path=tests/corpus/repos/zsh/spaceship-prompt/spaceship.zsh-theme
+- [PARSER-FAIL] zsh-gnzh (theme) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_zsh-gnzh_104.fish` exit=127 message=tests/corpus/.parser_check_zsh-gnzh_104.fish (line 31): Unexpected end of string, incomplete parameter expansion
+() {
+   ^
+warning: Error while reading file tests/corpus/.parser_check_zsh-gnzh_104.fish
  path=tests/corpus/repos/zsh/ohmyzsh/themes/gnzh.zsh-theme
-- [PARSER-SKIP] bashit-bobby-theme (theme) bash->fish command=`fish --no-execute tests/corpus/.parser_check_bashit-bobby-theme_107.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/themes/bobby/bobby.theme.bash
-- [PARSER-FAIL] bashit-bobby-theme (theme) bash->posix command=`bash -n tests/corpus/.parser_check_bashit-bobby-theme_108.sh` exit=2 message=tests/corpus/.parser_check_bashit-bobby-theme_108.sh: line 14: syntax error near unexpected token `;'
-tests/corpus/.parser_check_bashit-bobby-theme_108.sh: line 14: `	if ; then'
+- [PARSER-FAIL] bashit-bobby-theme (theme) bash->fish command=`fish --no-execute tests/corpus/.parser_check_bashit-bobby-theme_107.fish` exit=127 message=tests/corpus/.parser_check_bashit-bobby-theme_107.fish (line 58): Unexpected end of string, incomplete parameter expansion
+: "(__shellx_param_default THEME_CLOCK_COLOR "\${bold_cyan?")}"
+                                                ^
+warning: Error while reading file tests/corpus/.parser_check_bashit-bobby-theme_107.fish
+ path=tests/corpus/repos/bash/bash-it/themes/bobby/bobby.theme.bash
+- [PARSER-FAIL] bashit-bobby-theme (theme) bash->posix command=`bash -n tests/corpus/.parser_check_bashit-bobby-theme_108.sh` exit=2 message=tests/corpus/.parser_check_bashit-bobby-theme_108.sh: line 15: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_bashit-bobby-theme_108.sh: line 15: `	fi'
  path=tests/corpus/repos/bash/bash-it/themes/bobby/bobby.theme.bash
 - [PARSER-FAIL] bashit-atomic-theme (theme) bash->zsh command=`zsh -n tests/corpus/.parser_check_bashit-atomic-theme_109.zsh` exit=1 message=tests/corpus/.parser_check_bashit-atomic-theme_109.zsh:42: parse error
  path=tests/corpus/repos/bash/bash-it/themes/atomic/atomic.theme.bash
-- [PARSER-SKIP] bashit-atomic-theme (theme) bash->fish command=`fish --no-execute tests/corpus/.parser_check_bashit-atomic-theme_110.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/themes/atomic/atomic.theme.bash
-- [PARSER-FAIL] bashit-atomic-theme (theme) bash->posix command=`bash -n tests/corpus/.parser_check_bashit-atomic-theme_111.sh` exit=2 message=tests/corpus/.parser_check_bashit-atomic-theme_111.sh: line 17: syntax error near unexpected token `;'
-tests/corpus/.parser_check_bashit-atomic-theme_111.sh: line 17: `	if ; then'
+- [PARSER-FAIL] bashit-atomic-theme (theme) bash->fish command=`fish --no-execute tests/corpus/.parser_check_bashit-atomic-theme_110.fish` exit=127 message=tests/corpus/.parser_check_bashit-atomic-theme_110.fish (line 250): Unexpected end of string, incomplete parameter expansion
+: "(__shellx_param_default THEME_CLOCK_COLOR "\${BICyan?")}"
+                                                ^
+warning: Error while reading file tests/corpus/.parser_check_bashit-atomic-theme_110.fish
+ path=tests/corpus/repos/bash/bash-it/themes/atomic/atomic.theme.bash
+- [PARSER-FAIL] bashit-atomic-theme (theme) bash->posix command=`bash -n tests/corpus/.parser_check_bashit-atomic-theme_111.sh` exit=2 message=tests/corpus/.parser_check_bashit-atomic-theme_111.sh: line 18: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_bashit-atomic-theme_111.sh: line 18: `	fi'
  path=tests/corpus/repos/bash/bash-it/themes/atomic/atomic.theme.bash
 - [PARSER-FAIL] bashit-brainy-theme (theme) bash->zsh command=`zsh -n tests/corpus/.parser_check_bashit-brainy-theme_112.zsh` exit=1 message=tests/corpus/.parser_check_bashit-brainy-theme_112.zsh:42: parse error
  path=tests/corpus/repos/bash/bash-it/themes/brainy/brainy.theme.bash
-- [PARSER-SKIP] bashit-brainy-theme (theme) bash->fish command=`fish --no-execute tests/corpus/.parser_check_bashit-brainy-theme_113.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/themes/brainy/brainy.theme.bash
-- [PARSER-FAIL] bashit-brainy-theme (theme) bash->posix command=`bash -n tests/corpus/.parser_check_bashit-brainy-theme_114.sh` exit=2 message=tests/corpus/.parser_check_bashit-brainy-theme_114.sh: line 17: syntax error near unexpected token `;'
-tests/corpus/.parser_check_bashit-brainy-theme_114.sh: line 17: `	if ; then'
+- [PARSER-FAIL] bashit-brainy-theme (theme) bash->fish command=`fish --no-execute tests/corpus/.parser_check_bashit-brainy-theme_113.fish` exit=127 message=tests/corpus/.parser_check_bashit-brainy-theme_113.fish (line 248): Unexpected end of string, quotes are not balanced
+set ___BRAINY_BOTTOM (__shellx_param_default ___BRAINY_BOTTOM "\"exitcode char\"")
+                                                                                ^
+warning: Error while reading file tests/corpus/.parser_check_bashit-brainy-theme_113.fish
  path=tests/corpus/repos/bash/bash-it/themes/brainy/brainy.theme.bash
-- [PARSER-SKIP] bashit-candy-theme (theme) bash->fish command=`fish --no-execute tests/corpus/.parser_check_bashit-candy-theme_116.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/themes/candy/candy.theme.bash
-- [PARSER-SKIP] bashit-envy-theme (theme) bash->fish command=`fish --no-execute tests/corpus/.parser_check_bashit-envy-theme_119.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/bash/bash-it/themes/envy/envy.theme.bash
+- [PARSER-FAIL] bashit-brainy-theme (theme) bash->posix command=`bash -n tests/corpus/.parser_check_bashit-brainy-theme_114.sh` exit=2 message=tests/corpus/.parser_check_bashit-brainy-theme_114.sh: line 18: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_bashit-brainy-theme_114.sh: line 18: `	fi'
+ path=tests/corpus/repos/bash/bash-it/themes/brainy/brainy.theme.bash
+- [PARSER-FAIL] bashit-candy-theme (theme) bash->fish command=`fish --no-execute tests/corpus/.parser_check_bashit-candy-theme_116.fish` exit=127 message=tests/corpus/.parser_check_bashit-candy-theme_116.fish (line 22): Unexpected end of string, incomplete parameter expansion
+: "(__shellx_param_default THEME_CLOCK_COLOR "\${blue?")}"
+                                                ^
+warning: Error while reading file tests/corpus/.parser_check_bashit-candy-theme_116.fish
+ path=tests/corpus/repos/bash/bash-it/themes/candy/candy.theme.bash
 - [PARSER-FAIL] fish-tide-theme (theme) fish->bash command=`bash -n tests/corpus/.parser_check_fish-tide-theme_121.bash` exit=2 message=tests/corpus/.parser_check_fish-tide-theme_121.bash: line 103: syntax error near unexpected token `}'
 tests/corpus/.parser_check_fish-tide-theme_121.bash: line 103: `}'
  path=tests/corpus/repos/fish/tide/functions/fish_prompt.fish
@@ -419,14 +589,19 @@ tests/corpus/.parser_check_fish-tide-theme_123.sh: line 106: `}'
  path=tests/corpus/repos/fish/tide/functions/fish_prompt.fish
 - [PARSER-FAIL] fish-starship-init (theme) bash->zsh command=`zsh -n tests/corpus/.parser_check_fish-starship-init_124.zsh` exit=1 message=tests/corpus/.parser_check_fish-starship-init_124.zsh:151: parse error
  path=tests/corpus/repos/fish/starship/install/install.sh
-- [PARSER-SKIP] fish-starship-init (theme) bash->fish command=`fish --no-execute tests/corpus/.parser_check_fish-starship-init_125.fish` message=parser execution error: Not_Exist path=tests/corpus/repos/fish/starship/install/install.sh
-- [PARSER-FAIL] fish-starship-init (theme) bash->posix command=`bash -n tests/corpus/.parser_check_fish-starship-init_126.sh` exit=2 message=tests/corpus/.parser_check_fish-starship-init_126.sh: line 33: syntax error near unexpected token `;'
-tests/corpus/.parser_check_fish-starship-init_126.sh: line 33: `	if ; then'
+- [PARSER-FAIL] fish-starship-init (theme) bash->fish command=`fish --no-execute tests/corpus/.parser_check_fish-starship-init_125.fish` exit=127 message=tests/corpus/.parser_check_fish-starship-init_125.fish (line 31): Variables cannot be bracketed. In fish, please use "$BOLD".
+	printf "${BOLD}${GREY}>${NO_COLOR} $*"
+	         ^
+warning: Error while reading file tests/corpus/.parser_check_fish-starship-init_125.fish
  path=tests/corpus/repos/fish/starship/install/install.sh
+- [PARSER-FAIL] fish-starship-init (theme) bash->posix command=`bash -n tests/corpus/.parser_check_fish-starship-init_126.sh` exit=2 message=tests/corpus/.parser_check_fish-starship-init_126.sh: line 34: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_fish-starship-init_126.sh: line 34: `	fi'
+ path=tests/corpus/repos/fish/starship/install/install.sh
+- No parser validation skips.
 
 ## High Warning Runs
 
-- [WARN] ohmyzsh-z zsh->fish warnings=20(parse=14 compat=6) shims=6 src_fn=14 out_fn=12 path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
+- [WARN] ohmyzsh-z zsh->fish warnings=20(parse=14 compat=6) shims=6 src_fn=14 out_fn=16 path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
 
 ## Validator Rule Failures
 
