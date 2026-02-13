@@ -272,6 +272,17 @@ __shellx_list_to_array() {
   local __name="$1"; shift
   eval "$__name=(\"$@\")"
 }
+
+__shellx_list_get() {
+  local __name="$1"
+  local __idx="$2"
+  eval "printf '%s' \"\${$__name[$__idx]}\""
+}
+
+__shellx_list_len() {
+  local __name="$1"
+  eval "printf '%s' \"\${#$__name[@]}\""
+}
 `)
 	case .POSIX:
 		return strings.trim_space(`
@@ -289,6 +300,13 @@ __shellx_list_get() {
   eval "_zx_vals=\${$_zx_name}"
   set -- $_zx_vals
   eval "printf '%s' \"\${$_zx_idx}\""
+}
+
+__shellx_list_len() {
+  _zx_name="$1"
+  eval "_zx_vals=\${$_zx_name}"
+  set -- $_zx_vals
+  printf "%d" "$#"
 }
 `)
 	}

@@ -80,6 +80,7 @@ CaseOutcome :: struct {
 	first_error: string,
 	first_rule:  string,
 	rule_ids:    [dynamic]string,
+	shim_ids:    [dynamic]string,
 }
 
 RuleFailureGroup :: struct {
@@ -93,6 +94,17 @@ contains_string :: proc(items: []string, value: string) -> bool {
 	for item in items {
 		if item == value {
 			return true
+		}
+	}
+	return false
+}
+
+has_any_feature :: proc(items: []string, candidates: []string) -> bool {
+	for item in items {
+		for candidate in candidates {
+			if item == candidate {
+				return true
+			}
 		}
 	}
 	return false
@@ -342,6 +354,7 @@ main :: proc() {
 				shim_count = len(tr.required_shims),
 				error_code = tr.error,
 				rule_ids = make([dynamic]string, 0, 4),
+				shim_ids = make([dynamic]string, 0, 4),
 			}
 			for w in tr.warnings {
 				if strings.has_prefix(w, "Parse diagnostic at ") {
@@ -360,6 +373,14 @@ main :: proc() {
 				}
 				if !contains_string(out.rule_ids[:], err_ctx.rule_id) {
 					append(&out.rule_ids, strings.clone(err_ctx.rule_id, context.allocator))
+				}
+			}
+			for shim in tr.required_shims {
+				if shim == "" {
+					continue
+				}
+				if !contains_string(out.shim_ids[:], shim) {
+					append(&out.shim_ids, strings.clone(shim, context.allocator))
 				}
 			}
 			if !tr.success && len(out.rule_ids) > 0 {
@@ -613,6 +634,68 @@ main :: proc() {
 				outcome.source_functions,
 				outcome.target_functions,
 				outcome.case_.path,
+			),
+		)
+	}
+
+	strings.write_string(&report, "\n## Semantic Parity Matrix\n\n")
+	strings.write_string(&report, "| Pair | Cases | Arrays/Maps | Hooks/Events | Condition/Test | Param Expansion | Process Subst | Source |\n")
+	strings.write_string(&report, "|---|---:|---:|---:|---:|---:|---:|---:|\n")
+
+	arrays_keys := []string{"arrays_lists", "indexed_arrays", "assoc_arrays", "fish_list_indexing"}
+	hooks_keys := []string{"hooks_events", "zsh_hooks", "fish_events", "prompt_hooks"}
+	cond_keys := []string{"condition_semantics"}
+	param_keys := []string{"parameter_expansion"}
+	psub_keys := []string{"process_substitution"}
+	source_keys := []string{"source", "source_builtin"}
+	for s in summaries {
+		pair_from := s.key.from
+		pair_to := s.key.to
+		arrays_count := 0
+		hooks_count := 0
+		cond_count := 0
+		param_count := 0
+		psub_count := 0
+		source_count := 0
+		for outcome in outcomes {
+			if !outcome.exists {
+				continue
+			}
+			if outcome.case_.from != pair_from || outcome.to != pair_to {
+				continue
+			}
+			if has_any_feature(outcome.shim_ids[:], arrays_keys) {
+				arrays_count += 1
+			}
+			if has_any_feature(outcome.shim_ids[:], hooks_keys) {
+				hooks_count += 1
+			}
+			if has_any_feature(outcome.shim_ids[:], cond_keys) {
+				cond_count += 1
+			}
+			if has_any_feature(outcome.shim_ids[:], param_keys) {
+				param_count += 1
+			}
+			if has_any_feature(outcome.shim_ids[:], psub_keys) {
+				psub_count += 1
+			}
+			if has_any_feature(outcome.shim_ids[:], source_keys) {
+				source_count += 1
+			}
+		}
+		strings.write_string(
+			&report,
+			fmt.tprintf(
+				"| %s->%s | %d | %d | %d | %d | %d | %d | %d |\n",
+				dialect_name(pair_from),
+				dialect_name(pair_to),
+				s.total_cases,
+				arrays_count,
+				hooks_count,
+				cond_count,
+				param_count,
+				psub_count,
+				source_count,
 			),
 		)
 	}

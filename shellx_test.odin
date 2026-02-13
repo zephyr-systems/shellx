@@ -785,6 +785,33 @@ test_golden_parse_hardening_keeps_multiline_if_balance :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_shim_rewrite_fish_set_list_bridge_is_scoped :: proc(t: ^testing.T) {
+	if !should_run_test("test_shim_rewrite_fish_set_list_bridge_is_scoped") { return }
+
+	input := "set arr one two three\nset -gx PATH /tmp/bin $PATH\necho \"set arr one two\""
+	output, changed := rewrite_fish_set_list_bridge_callsites(input)
+	defer delete(output)
+
+	testing.expect(t, changed, "Simple fish list assignment should be rewritten")
+	testing.expect(t, strings.contains(output, "__shellx_list_to_array arr one two three"), "List assignment should lower to shim call")
+	testing.expect(t, strings.contains(output, "set -gx PATH /tmp/bin $PATH"), "Flagged fish set should remain untouched")
+	testing.expect(t, strings.contains(output, "echo \"set arr one two\""), "Quoted string content should remain untouched")
+}
+
+@(test)
+test_shim_rewrite_declare_array_is_line_scoped :: proc(t: ^testing.T) {
+	if !should_run_test("test_shim_rewrite_declare_array_is_line_scoped") { return }
+
+	input := "declare -a arr=(one two)\necho \"declare -a arr=(x y)\""
+	output, changed := rewrite_declare_array_callsites(input)
+	defer delete(output)
+
+	testing.expect(t, changed, "declare -a line should be rewritten")
+	testing.expect(t, strings.contains(output, "__shellx_array_set arr=(one two)"), "declare -a should be rewritten to shim call")
+	testing.expect(t, strings.contains(output, "echo \"declare -a arr=(x y)\""), "Inline string content should remain untouched")
+}
+
+@(test)
 test_semantic_array_list_fish_to_bash_runtime :: proc(t: ^testing.T) {
 	if !should_run_test("test_semantic_array_list_fish_to_bash_runtime") { return }
 	source := `set arr one two three

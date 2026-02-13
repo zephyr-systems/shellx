@@ -689,10 +689,24 @@ apply_shim_callsite_rewrites :: proc(
 
 	if has_array_bridge_shim(required_shims) {
 		if to == .Fish {
-			out, changed_any = replace_with_flag(out, "declare -a ", "__shellx_array_set ", changed_any, allocator)
+			rewritten, changed := rewrite_declare_array_callsites(out, allocator)
+			if changed {
+				delete(out)
+				out = rewritten
+				changed_any = true
+			} else {
+				delete(rewritten)
+			}
 		}
 		if from == .Fish && (to == .Bash || to == .Zsh) {
-			out, changed_any = replace_with_flag(out, "set ", "__shellx_list_to_array ", changed_any, allocator)
+			rewritten, changed := rewrite_fish_set_list_bridge_callsites(out, allocator)
+			if changed {
+				delete(out)
+				out = rewritten
+				changed_any = true
+			} else {
+				delete(rewritten)
+			}
 		}
 	}
 
@@ -719,6 +733,120 @@ apply_shim_callsite_rewrites :: proc(
 	}
 
 	return out, changed_any
+}
+
+rewrite_declare_array_callsites :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	for line, idx in lines {
+		out_line := line
+		out_allocated := false
+		trimmed := strings.trim_space(line)
+		if strings.has_prefix(trimmed, "declare -a ") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			rest := strings.trim_space(trimmed[len("declare -a "):])
+			if rest != "" {
+				out_line = strings.concatenate([]string{indent, "__shellx_array_set ", rest}, allocator)
+				out_allocated = true
+				changed = true
+			}
+		}
+		strings.write_string(&builder, out_line)
+		if out_allocated {
+			delete(out_line)
+		}
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_fish_set_list_bridge_callsites :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	for line, idx in lines {
+		out_line := line
+		out_allocated := false
+		trimmed := strings.trim_space(line)
+
+		if strings.has_prefix(trimmed, "set ") && !strings.has_prefix(trimmed, "set -") {
+			rest := strings.trim_space(trimmed[len("set "):])
+			parts := strings.split(rest, " ")
+			defer delete(parts)
+			non_empty := make([dynamic]string, 0, len(parts), context.temp_allocator)
+			defer delete(non_empty)
+			for p in parts {
+				if p != "" {
+					append(&non_empty, p)
+				}
+			}
+			// Convert only simple list assignments: set name a b
+			// Single-value assignment remains native shell assignment handling.
+			if len(non_empty) >= 3 {
+				name := non_empty[0]
+				if is_basic_name(name) {
+					simple_values := true
+					for i := 1; i < len(non_empty); i += 1 {
+						v := non_empty[i]
+						if strings.contains(v, "\"") || strings.contains(v, "'") || strings.contains(v, "$") || strings.contains(v, "\\") {
+							simple_values = false
+							break
+						}
+					}
+					if simple_values {
+						indent_len := len(line) - len(strings.trim_left_space(line))
+						indent := ""
+						if indent_len > 0 {
+							indent = line[:indent_len]
+						}
+						value_text := strings.join(non_empty[1:], " ", allocator)
+						out_line = strings.concatenate([]string{indent, "__shellx_list_to_array ", name, " ", value_text}, allocator)
+						delete(value_text)
+						out_allocated = true
+						changed = true
+					}
+				}
+			}
+		}
+
+		strings.write_string(&builder, out_line)
+		if out_allocated {
+			delete(out_line)
+		}
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
 }
 
 replace_with_flag :: proc(
