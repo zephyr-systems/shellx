@@ -1911,7 +1911,18 @@ lower_fish_capability_callsites :: proc(text: string, allocator := context.alloc
 		} else if strings.has_prefix(trimmed, "set ") {
 			rest := strings.trim_space(trimmed[len("set "):])
 			name, tail := split_first_word_raw(rest)
-			if is_basic_name(name) && tail != "" {
+			if is_basic_name(name) &&
+				tail != "" &&
+				!strings.contains(tail, " ") &&
+				!strings.contains(tail, ";") &&
+				!strings.contains(tail, "|") &&
+				!strings.contains(tail, "&") &&
+				!strings.contains(tail, "(") &&
+				!strings.contains(tail, ")") &&
+				!strings.contains(tail, "{") &&
+				!strings.contains(tail, "}") &&
+				!strings.contains(tail, "[") &&
+				!strings.contains(tail, "]") {
 				out_line = strings.concatenate([]string{indent, "__zx_set ", name, " ", tail, " default 0"}, allocator)
 				out_allocated = true
 				changed = true
@@ -2007,6 +2018,31 @@ normalize_fish_artifacts :: proc(text: string, allocator := context.allocator) -
 			delete(out)
 			out = strings.concatenate([]string{indent, ":"}, allocator)
 			changed = true
+		}
+		if strings.has_prefix(trimmed, "case ") && strings.contains(trimmed, "=(") {
+			raw := strings.trim_space(trimmed[len("case "):])
+			eq_idx := find_substring(raw, "=")
+			if eq_idx > 0 {
+				name := strings.trim_space(raw[:eq_idx])
+				rhs := strings.trim_space(raw[eq_idx+1:])
+				if strings.has_prefix(rhs, "(") {
+					rhs = strings.trim_space(rhs[1:])
+				}
+				if strings.has_suffix(rhs, ")") && len(rhs) > 1 {
+					rhs = strings.trim_space(rhs[:len(rhs)-1])
+				}
+				if is_basic_name(name) && rhs != "" {
+					indent_len := len(out) - len(strings.trim_left_space(out))
+					indent := ""
+					if indent_len > 0 {
+						indent = out[:indent_len]
+					}
+					delete(out)
+					out = strings.concatenate([]string{indent, "set ", name, " ", rhs}, allocator)
+					changed = true
+				}
+			}
+			trimmed = strings.trim_space(out)
 		}
 		repl, c := strings.replace_all(out, "; and {", "; and ", allocator)
 		if c {
@@ -2753,6 +2789,7 @@ rewrite_fish_parse_hardening :: proc(text: string, allocator := context.allocato
 			block_stack[len(block_stack)-1] == 's' &&
 			strings.contains(trimmed, ")") &&
 			strings.contains(trimmed, ";;") &&
+			!strings.contains(trimmed, "=") &&
 			!strings.has_prefix(trimmed, "set ") &&
 			!strings.has_prefix(trimmed, "local ") &&
 			!strings.has_prefix(trimmed, "typeset ") &&
@@ -2789,6 +2826,7 @@ rewrite_fish_parse_hardening :: proc(text: string, allocator := context.allocato
 		} else if len(block_stack) > 0 &&
 			heredoc_delim == "" &&
 			block_stack[len(block_stack)-1] == 's' &&
+			!strings.contains(trimmed, "=") &&
 			!strings.has_prefix(trimmed, "case ") &&
 			!strings.has_prefix(trimmed, "set ") &&
 			!strings.has_prefix(trimmed, "local ") &&
@@ -2817,6 +2855,7 @@ rewrite_fish_parse_hardening :: proc(text: string, allocator := context.allocato
 		} else if len(block_stack) > 0 &&
 			heredoc_delim == "" &&
 			block_stack[len(block_stack)-1] == 's' &&
+			!strings.contains(trimmed, "=") &&
 			!strings.has_prefix(trimmed, "set ") &&
 			!strings.has_prefix(trimmed, "local ") &&
 			!strings.has_prefix(trimmed, "typeset ") &&

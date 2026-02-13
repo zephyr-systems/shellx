@@ -8,14 +8,14 @@ Cross-dialect runs executed: 126
 
 | Pair | Cases | Translate | Parse | Parser Matrix | Parser Skipped | Plugin Parse | Theme Parse | Parse Warn | Compat Warn | Avg Size Ratio | Avg Fn Ratio | With Shims |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| bash->fish | 16 | 16/16 | 16/16 | 15/16 | 0 | 10/10 | 6/6 | 0 | 42 | 1.557 | 8.235 | 15 |
+| bash->fish | 16 | 16/16 | 16/16 | 15/16 | 0 | 10/10 | 6/6 | 0 | 42 | 1.556 | 8.235 | 15 |
 | bash->posix | 16 | 16/16 | 16/16 | 11/16 | 0 | 10/10 | 6/6 | 0 | 12 | 0.699 | 4.206 | 12 |
 | bash->zsh | 16 | 16/16 | 16/16 | 11/16 | 0 | 10/10 | 6/6 | 0 | 0 | 0.393 | 0.921 | 0 |
 | fish->bash | 11 | 11/11 | 11/11 | 9/11 | 0 | 10/10 | 1/1 | 1 | 19 | 0.999 | 7.157 | 11 |
 | fish->posix | 11 | 11/11 | 11/11 | 7/11 | 0 | 10/10 | 1/1 | 1 | 18 | 0.940 | 6.793 | 11 |
 | fish->zsh | 11 | 11/11 | 11/11 | 10/11 | 0 | 10/10 | 1/1 | 1 | 19 | 1.151 | 4.793 | 11 |
 | zsh->bash | 15 | 15/15 | 15/15 | 8/15 | 0 | 10/10 | 5/5 | 76 | 4 | 0.990 | 1.656 | 4 |
-| zsh->fish | 15 | 15/15 | 15/15 | 4/15 | 0 | 10/10 | 5/5 | 76 | 58 | 2.027 | 9.637 | 15 |
+| zsh->fish | 15 | 15/15 | 15/15 | 4/15 | 0 | 10/10 | 5/5 | 76 | 58 | 2.008 | 9.571 | 15 |
 | zsh->posix | 15 | 15/15 | 15/15 | 7/15 | 0 | 10/10 | 5/5 | 76 | 22 | 1.367 | 5.315 | 14 |
 
 ## Failures
@@ -50,9 +50,9 @@ warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-git_8.fish
 - [FAIL] ohmyzsh-z (plugin) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=15(parse=14 compat=1) shims=1 src_fn=14 out_fn=16 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-z_10.bash: line 435: syntax error near unexpected token `done'
 tests/corpus/.parser_check_ohmyzsh-z_10.bash: line 435: `        done'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
-- [FAIL] ohmyzsh-z (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=20(parse=14 compat=6) shims=6 src_fn=14 out_fn=35 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-z_11.fish (line 533): Expected end of the statement, but found an incomplete token
-	          __zx_set rank $true )) default 0
-	                              ^
+- [FAIL] ohmyzsh-z (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=20(parse=14 compat=6) shims=6 src_fn=14 out_fn=24 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-z_11.fish (line 892): Expected end of the statement, but found an incomplete token
+  for opt in ${(k)opts
+              ^
 warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-z_11.fish
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
 - [FAIL] ohmyzsh-z (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=17(parse=14 compat=3) shims=3 src_fn=14 out_fn=22 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-z_12.sh: line 306: syntax error near unexpected token `done'
@@ -77,9 +77,9 @@ tests/corpus/.parser_check_ohmyzsh-sudo_18.sh: line 129: `	    if [[ "$realcmd" 
 - [FAIL] ohmyzsh-extract (plugin) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=1 compat=0) shims=0 src_fn=0 out_fn=1 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-extract_19.bash: line 56: syntax error near unexpected token `newline'
 tests/corpus/.parser_check_ohmyzsh-extract_19.bash: line 56: `      *.tar.gz|      *.tgz'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/extract/extract.plugin.zsh
-- [FAIL] ohmyzsh-extract (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=4(parse=1 compat=3) shims=3 src_fn=0 out_fn=18 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-extract_20.fish (line 254): command substitutions not allowed in command position. Try var=(your-cmd) $var ...
-    __zx_set content ("$extract_dir"/*(DNY2)) default 0
-                                      ^~~~~^
+- [FAIL] ohmyzsh-extract (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=4(parse=1 compat=3) shims=3 src_fn=0 out_fn=17 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-extract_20.fish (line 145): Missing end to balance this while loop
+  while true
+  ^~~~^
 warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-extract_20.fish
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/extract/extract.plugin.zsh
 - [FAIL] ohmyzsh-extract (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=2(parse=1 compat=1) shims=1 src_fn=0 out_fn=10 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-extract_21.sh: line 116: syntax error near unexpected token `newline'
@@ -204,9 +204,9 @@ warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-git_8.fish
 - [PARSER-FAIL] ohmyzsh-z (plugin) zsh->bash command=`bash -n tests/corpus/.parser_check_ohmyzsh-z_10.bash` exit=2 message=tests/corpus/.parser_check_ohmyzsh-z_10.bash: line 435: syntax error near unexpected token `done'
 tests/corpus/.parser_check_ohmyzsh-z_10.bash: line 435: `        done'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
-- [PARSER-FAIL] ohmyzsh-z (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-z_11.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-z_11.fish (line 533): Expected end of the statement, but found an incomplete token
-	          __zx_set rank $true )) default 0
-	                              ^
+- [PARSER-FAIL] ohmyzsh-z (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-z_11.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-z_11.fish (line 892): Expected end of the statement, but found an incomplete token
+  for opt in ${(k)opts
+              ^
 warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-z_11.fish
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
 - [PARSER-FAIL] ohmyzsh-z (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-z_12.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-z_12.sh: line 306: syntax error near unexpected token `done'
@@ -231,9 +231,9 @@ tests/corpus/.parser_check_ohmyzsh-sudo_18.sh: line 129: `	    if [[ "$realcmd" 
 - [PARSER-FAIL] ohmyzsh-extract (plugin) zsh->bash command=`bash -n tests/corpus/.parser_check_ohmyzsh-extract_19.bash` exit=2 message=tests/corpus/.parser_check_ohmyzsh-extract_19.bash: line 56: syntax error near unexpected token `newline'
 tests/corpus/.parser_check_ohmyzsh-extract_19.bash: line 56: `      *.tar.gz|      *.tgz'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/extract/extract.plugin.zsh
-- [PARSER-FAIL] ohmyzsh-extract (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-extract_20.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-extract_20.fish (line 254): command substitutions not allowed in command position. Try var=(your-cmd) $var ...
-    __zx_set content ("$extract_dir"/*(DNY2)) default 0
-                                      ^~~~~^
+- [PARSER-FAIL] ohmyzsh-extract (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-extract_20.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-extract_20.fish (line 145): Missing end to balance this while loop
+  while true
+  ^~~~^
 warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-extract_20.fish
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/extract/extract.plugin.zsh
 - [PARSER-FAIL] ohmyzsh-extract (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-extract_21.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-extract_21.sh: line 116: syntax error near unexpected token `newline'
@@ -329,7 +329,7 @@ tests/corpus/.parser_check_fish-starship-init_126.sh: line 220: syntax error: `(
 
 ## High Warning Runs
 
-- [WARN] ohmyzsh-z zsh->fish warnings=20(parse=14 compat=6) shims=6 src_fn=14 out_fn=35 path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
+- [WARN] ohmyzsh-z zsh->fish warnings=20(parse=14 compat=6) shims=6 src_fn=14 out_fn=24 path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
 
 ## Validator Rule Failures
 
