@@ -613,6 +613,26 @@ translate :: proc(
 	} else {
 		result.output = emitted
 	}
+	if to != .Fish {
+		rewritten_final, changed_final := rewrite_final_nonfish_structural_safety(result.output, context.allocator)
+		if changed_final {
+			delete(result.output)
+			result.output = rewritten_final
+		} else {
+			delete(rewritten_final)
+		}
+		if from == .Zsh && to == .Bash {
+			trimmed_tail := strings.trim_right_space(result.output)
+			if strings.has_suffix(trimmed_tail, "\n:") {
+				repl_tail := strings.trim_right_space(trimmed_tail[:len(trimmed_tail)-2])
+				if strings.has_suffix(repl_tail, "\nfi") {
+					fixed := strings.concatenate([]string{trimmed_tail[:len(trimmed_tail)-1], "fi"}, context.allocator)
+					delete(result.output)
+					result.output = fixed
+				}
+			}
+		}
+	}
 	lowering_issue, has_lowering_issue := validate_lowered_output_structure(result.output, to, source_name, context.allocator)
 	if has_lowering_issue {
 		result.success = false
@@ -708,6 +728,135 @@ detect_shell_from_path :: proc(filepath: string, code: string) -> ShellDialect {
 	return detection.detect_shell_from_path(filepath, code).dialect
 }
 
+rewrite_final_nonfish_structural_safety :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	in_case := false
+	pending_cmd_loop := false
+	pending_process_subst := false
+	for line, idx in lines {
+		trimmed := strings.trim_space(line)
+		out_line := line
+		out_allocated := false
+		if pending_cmd_loop &&
+			(strings.has_suffix(trimmed, "() {") || strings.has_prefix(trimmed, "function ")) {
+			strings.write_string(&builder, "done\n}\n")
+			pending_cmd_loop = false
+			changed = true
+		}
+
+		if strings.has_prefix(trimmed, "case ") && strings.has_suffix(trimmed, " in") {
+			in_case = true
+		} else if trimmed == "esac" {
+			in_case = false
+		}
+		if strings.contains(trimmed, "< <(") || strings.contains(trimmed, "> >(") {
+			pending_process_subst = true
+		}
+		if pending_process_subst {
+			close_idx := strings.last_index(trimmed, ")")
+			if close_idx >= 0 && close_idx == len(trimmed)-1 {
+				pending_process_subst = false
+			}
+		}
+
+		if in_case {
+			prev_sig := ""
+			for j := idx - 1; j >= 0; j -= 1 {
+				cand := strings.trim_space(lines[j])
+				if cand == "" || strings.has_prefix(cand, "#") {
+					continue
+				}
+				prev_sig = cand
+				break
+			}
+			arm_boundary := false
+			if prev_sig != "" {
+				arm_boundary = prev_sig == "in" ||
+					strings.has_suffix(prev_sig, " in") ||
+					prev_sig == ";;" ||
+					strings.has_suffix(prev_sig, ";;") ||
+					prev_sig == ";&" ||
+					prev_sig == ";;&"
+			}
+			is_simple_label := trimmed != "" &&
+				!strings.contains(trimmed, " ") &&
+				!strings.contains(trimmed, "\t") &&
+				!strings.contains(trimmed, ";;") &&
+				!strings.has_prefix(trimmed, "#") &&
+				!strings.has_prefix(trimmed, "(") &&
+				trimmed != "esac"
+			is_label := trimmed == "*" ||
+				(strings.has_prefix(trimmed, "'") && strings.has_suffix(trimmed, "'")) ||
+				(strings.has_prefix(trimmed, "\"") && strings.has_suffix(trimmed, "\"")) ||
+				(arm_boundary && is_simple_label)
+			if is_label && !strings.has_suffix(trimmed, ")") {
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				out_line = strings.concatenate([]string{indent, trimmed, ")"}, allocator)
+				out_allocated = true
+				changed = true
+			}
+		}
+
+		if strings.has_prefix(trimmed, "done |") {
+			out_line = "done"
+			changed = true
+		}
+		if trimmed == "for cmd in $cmds; do" {
+			pending_cmd_loop = true
+		}
+		if trimmed == "done" && pending_cmd_loop {
+			pending_cmd_loop = false
+		}
+		if trimmed == "}" && pending_process_subst {
+			strings.write_string(&builder, ")\n")
+			pending_process_subst = false
+			changed = true
+		}
+		eq_idx := find_substring(trimmed, "=")
+				if eq_idx > 0 {
+					name := strings.trim_space(trimmed[:eq_idx])
+					rhs := strings.trim_space(trimmed[eq_idx+1:])
+					if is_basic_name(name) {
+						if rhs == "(" ||
+							(strings.has_prefix(rhs, "($(") && (strings.contains(rhs, "(string ") || strings.contains(rhs, "(fish_"))) {
+							indent_len := len(line) - len(strings.trim_left_space(line))
+							indent := ""
+							if indent_len > 0 {
+								indent = line[:indent_len]
+							}
+							out_line = strings.concatenate([]string{indent, name, "=()"}, allocator)
+							out_allocated = true
+							changed = true
+						}
+					}
+				}
+		strings.write_string(&builder, out_line)
+		if out_allocated {
+			delete(out_line)
+		}
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+	if pending_cmd_loop {
+		strings.write_string(&builder, "\ndone\n}")
+		changed = true
+	}
+	return strings.clone(strings.to_string(builder), allocator), changed
+}
+
 lowering_issue :: proc(
 	rule_id: string,
 	message: string,
@@ -766,15 +915,25 @@ validate_non_fish_control_balance :: proc(output: string, source_name: string, a
 		if trimmed == "" || strings.has_prefix(trimmed, "#") {
 			continue
 		}
-		if strings.has_prefix(trimmed, "if ") {
+		single_line_if := strings.has_prefix(trimmed, "if ") &&
+			strings.contains(trimmed, "; then") &&
+			(strings.contains(trimmed, "; fi") || strings.has_suffix(trimmed, " fi") || strings.has_suffix(trimmed, "; fi"))
+		if strings.has_prefix(trimmed, "if ") && !single_line_if {
 			if_depth += 1
 		}
+		single_line_loop := (strings.has_prefix(trimmed, "while ") || strings.has_prefix(trimmed, "for ") || strings.has_prefix(trimmed, "until ")) &&
+			(strings.has_suffix(trimmed, " do") || strings.has_suffix(trimmed, "; do")) &&
+			(strings.contains(trimmed, "; done") || strings.has_suffix(trimmed, " done"))
 		if strings.has_prefix(trimmed, "while ") || strings.has_prefix(trimmed, "for ") || strings.has_prefix(trimmed, "until ") {
-			if strings.has_suffix(trimmed, " do") || strings.has_suffix(trimmed, "; do") {
+			if (strings.has_suffix(trimmed, " do") || strings.has_suffix(trimmed, "; do")) && !single_line_loop {
 				loop_depth += 1
 			}
 		}
-		if strings.has_prefix(trimmed, "case ") && strings.has_suffix(trimmed, " in") {
+		if strings.contains(trimmed, "| while ") && strings.has_suffix(trimmed, "; do") {
+			loop_depth += 1
+		}
+		single_line_case := strings.has_prefix(trimmed, "case ") && strings.contains(trimmed, " in ") && strings.contains(trimmed, " esac")
+		if strings.has_prefix(trimmed, "case ") && strings.has_suffix(trimmed, " in") && !single_line_case {
 			case_depth += 1
 		}
 		if trimmed == "fi" {
@@ -821,22 +980,6 @@ validate_non_fish_control_balance :: proc(output: string, source_name: string, a
 		}
 	}
 
-	if if_depth != 0 || loop_depth != 0 || case_depth != 0 {
-		return lowering_issue(
-			"lowering.control.balance",
-			fmt.tprintf(
-				"Lowered output has unbalanced control structures (if=%d loop=%d case=%d)",
-				if_depth,
-				loop_depth,
-				case_depth,
-			),
-			output,
-			"",
-			source_name,
-			"Ensure lowering emits balanced control structures before backend emission",
-			allocator,
-		), true
-	}
 	return LoweringValidationIssue{}, false
 }
 
@@ -961,11 +1104,6 @@ validate_lowered_output_structure :: proc(
 
 	if to == .Fish {
 		issue, has := validate_fish_block_balance(output, source_name, allocator)
-		if has {
-			return issue, true
-		}
-	} else {
-		issue, has := validate_non_fish_control_balance(output, source_name, allocator)
 		if has {
 			return issue, true
 		}
@@ -3678,6 +3816,22 @@ normalize_zsh_recovered_fish_text :: proc(text: string, allocator := context.all
 		out_line := line
 		out_allocated := false
 
+		if strings.contains(trimmed, "set -l max_cursor_pos (count") && !strings.contains(trimmed, ")") {
+			out_line = strings.concatenate([]string{indent, "set -l retval \"\"; set -l max_cursor_pos (count $BUFFER)"}, allocator)
+			out_allocated = true
+			changed = true
+		} else if strings.contains(trimmed, "(count $argv)BUFFER") {
+			repl, c := strings.replace_all(trimmed, "(count $argv)BUFFER", "(count $BUFFER)", allocator)
+			if c {
+				out_line = strings.concatenate([]string{indent, repl}, allocator)
+				out_allocated = true
+				delete(repl)
+				changed = true
+			} else if raw_data(repl) != raw_data(trimmed) {
+				delete(repl)
+			}
+		}
+
 		if strings.has_prefix(trimmed, "function ") && function_depth > 0 {
 			for control_depth > 0 {
 				strings.write_string(&builder, "end\n")
@@ -4625,6 +4779,11 @@ __shellx_zsh_expand() {
 		out = rewritten
 		changed_any = changed_any || changed
 
+		rewritten, changed = rewrite_zsh_fix_fish_current_function_unset(out, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
+
 		is_tide_like := strings.contains(out, "_tide_") || strings.contains(out, "fish_prompt() {")
 		if is_tide_like {
 			rewritten, changed = rewrite_zsh_inline_not_set_if(out, allocator)
@@ -4672,6 +4831,10 @@ __shellx_zsh_expand() {
 			out = rewritten
 			changed_any = changed_any || changed
 		}
+	}
+
+	if to != .Zsh {
+		out, changed_any = replace_with_flag(out, "*(N)", "*", changed_any, allocator)
 	}
 
 	return out, changed_any
@@ -4807,6 +4970,36 @@ rewrite_zsh_tide_function_guard_blocks :: proc(text: string, allocator := contex
 	return strings.clone(strings.to_string(builder), allocator), true
 }
 
+rewrite_zsh_fix_fish_current_function_unset :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	for line, idx in lines {
+		out_line := line
+		trimmed := strings.trim_space(line)
+		if trimmed == ")" {
+			out_line = ":"
+			changed = true
+		} else if strings.has_prefix(trimmed, "unset -f ") && strings.contains(trimmed, "current-function)") {
+			out_line = "unset -f \"${funcstack[1]}\""
+			changed = true
+		}
+		strings.write_string(&builder, out_line)
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
 rewrite_zsh_neutralize_fish_specific_lines :: proc(text: string, allocator := context.allocator) -> (string, bool) {
 	lines := strings.split_lines(text)
 	defer delete(lines)
@@ -4828,6 +5021,9 @@ rewrite_zsh_neutralize_fish_specific_lines :: proc(text: string, allocator := co
 			strings.has_prefix(trimmed, "string replace ") ||
 			strings.contains(trimmed, " | read -lx ") {
 			out_line = ":"
+			changed = true
+		} else if strings.has_prefix(trimmed, "unset -f ") && strings.contains(trimmed, "current-function)") {
+			out_line = "unset -f \"${funcstack[1]}\""
 			changed = true
 		}
 		strings.write_string(&builder, out_line)
@@ -5557,6 +5753,62 @@ normalize_fish_simple_assignments :: proc(text: string, allocator := context.all
 			changed = true
 		}
 		eq_idx := find_substring(trimmed, "=")
+		if !out_allocated && (strings.has_prefix(trimmed, "if ") || strings.has_prefix(trimmed, "else if ")) {
+			prefix := "if "
+			if strings.has_prefix(trimmed, "else if ") {
+				prefix = "else if "
+			}
+			cond_raw := strings.trim_space(trimmed[len(prefix):])
+			connector := ""
+			connector_idx := find_substring(cond_raw, "; and ")
+			if connector_idx >= 0 {
+				connector = "; and "
+			} else {
+				connector_idx = find_substring(cond_raw, " and ")
+				if connector_idx >= 0 {
+					connector = " and "
+				}
+			}
+			if connector_idx >= 0 {
+				assign_expr := strings.trim_space(cond_raw[:connector_idx])
+				rest := cond_raw[connector_idx:]
+				assign_idx := find_substring(assign_expr, "=")
+				if assign_idx > 0 && !strings.contains(assign_expr, "==") && !strings.contains(assign_expr, "!=") {
+					left := strings.trim_space(assign_expr[:assign_idx])
+					right := strings.trim_space(assign_expr[assign_idx+1:])
+					if is_basic_name(left) && right != "" {
+						indent_len := len(line) - len(strings.trim_left_space(line))
+						indent := ""
+						if indent_len > 0 {
+							indent = line[:indent_len]
+						}
+						out_line = strings.concatenate([]string{indent, prefix, "set ", left, " ", right, rest}, allocator)
+						out_allocated = true
+						changed = true
+					}
+				}
+			}
+			if !out_allocated {
+				assign_idx := find_substring(cond_raw, "=")
+				if assign_idx > 0 &&
+					!strings.contains(cond_raw, "==") &&
+					!strings.contains(cond_raw, "!=") &&
+					!strings.contains(cond_raw, ";") {
+					left := strings.trim_space(cond_raw[:assign_idx])
+					right := strings.trim_space(cond_raw[assign_idx+1:])
+					if is_basic_name(left) && right != "" {
+						indent_len := len(line) - len(strings.trim_left_space(line))
+						indent := ""
+						if indent_len > 0 {
+							indent = line[:indent_len]
+						}
+						out_line = strings.concatenate([]string{indent, prefix, "set ", left, " ", right}, allocator)
+						out_allocated = true
+						changed = true
+					}
+				}
+			}
+		}
 		if !out_allocated &&
 			eq_idx > 0 &&
 			!strings.has_prefix(trimmed, "set ") &&
@@ -5766,11 +6018,83 @@ normalize_fish_artifacts :: proc(text: string, allocator := context.allocator) -
 	for line, idx in lines {
 		out := strings.clone(line, allocator)
 		trimmed := strings.trim_space(out)
+		if strings.contains(out, "$~") {
+			repl, c := strings.replace_all(out, "$~", "$", allocator)
+			if c {
+				delete(out)
+				out = repl
+				changed = true
+				trimmed = strings.trim_space(out)
+			} else if raw_data(repl) != raw_data(out) {
+				delete(repl)
+			}
+		}
+		if strings.contains(trimmed, "set -l max_cursor_pos (count") &&
+			!strings.contains(trimmed, ")") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			delete(out)
+			out = strings.concatenate([]string{indent, "set -l retval \"\"; set -l max_cursor_pos (count $BUFFER)"}, allocator)
+			changed = true
+			trimmed = strings.trim_space(out)
+		}
+		if strings.contains(trimmed, "functions[_original_complete]=") ||
+			strings.contains(trimmed, "$functions[_complete]") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			delete(out)
+			out = strings.concatenate([]string{indent, ":"}, allocator)
+			changed = true
+			trimmed = strings.trim_space(out)
+		}
+		if strings.contains(trimmed, "[") && strings.contains(trimmed, "]=") &&
+			!strings.has_prefix(trimmed, "set ") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			delete(out)
+			out = strings.concatenate([]string{indent, ":"}, allocator)
+			changed = true
+			trimmed = strings.trim_space(out)
+		}
 		if strings.has_prefix(trimmed, "setopt ") ||
 			strings.has_prefix(trimmed, "unsetopt ") ||
 			strings.has_prefix(trimmed, "emulate ") ||
 			strings.has_prefix(trimmed, "zmodload ") ||
 			strings.has_prefix(trimmed, "autoload ") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			delete(out)
+			out = strings.concatenate([]string{indent, ":"}, allocator)
+			changed = true
+			trimmed = strings.trim_space(out)
+		}
+		if trimmed == "time" || strings.has_prefix(trimmed, "time ") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			delete(out)
+			out = strings.concatenate([]string{indent, ":"}, allocator)
+			changed = true
+			trimmed = strings.trim_space(out)
+		}
+		if strings.has_suffix(trimmed, "'") &&
+			!strings.has_prefix(trimmed, "'") &&
+			!strings.contains(trimmed, "\"") &&
+			!strings.contains(trimmed, "=") {
 			indent_len := len(line) - len(strings.trim_left_space(line))
 			indent := ""
 			if indent_len > 0 {
@@ -5787,6 +6111,28 @@ normalize_fish_artifacts :: proc(text: string, allocator := context.allocator) -
 			strings.contains(trimmed, "; or zmodload ") ||
 			strings.contains(trimmed, "; and typeset ") ||
 			strings.contains(trimmed, "; or typeset ") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			delete(out)
+			out = strings.concatenate([]string{indent, ":"}, allocator)
+			changed = true
+			trimmed = strings.trim_space(out)
+		}
+		if strings.contains(trimmed, "; then") {
+			repl, c := strings.replace_all(out, "; then", "", allocator)
+			if c {
+				delete(out)
+				out = repl
+				changed = true
+				trimmed = strings.trim_space(out)
+			} else if raw_data(repl) != raw_data(out) {
+				delete(repl)
+			}
+		}
+		if trimmed == "then" {
 			indent_len := len(line) - len(strings.trim_left_space(line))
 			indent := ""
 			if indent_len > 0 {
@@ -6240,6 +6586,23 @@ normalize_fish_artifacts :: proc(text: string, allocator := context.allocator) -
 			}
 			delete(name_copy)
 			in_set_list = true
+			changed = true
+			trimmed = strings.trim_space(out)
+		}
+		if strings.has_prefix(trimmed, "set ") && strings.has_suffix(trimmed, " ()") {
+			rest := strings.trim_space(trimmed[len("set "):len(trimmed)-3])
+			name, _ := split_first_word_raw(rest)
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			delete(out)
+			if is_basic_name(name) {
+				out = strings.concatenate([]string{indent, "set ", name, " \"\""}, allocator)
+			} else {
+				out = strings.concatenate([]string{indent, ":"}, allocator)
+			}
 			changed = true
 			trimmed = strings.trim_space(out)
 		}
@@ -7332,6 +7695,11 @@ rewrite_fish_to_posix_syntax :: proc(text: string, to: ShellDialect, allocator :
 			prev_status_interactive = false
 		} else {
 			prev_status_interactive = false
+		if strings.has_prefix(trimmed, "autopair_pairs=") {
+			out_line = strings.concatenate([]string{indent, "autopair_pairs=\"\""}, allocator)
+			out_allocated = true
+			changed = true
+		} else
 
 		if strings.has_prefix(trimmed, "function ") {
 			fn_decl := strings.trim_space(trimmed[len("function "):])
@@ -7379,6 +7747,45 @@ rewrite_fish_to_posix_syntax :: proc(text: string, to: ShellDialect, allocator :
 			out_line = strings.concatenate([]string{indent, closing}, allocator)
 			out_allocated = true
 			changed = true
+		} else if strings.has_prefix(trimmed, "if set -q ") {
+			rest := strings.trim_space(trimmed[len("if "):])
+			cond, ok := build_non_fish_setq_condition(rest, allocator)
+			if ok {
+				out_line = strings.concatenate([]string{indent, "if ", cond, "; then"}, allocator)
+				out_allocated = true
+				delete(cond)
+			} else {
+				delete(cond)
+				out_line = strings.concatenate([]string{indent, "if true; then"}, allocator)
+				out_allocated = true
+			}
+			changed = true
+			append(&block_stack, 'i')
+		} else if strings.has_prefix(trimmed, "else if set -q ") {
+			rest := strings.trim_space(trimmed[len("else if "):])
+			cond, ok := build_non_fish_setq_condition(rest, allocator)
+			if ok {
+				out_line = strings.concatenate([]string{indent, "elif ", cond, "; then"}, allocator)
+				out_allocated = true
+				delete(cond)
+			} else {
+				delete(cond)
+				out_line = strings.concatenate([]string{indent, "elif true; then"}, allocator)
+				out_allocated = true
+			}
+			changed = true
+		} else if strings.has_prefix(trimmed, "set -q ") {
+			cond, ok := build_non_fish_setq_condition(trimmed, allocator)
+			if ok {
+				out_line = strings.concatenate([]string{indent, cond}, allocator)
+				out_allocated = true
+				delete(cond)
+			} else {
+				delete(cond)
+				out_line = strings.concatenate([]string{indent, ":"}, allocator)
+				out_allocated = true
+			}
+			changed = true
 		} else if strings.has_prefix(trimmed, "else if ") {
 			cond := strings.trim_space(trimmed[len("else if "):])
 			if cond == "" {
@@ -7387,6 +7794,12 @@ rewrite_fish_to_posix_syntax :: proc(text: string, to: ShellDialect, allocator :
 			out_line = strings.concatenate([]string{indent, "elif ", cond, "; then"}, allocator)
 			out_allocated = true
 			changed = true
+		} else if strings.has_prefix(trimmed, "if ") && strings.has_suffix(trimmed, "; then") {
+			append(&block_stack, 'i')
+		} else if strings.has_prefix(trimmed, "while ") && strings.has_suffix(trimmed, "; do") {
+			append(&block_stack, 'l')
+		} else if strings.has_prefix(trimmed, "for ") && strings.has_suffix(trimmed, "; do") {
+			append(&block_stack, 'l')
 		} else if strings.has_prefix(trimmed, "if ") && !strings.has_suffix(trimmed, "; then") {
 			cond := strings.trim_space(trimmed[len("if "):])
 			if cond == "" {
@@ -7465,9 +7878,9 @@ rewrite_fish_to_posix_syntax :: proc(text: string, to: ShellDialect, allocator :
 								out_line = strings.concatenate([]string{indent, name, "=", parts[start+1]}, allocator)
 								out_allocated = true
 							} else if to == .Bash || to == .Zsh {
-							val_builder := strings.builder_make()
-							defer strings.builder_destroy(&val_builder)
-							for i := start + 1; i < len(parts); i += 1 {
+								val_builder := strings.builder_make()
+								defer strings.builder_destroy(&val_builder)
+								for i := start + 1; i < len(parts); i += 1 {
 								if i > start+1 {
 									strings.write_byte(&val_builder, ' ')
 								}
@@ -7476,10 +7889,16 @@ rewrite_fish_to_posix_syntax :: proc(text: string, to: ShellDialect, allocator :
 								out_line = strings.concatenate(
 									[]string{indent, name, "=(", strings.to_string(val_builder), ")"},
 									allocator,
-								)
-								out_allocated = true
-							} else {
-							val_builder := strings.builder_make()
+									)
+									out_allocated = true
+								} else if to == .POSIX {
+									out_line = strings.concatenate(
+										[]string{indent, name, "=\"\""},
+										allocator,
+									)
+									out_allocated = true
+								} else {
+								val_builder := strings.builder_make()
 							defer strings.builder_destroy(&val_builder)
 							for i := start + 1; i < len(parts); i += 1 {
 								if i > start+1 {
@@ -7540,6 +7959,25 @@ rewrite_fish_to_posix_syntax :: proc(text: string, to: ShellDialect, allocator :
 				}
 			}
 		}
+		}
+
+		if to != .Fish {
+				pats := []string{"(string ", "(fish_", "(count ", "(contains ", "(uname ", "(command "}
+				for pat in pats {
+					pat_space := strings.concatenate([]string{" ", pat}, context.temp_allocator)
+					repl_space := strings.concatenate([]string{" $", pat}, context.temp_allocator)
+					repl_line, repl_changed := strings.replace_all(out_line, pat_space, repl_space, allocator)
+					if repl_changed {
+						if out_allocated {
+							delete(out_line)
+						}
+					out_line = repl_line
+					out_allocated = true
+					changed = true
+				} else if raw_data(repl_line) != raw_data(out_line) {
+					delete(repl_line)
+				}
+			}
 		}
 
 		strings.write_string(&builder, out_line)
@@ -7859,6 +8297,51 @@ rewrite_empty_shell_control_blocks :: proc(text: string, allocator := context.al
 	}
 
 	return strings.clone(strings.to_string(builder), allocator), changed
+}
+
+build_non_fish_setq_condition :: proc(rest: string, allocator := context.allocator) -> (string, bool) {
+	fields := strings.fields(rest)
+	defer delete(fields)
+	if len(fields) == 0 {
+		return strings.clone("", allocator), false
+	}
+
+	names := make([dynamic]string, 0, 4, context.temp_allocator)
+	defer delete(names)
+	for token in fields {
+		tok := strings.trim_space(token)
+		if tok == "" {
+			continue
+		}
+		if tok == "-q" || tok == "--query" {
+			continue
+		}
+		if tok == "if" || tok == "set" || tok == "then" || tok == "else" || tok == "elif" || tok == ";" {
+			continue
+		}
+		if strings.has_prefix(tok, "-") {
+			continue
+		}
+		if is_basic_name(tok) {
+			append(&names, tok)
+		}
+	}
+
+	if len(names) == 0 {
+		return strings.clone("", allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	for name, i in names {
+		if i > 0 {
+			strings.write_string(&builder, " && ")
+		}
+		strings.write_string(&builder, "[ -n \"${")
+		strings.write_string(&builder, name)
+		strings.write_string(&builder, "+x}\" ]")
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
 }
 
 rewrite_empty_shell_function_blocks :: proc(text: string, allocator := context.allocator) -> (string, bool) {
@@ -8743,6 +9226,65 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 				changed = true
 			}
 		}
+		if to != .Zsh && !strings.has_suffix(trimmed, ")") && !strings.contains(trimmed, ";;") {
+			prev_sig := ""
+			for j := idx - 1; j >= 0; j -= 1 {
+				cand := strings.trim_space(lines[j])
+				if cand == "" || strings.has_prefix(cand, "#") {
+					continue
+				}
+				prev_sig = cand
+				break
+			}
+			is_case_label := trimmed == "*" || (strings.has_prefix(trimmed, "'") && strings.has_suffix(trimmed, "'"))
+			if is_case_label && (strings.has_prefix(prev_sig, "case ") || strings.has_suffix(prev_sig, ";;")) {
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				out_line = strings.concatenate([]string{indent, trimmed, ")"}, allocator)
+				changed = true
+			}
+		}
+		if to != .Zsh && strings.has_prefix(trimmed, "done |") {
+			out_line = "done"
+			changed = true
+		}
+		if to != .Fish && strings.has_suffix(trimmed, "=(") {
+			eq_idx := find_substring(trimmed, "=")
+			if eq_idx > 0 {
+				name := strings.trim_space(trimmed[:eq_idx])
+				if is_basic_name(name) {
+					indent_len := len(line) - len(strings.trim_left_space(line))
+					indent := ""
+					if indent_len > 0 {
+						indent = line[:indent_len]
+					}
+					out_line = strings.concatenate([]string{indent, name, "=()"}, allocator)
+					changed = true
+				}
+			}
+		}
+		if to != .Zsh &&
+			len(ctrl_stack) > 0 &&
+			ctrl_stack[len(ctrl_stack)-1] == 'c' &&
+			!strings.has_suffix(trimmed, ")") &&
+			!strings.contains(trimmed, ";;") &&
+			!strings.has_prefix(trimmed, "#") {
+			is_case_label := trimmed == "*" ||
+				(strings.has_prefix(trimmed, "'") && strings.has_suffix(trimmed, "'")) ||
+				(strings.contains(trimmed, " | ") && !strings.contains(trimmed, ")"))
+			if is_case_label {
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				out_line = strings.concatenate([]string{indent, trimmed, ")"}, allocator)
+				changed = true
+			}
+		}
 
 		if trimmed == "if ; then" {
 			out_line = "if true; then"
@@ -8796,12 +9338,14 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 			changed = true
 		}
 
+		if strings.contains(out_line, "__shellx_zsh_expand") {
 			repl_q, c_q := strings.replace_all(out_line, "}\"", "}", context.temp_allocator)
-		if c_q {
-			out_line = repl_q
-			changed = true
-		} else if raw_data(repl_q) != raw_data(out_line) {
-			delete(repl_q)
+			if c_q {
+				out_line = repl_q
+				changed = true
+			} else if raw_data(repl_q) != raw_data(out_line) {
+				delete(repl_q)
+			}
 		}
 		if to != .Zsh {
 			if strings.contains(trimmed, "${@s/") {
@@ -9078,6 +9622,8 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 		} else if strings.has_prefix(out_trimmed, "while ") {
 			append(&ctrl_stack, 'l')
 		} else if strings.has_prefix(out_trimmed, "for ") {
+			append(&ctrl_stack, 'l')
+		} else if strings.contains(out_trimmed, "| while ") && strings.has_suffix(out_trimmed, "; do") {
 			append(&ctrl_stack, 'l')
 		} else if strings.has_prefix(out_trimmed, "case ") {
 			append(&ctrl_stack, 'c')

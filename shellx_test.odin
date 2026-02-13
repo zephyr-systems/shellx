@@ -1740,6 +1740,38 @@ test_lowering_validator_rejects_fish_setq_in_bash_output :: proc(t: ^testing.T) 
 }
 
 @(test)
+test_rewrite_final_nonfish_structural_safety_case_labels :: proc(t: ^testing.T) {
+	if !should_run_test("test_rewrite_final_nonfish_structural_safety_case_labels") { return }
+
+	input := "nvm() {\n  case $1 in\n    'upgrade'\n      echo u\n      ;;\n  esac\n}\n"
+	output, changed := rewrite_final_nonfish_structural_safety(input)
+	defer delete(output)
+	testing.expect(t, changed, "final non-fish safety pass should rewrite quoted case labels")
+	testing.expect(t, strings.contains(output, "'upgrade')"), "quoted case label should be normalized to pattern)")
+}
+
+@(test)
+test_translate_corpus_zsh_nvm_case_label_normalized :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_corpus_zsh_nvm_case_label_normalized") { return }
+	path := "tests/corpus/repos/zsh/zsh-nvm/zsh-nvm.plugin.zsh"
+	if !os.is_file(path) {
+		return
+	}
+	data, ok := os.read_entire_file(path)
+	testing.expect(t, ok, "Should read zsh-nvm corpus plugin")
+	if !ok {
+		return
+	}
+	defer delete(data)
+	opts := DEFAULT_TRANSLATION_OPTIONS
+	opts.insert_shims = true
+	result := translate(string(data), .Zsh, .Bash, opts)
+	defer destroy_translation_result(&result)
+	testing.expect(t, result.success, "zsh-nvm should translate")
+	testing.expect(t, strings.contains(result.output, "'upgrade')"), "Case arm should preserve ')' in bash output")
+}
+
+@(test)
 test_semantic_corpus_pattern_fish_gitnow_branch_compare :: proc(t: ^testing.T) {
 	if !should_run_test("test_semantic_corpus_pattern_fish_gitnow_branch_compare") { return }
 	source := `function __gitnow_current_branch_name

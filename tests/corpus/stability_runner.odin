@@ -654,6 +654,7 @@ main :: proc() {
 						continue
 					}
 					fmt.eprintln("VALIDATION FAILED:", err_ctx.rule_id, "at", fmt.tprintf("%s:%d:%d", err_ctx.location.file, err_ctx.location.line, err_ctx.location.column+1))
+					fmt.eprintln("Case:", c.name, fmt.tprintf("%s->%s", dialect_name(c.from), dialect_name(to)))
 					fmt.eprintln("Suggestion:", err_ctx.suggestion)
 					if err_ctx.snippet != "" {
 						fmt.eprintln("Snippet:", err_ctx.snippet)
