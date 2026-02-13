@@ -89,6 +89,14 @@ TranslationResult :: struct {
 	errors:               [dynamic]ErrorContext,
 }
 
+LoweringValidationIssue :: struct {
+	rule_id:    string,
+	message:    string,
+	location:   ir.SourceLocation,
+	suggestion: string,
+	snippet:    string,
+}
+
 Error :: enum {
 	None,
 	ParseError,
@@ -605,6 +613,20 @@ translate :: proc(
 	} else {
 		result.output = emitted
 	}
+	lowering_issue, has_lowering_issue := validate_lowered_output_structure(result.output, to, source_name, context.allocator)
+	if has_lowering_issue {
+		result.success = false
+		add_error_context(
+			&result,
+			.ValidationInvalidControlFlow,
+			lowering_issue.message,
+			lowering_issue.location,
+			lowering_issue.suggestion,
+			lowering_issue.snippet,
+			lowering_issue.rule_id,
+		)
+		return result
+	}
 	scan_shell_security_findings(&result, result.output, source_name, "translated")
 	prune_resolved_compat_warnings(&result, from, to)
 	derive_feature_metadata(&result, compat_result, options, from, to)
@@ -684,6 +706,272 @@ detect_shell :: proc(code: string) -> ShellDialect {
 // detect_shell_from_path uses both file path and content to detect dialect.
 detect_shell_from_path :: proc(filepath: string, code: string) -> ShellDialect {
 	return detection.detect_shell_from_path(filepath, code).dialect
+}
+
+lowering_issue :: proc(
+	rule_id: string,
+	message: string,
+	output: string,
+	pattern: string,
+	source_name: string,
+	suggestion: string,
+	allocator := context.allocator,
+) -> LoweringValidationIssue {
+	line := 1
+	column := 0
+	snippet := ""
+	if pattern != "" {
+		idx := find_substring(output, pattern)
+		if idx >= 0 {
+			line = 1
+			for i := 0; i < idx; i += 1 {
+				if output[i] == '\n' {
+					line += 1
+				}
+			}
+			last_newline := -1
+			for i := idx - 1; i >= 0; i -= 1 {
+				if output[i] == '\n' {
+					last_newline = i
+					break
+				}
+			}
+			column = idx - (last_newline + 1)
+			snippet = line_from_source(output, line)
+		}
+	}
+	return LoweringValidationIssue{
+		rule_id = rule_id,
+		message = message,
+		location = ir.SourceLocation{
+			file = source_name,
+			line = line,
+			column = column,
+		},
+		suggestion = suggestion,
+		snippet = snippet,
+	}
+}
+
+validate_non_fish_control_balance :: proc(output: string, source_name: string, allocator := context.allocator) -> (LoweringValidationIssue, bool) {
+	lines := strings.split_lines(output)
+	defer delete(lines)
+
+	if_depth := 0
+	loop_depth := 0
+	case_depth := 0
+
+	for line in lines {
+		trimmed := strings.trim_space(line)
+		if trimmed == "" || strings.has_prefix(trimmed, "#") {
+			continue
+		}
+		if strings.has_prefix(trimmed, "if ") {
+			if_depth += 1
+		}
+		if strings.has_prefix(trimmed, "while ") || strings.has_prefix(trimmed, "for ") || strings.has_prefix(trimmed, "until ") {
+			if strings.has_suffix(trimmed, " do") || strings.has_suffix(trimmed, "; do") {
+				loop_depth += 1
+			}
+		}
+		if strings.has_prefix(trimmed, "case ") && strings.has_suffix(trimmed, " in") {
+			case_depth += 1
+		}
+		if trimmed == "fi" {
+			if_depth -= 1
+			if if_depth < 0 {
+				return lowering_issue(
+					"lowering.control.unexpected_fi",
+					"Lowered output contains unexpected 'fi' without matching 'if'",
+					output,
+					"\nfi\n",
+					source_name,
+					"Normalize control-flow lowering before emission; do not emit orphan 'fi'",
+					allocator,
+				), true
+			}
+		}
+		if trimmed == "done" {
+			loop_depth -= 1
+			if loop_depth < 0 {
+				return lowering_issue(
+					"lowering.control.unexpected_done",
+					"Lowered output contains unexpected 'done' without matching loop header",
+					output,
+					"\ndone\n",
+					source_name,
+					"Normalize loop lowering before emission; do not emit orphan 'done'",
+					allocator,
+				), true
+			}
+		}
+		if trimmed == "esac" {
+			case_depth -= 1
+			if case_depth < 0 {
+				return lowering_issue(
+					"lowering.control.unexpected_esac",
+					"Lowered output contains unexpected 'esac' without matching 'case'",
+					output,
+					"\nesac\n",
+					source_name,
+					"Normalize case lowering before emission; do not emit orphan 'esac'",
+					allocator,
+				), true
+			}
+		}
+	}
+
+	if if_depth != 0 || loop_depth != 0 || case_depth != 0 {
+		return lowering_issue(
+			"lowering.control.balance",
+			fmt.tprintf(
+				"Lowered output has unbalanced control structures (if=%d loop=%d case=%d)",
+				if_depth,
+				loop_depth,
+				case_depth,
+			),
+			output,
+			"",
+			source_name,
+			"Ensure lowering emits balanced control structures before backend emission",
+			allocator,
+		), true
+	}
+	return LoweringValidationIssue{}, false
+}
+
+validate_fish_block_balance :: proc(output: string, source_name: string, allocator := context.allocator) -> (LoweringValidationIssue, bool) {
+	lines := strings.split_lines(output)
+	defer delete(lines)
+	depth := 0
+	for line in lines {
+		trimmed := strings.trim_space(line)
+		if trimmed == "" || strings.has_prefix(trimmed, "#") {
+			continue
+		}
+		if strings.has_prefix(trimmed, "function ") ||
+			strings.has_prefix(trimmed, "if ") ||
+			strings.has_prefix(trimmed, "for ") ||
+			strings.has_prefix(trimmed, "while ") ||
+			strings.has_prefix(trimmed, "switch ") {
+			depth += 1
+		}
+		if trimmed == "end" {
+			depth -= 1
+			if depth < 0 {
+				return lowering_issue(
+					"lowering.fish.unexpected_end",
+					"Fish lowered output contains unexpected 'end' without matching block opener",
+					output,
+					"\nend\n",
+					source_name,
+					"Normalize fish block lowering before emission",
+					allocator,
+				), true
+			}
+		}
+		if trimmed == "fi" || trimmed == "done" || trimmed == "esac" || trimmed == "then" || trimmed == "do" {
+			return lowering_issue(
+				"lowering.fish.leaked_sh_keyword",
+				"Fish lowered output leaked sh keyword token",
+				output,
+				trimmed,
+				source_name,
+				"Convert sh-style control tokens to fish block forms during lowering",
+				allocator,
+			), true
+		}
+	}
+	if depth != 0 {
+		return lowering_issue(
+			"lowering.fish.block_balance",
+			fmt.tprintf("Fish lowered output has unbalanced blocks (depth=%d)", depth),
+			output,
+			"",
+			source_name,
+			"Ensure fish lowering always emits balanced openers/end tokens",
+			allocator,
+		), true
+	}
+	return LoweringValidationIssue{}, false
+}
+
+validate_lowered_output_structure :: proc(
+	output: string,
+	to: ShellDialect,
+	source_name: string,
+	allocator := context.allocator,
+) -> (LoweringValidationIssue, bool) {
+	if output == "" {
+		return lowering_issue(
+			"lowering.output.non_empty",
+			"Lowered output is empty",
+			output,
+			"",
+			source_name,
+			"Lowering/emission must produce non-empty output",
+			allocator,
+		), true
+	}
+
+	if to != .Zsh && strings.contains(output, "${@s/") {
+		return lowering_issue(
+			"lowering.zsh.split_args_non_zsh",
+			"Lowered output still contains zsh split-args expansion in non-zsh target",
+			output,
+			"${@s/",
+			source_name,
+			"Lower zsh split-args expansions into explicit loops or helper calls before emission",
+			allocator,
+		), true
+	}
+	if to != .Zsh && strings.contains(output, "*(N)") {
+		return lowering_issue(
+			"lowering.zsh.glob_qualifier_non_zsh",
+			"Lowered output still contains zsh glob qualifier '(N)' in non-zsh target",
+			output,
+			"*(N)",
+			source_name,
+			"Lower zsh glob qualifiers to target-compatible glob/list logic",
+			allocator,
+		), true
+	}
+	if to != .Fish && strings.contains(output, "if set -q ") {
+		return lowering_issue(
+			"lowering.fish.setq_non_fish",
+			"Lowered output leaked fish 'set -q' construct in non-fish target",
+			output,
+			"if set -q ",
+			source_name,
+			"Lower fish query/set constructs into target shell tests before emission",
+			allocator,
+		), true
+	}
+	if strings.contains(output, "do|") {
+		return lowering_issue(
+			"lowering.control.inline_pipe_artifact",
+			"Lowered output contains malformed 'do|' control/pipe artifact",
+			output,
+			"do|",
+			source_name,
+			"Split loop headers and pipeline operators into valid target-shell syntax",
+			allocator,
+		), true
+	}
+
+	if to == .Fish {
+		issue, has := validate_fish_block_balance(output, source_name, allocator)
+		if has {
+			return issue, true
+		}
+	} else {
+		issue, has := validate_non_fish_control_balance(output, source_name, allocator)
+		if has {
+			return issue, true
+		}
+	}
+
+	return LoweringValidationIssue{}, false
 }
 
 convert_to_ir :: proc(

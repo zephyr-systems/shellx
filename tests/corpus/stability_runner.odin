@@ -521,10 +521,14 @@ pair_summary_ptr :: proc(summaries: ^[dynamic]PairSummary, key: PairKey) -> ^Pai
 
 main :: proc() {
 	semantic_mode := false
+	validation_debug := false
 	for arg in os.args {
 		if arg == "--semantic" {
 			semantic_mode = true
-			break
+			continue
+		}
+		if arg == "--validation-debug" {
+			validation_debug = true
 		}
 	}
 
@@ -644,6 +648,19 @@ main :: proc() {
 			opts := shellx.DEFAULT_TRANSLATION_OPTIONS
 			opts.insert_shims = true
 			tr := shellx.translate(source_code, c.from, to, opts)
+			if validation_debug && !tr.success {
+				for err_ctx in tr.errors {
+					if !strings.has_prefix(err_ctx.rule_id, "lowering.") {
+						continue
+					}
+					fmt.eprintln("VALIDATION FAILED:", err_ctx.rule_id, "at", fmt.tprintf("%s:%d:%d", err_ctx.location.file, err_ctx.location.line, err_ctx.location.column+1))
+					fmt.eprintln("Suggestion:", err_ctx.suggestion)
+					if err_ctx.snippet != "" {
+						fmt.eprintln("Snippet:", err_ctx.snippet)
+					}
+					os.exit(-1)
+				}
+			}
 			out := CaseOutcome{
 				case_ = c,
 				to = to,

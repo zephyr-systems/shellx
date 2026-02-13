@@ -1716,6 +1716,30 @@ fish_prompt`
 }
 
 @(test)
+test_lowering_validator_rejects_zsh_split_args_non_zsh :: proc(t: ^testing.T) {
+	if !should_run_test("test_lowering_validator_rejects_zsh_split_args_non_zsh") { return }
+
+	output := "for entry in ${@s/\\n/line}; do\n  :\ndone\n"
+	issue, has := validate_lowered_output_structure(output, .Bash, "<test>")
+	testing.expect(t, has, "Lowering validator should reject leaked zsh split-args syntax in bash output")
+	if has {
+		testing.expect(t, issue.rule_id == "lowering.zsh.split_args_non_zsh", "Rule id should identify zsh split-args leak")
+	}
+}
+
+@(test)
+test_lowering_validator_rejects_fish_setq_in_bash_output :: proc(t: ^testing.T) {
+	if !should_run_test("test_lowering_validator_rejects_fish_setq_in_bash_output") { return }
+
+	output := "if set -q async_prompt_functions; then\n  :\nfi\n"
+	issue, has := validate_lowered_output_structure(output, .Bash, "<test>")
+	testing.expect(t, has, "Lowering validator should reject leaked fish set -q syntax in bash output")
+	if has {
+		testing.expect(t, issue.rule_id == "lowering.fish.setq_non_fish", "Rule id should identify fish set -q leak")
+	}
+}
+
+@(test)
 test_semantic_corpus_pattern_fish_gitnow_branch_compare :: proc(t: ^testing.T) {
 	if !should_run_test("test_semantic_corpus_pattern_fish_gitnow_branch_compare") { return }
 	source := `function __gitnow_current_branch_name

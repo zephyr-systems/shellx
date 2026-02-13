@@ -130,11 +130,11 @@ add_error_context :: proc(
 		&result.errors,
 		ErrorContext{
 			error = err,
-			rule_id = rule_id,
-			message = message,
+			rule_id = strings.clone(rule_id, context.allocator),
+			message = strings.clone(message, context.allocator),
 			location = location,
-			suggestion = suggestion,
-			snippet = snippet,
+			suggestion = strings.clone(suggestion, context.allocator),
+			snippet = strings.clone(snippet, context.allocator),
 		},
 	)
 }
@@ -159,5 +159,11 @@ destroy_translation_result :: proc(result: ^TranslationResult) {
 		delete(finding.phase)
 	}
 	delete(result.findings)
+	for ctx in result.errors {
+		delete(ctx.rule_id)
+		delete(ctx.message)
+		delete(ctx.suggestion)
+		delete(ctx.snippet)
+	}
 	delete(result.errors)
 }
