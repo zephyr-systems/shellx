@@ -334,11 +334,6 @@ translate :: proc(
 		emitted = strings.clone(source_code, context.allocator)
 		append(&result.warnings, "Applied POSIX preservation fallback after post-rewrite degradation")
 	}
-	if from == .Fish && to == .Zsh &&
-		(strings.contains(emitted, "fish_prompt() { :; }") || strings.contains(emitted, "fish_right_prompt() { :; }")) {
-		append_unique(&result.warnings, "Applied fish->zsh prompt no-op fallback for parse safety")
-	}
-
 	cap_prelude := ""
 	if options.insert_shims {
 		compat.collect_caps_from_output(&result.required_caps, emitted, to)
@@ -2155,12 +2150,12 @@ __shellx_zsh_expand() {
 			out = rewritten
 			changed_any = changed_any || changed
 
-			rewritten, changed = rewrite_zsh_noop_tide_prompt_functions(out, allocator)
+			rewritten, changed = rewrite_zsh_balance_if_fi(out, allocator)
 			delete(out)
 			out = rewritten
 			changed_any = changed_any || changed
 
-			rewritten, changed = rewrite_zsh_balance_if_fi(out, allocator)
+			rewritten, changed = rewrite_zsh_drop_redundant_fi_before_brace(out, allocator)
 			delete(out)
 			out = rewritten
 			changed_any = changed_any || changed
@@ -2391,8 +2386,17 @@ rewrite_zsh_balance_if_fi :: proc(text: string, allocator := context.allocator) 
 	for line, idx in lines {
 		out_line := line
 		trimmed := strings.trim_space(line)
+		if strings.has_suffix(trimmed, "() {") || strings.has_prefix(trimmed, "function ") {
+			if_depth = 0
+		}
 		if strings.has_prefix(trimmed, "if ") && strings.has_suffix(trimmed, "then") {
 			if_depth += 1
+		} else if trimmed == "}" && if_depth > 0 {
+			for n := 0; n < if_depth; n += 1 {
+				strings.write_string(&builder, "fi\n")
+			}
+			if_depth = 0
+			changed = true
 		} else if trimmed == "fi" {
 			if if_depth > 0 {
 				if_depth -= 1
@@ -2404,6 +2408,63 @@ rewrite_zsh_balance_if_fi :: proc(text: string, allocator := context.allocator) 
 
 		strings.write_string(&builder, out_line)
 		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_zsh_drop_redundant_fi_before_brace :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	next_sig_index :: proc(lines: []string, start: int) -> int {
+		for j := start; j < len(lines); j += 1 {
+			t := strings.trim_space(lines[j])
+			if t == "" || strings.has_prefix(t, "#") {
+				continue
+			}
+			return j
+		}
+		return -1
+	}
+	has_prev_fi_before_scope :: proc(lines: []string, idx: int) -> bool {
+		for j := idx - 1; j >= 0; j -= 1 {
+			t := strings.trim_space(lines[j])
+			if t == "" || strings.has_prefix(t, "#") || t == ":" {
+				continue
+			}
+			if t == "fi" {
+				return true
+			}
+			if t == "{" || t == "}" || strings.has_suffix(t, "() {") {
+				return false
+			}
+		}
+		return false
+	}
+
+	for i := 0; i < len(lines); i += 1 {
+		out_line := lines[i]
+		trimmed := strings.trim_space(out_line)
+		if trimmed == "fi" {
+			next_idx := next_sig_index(lines, i+1)
+			if next_idx >= 0 && strings.trim_space(lines[next_idx]) == "}" && has_prev_fi_before_scope(lines, i) {
+				out_line = ":"
+				changed = true
+			}
+		}
+		strings.write_string(&builder, out_line)
+		if i+1 < len(lines) {
 			strings.write_byte(&builder, '\n')
 		}
 	}

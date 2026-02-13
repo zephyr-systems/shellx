@@ -1014,8 +1014,8 @@ test_posix_output_likely_degraded_detection :: proc(t: ^testing.T) {
 }
 
 @(test)
-test_translate_warns_on_fish_zsh_prompt_noop_fallback :: proc(t: ^testing.T) {
-	if !should_run_test("test_translate_warns_on_fish_zsh_prompt_noop_fallback") { return }
+test_translate_fish_zsh_prompt_bridge_polyfill :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_fish_zsh_prompt_bridge_polyfill") { return }
 
 	source := `function fish_prompt
     set -g _tide_x 1
@@ -1030,15 +1030,9 @@ fish_prompt`
 	defer destroy_translation_result(&result)
 
 	testing.expect(t, result.success, "Translation should succeed")
-	testing.expect(t, strings.contains(result.output, "fish_prompt() { :; }"), "Output should contain prompt no-op fallback when applied")
-	has_warning := false
-	for w in result.warnings {
-		if strings.contains(w, "prompt no-op fallback") {
-			has_warning = true
-			break
-		}
-	}
-	testing.expect(t, has_warning, "Fallback should be surfaced via warnings")
+	testing.expect(t, !strings.contains(result.output, "fish_prompt() { :; }"), "Output should not replace fish_prompt with no-op")
+	testing.expect(t, strings.contains(result.output, "__shellx_run_precmd"), "Hook bridge shim should be present")
+	testing.expect(t, strings.contains(result.output, "command -v fish_prompt"), "Hook bridge should call fish_prompt when available")
 }
 
 @(test)

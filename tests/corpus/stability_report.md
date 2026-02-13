@@ -11,19 +11,22 @@ Cross-dialect runs executed: 126
 | bash->fish | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 1 | 42 | 1.625 | 8.235 | 15 |
 | bash->posix | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 12 | 0.713 | 4.659 | 12 |
 | bash->zsh | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 0 | 0.346 | 0.945 | 0 |
-| fish->bash | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 19 | 1.008 | 7.679 | 11 |
-| fish->posix | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 18 | 0.949 | 7.225 | 11 |
-| fish->zsh | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 19 | 0.991 | 5.195 | 11 |
-| zsh->bash | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 76 | 4 | 0.814 | 1.949 | 4 |
+| fish->bash | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 19 | 1.012 | 7.679 | 11 |
+| fish->posix | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 18 | 0.954 | 7.225 | 11 |
+| fish->zsh | 11 | 11/11 | 11/11 | 10/11 | 0 | 10/10 | 1/1 | 1 | 19 | 1.004 | 5.346 | 11 |
+| zsh->bash | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 76 | 4 | 0.817 | 1.949 | 4 |
 | zsh->fish | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 76 | 58 | 1.854 | 9.812 | 15 |
-| zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 76 | 22 | 1.254 | 6.342 | 14 |
+| zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 76 | 22 | 1.257 | 6.342 | 14 |
 
 ## Failures
 
+- [FAIL] fish-tide-theme (theme) fish->zsh translate=true parse=true parser=false/true exit=1 err=None warnings=3(parse=0 compat=3) shims=3 src_fn=3 out_fn=29 msg= parser_msg=tests/corpus/.parser_check_fish-tide-theme_122.zsh:297: parse error near `:'
+ path=tests/corpus/repos/fish/tide/functions/fish_prompt.fish
 
 ## Parser Validation Failures
 
-- No parser validation failures.
+- [PARSER-FAIL] fish-tide-theme (theme) fish->zsh command=`zsh -n tests/corpus/.parser_check_fish-tide-theme_122.zsh` exit=1 message=tests/corpus/.parser_check_fish-tide-theme_122.zsh:297: parse error near `:'
+ path=tests/corpus/repos/fish/tide/functions/fish_prompt.fish
 - No parser validation skips.
 
 ## High Warning Runs

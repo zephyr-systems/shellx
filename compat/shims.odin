@@ -391,6 +391,12 @@ SHELLX_PRECMD_HOOK="${SHELLX_PRECMD_HOOK-}"
 SHELLX_PREEXEC_HOOK="${SHELLX_PREEXEC_HOOK-}"
 
 __shellx_run_precmd() {
+  if command -v fish_prompt >/dev/null 2>&1; then
+    fish_prompt >/dev/null 2>&1 || true
+  fi
+  if command -v fish_right_prompt >/dev/null 2>&1; then
+    RPROMPT="$(fish_right_prompt 2>/dev/null || true)"
+  fi
   [ -n "${SHELLX_PRECMD_HOOK-}" ] || return 0
   command -v "$SHELLX_PRECMD_HOOK" >/dev/null 2>&1 || return 0
   "$SHELLX_PRECMD_HOOK"
