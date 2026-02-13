@@ -79,12 +79,21 @@ CaseOutcome :: struct {
 	error_code: shellx.Error,
 	first_error: string,
 	first_rule:  string,
+	warning_summary: string,
 	rule_ids:    [dynamic]string,
 	shim_ids:    [dynamic]string,
 }
 
 RuleFailureGroup :: struct {
 	pair_label: string,
+	rule_id:    string,
+	count:      int,
+	examples:   [dynamic]string,
+}
+
+WarningGroup :: struct {
+	pair_label: string,
+	category:   string,
 	rule_id:    string,
 	count:      int,
 	examples:   [dynamic]string,
@@ -145,6 +154,69 @@ rule_group_ptr :: proc(groups: ^[dynamic]RuleFailureGroup, pair_label: string, r
 		examples = make([dynamic]string, 0, 4),
 	})
 	return &groups^[len(groups^)-1]
+}
+
+warning_group_ptr :: proc(groups: ^[dynamic]WarningGroup, pair_label: string, category: string, rule_id: string) -> ^WarningGroup {
+	for &group in groups^ {
+		if group.pair_label == pair_label && group.category == category && group.rule_id == rule_id {
+			return &group
+		}
+	}
+	append(groups, WarningGroup{
+		pair_label = pair_label,
+		category = category,
+		rule_id = rule_id,
+		examples = make([dynamic]string, 0, 5),
+	})
+	return &groups^[len(groups^)-1]
+}
+
+extract_compat_rule_id :: proc(warning: string) -> string {
+	if !strings.has_prefix(warning, "Compat[") {
+		return ""
+	}
+	open := len("Compat[")
+	close_rel := strings.index_byte(warning[open:], ']')
+	if close_rel < 0 {
+		return ""
+	}
+	rule := strings.trim_space(warning[open : open+close_rel])
+	return strings.clone(rule, context.allocator)
+}
+
+categorize_warning :: proc(warning: string) -> (string, string) {
+	if strings.has_prefix(warning, "Parse diagnostic at ") {
+		return "parse_recovery", "parse_diagnostic"
+	}
+
+	compat_rule := extract_compat_rule_id(warning)
+	if compat_rule != "" {
+		switch compat_rule {
+		case "arrays_lists", "indexed_arrays", "assoc_arrays", "fish_list_indexing":
+			return "arrays_maps", compat_rule
+		case "hooks_events", "zsh_hooks", "fish_events", "prompt_hooks":
+			return "hook_event", compat_rule
+		case "condition_semantics":
+			return "condition_test", compat_rule
+		case "parameter_expansion":
+			return "parameter_expansion", compat_rule
+		case "process_substitution":
+			return "process_substitution", compat_rule
+		case "source", "source_builtin":
+			return "source_loading", compat_rule
+		case:
+			return "compat_shim_inserted", compat_rule
+		}
+	}
+
+	if strings.contains(warning, "fallback") {
+		return "recovery_fallback", "fallback"
+	}
+	if strings.contains(warning, "preserve_comments") {
+		return "option_notice", "preserve_comments"
+	}
+
+	return "general_warning", "general"
 }
 
 file_ext_for_dialect :: proc(dialect: shellx.ShellDialect) -> string {
@@ -441,6 +513,8 @@ main :: proc() {
 
 	rule_groups := make([dynamic]RuleFailureGroup, 0, 32)
 	defer delete(rule_groups)
+	warning_groups := make([dynamic]WarningGroup, 0, 64)
+	defer delete(warning_groups)
 
 	total_runs := 0
 	for c in cases {
@@ -492,13 +566,50 @@ main :: proc() {
 				rule_ids = make([dynamic]string, 0, 4),
 				shim_ids = make([dynamic]string, 0, 4),
 			}
+			warn_rules := make([dynamic]string, 0, 8, context.temp_allocator)
+			warn_rule_counts := make([dynamic]int, 0, 8, context.temp_allocator)
+			pair_label := fmt.tprintf("%s->%s", dialect_name(c.from), dialect_name(to))
 			for w in tr.warnings {
 				if strings.has_prefix(w, "Parse diagnostic at ") {
 					out.parse_warning_count += 1
 				} else {
 					out.compat_warning_count += 1
 				}
+				category, rule_id := categorize_warning(w)
+				group := warning_group_ptr(&warning_groups, pair_label, category, rule_id)
+				group.count += 1
+				if len(group.examples) < 5 {
+					example := fmt.tprintf("%s (%s) %s", c.name, c.kind, trim_report_text(w, 120))
+					append(&group.examples, strings.clone(example, context.allocator))
+				}
+
+				found := false
+				for rule, i in warn_rules {
+					if rule != rule_id {
+						continue
+					}
+					warn_rule_counts[i] += 1
+					found = true
+					break
+				}
+				if !found {
+					append(&warn_rules, strings.clone(rule_id, context.temp_allocator))
+					append(&warn_rule_counts, 1)
+				}
 			}
+			if len(warn_rules) > 0 {
+				summary_builder := strings.builder_make()
+				for i := 0; i < len(warn_rules); i += 1 {
+					if i > 0 {
+						strings.write_string(&summary_builder, ", ")
+					}
+					fmt.sbprintf(&summary_builder, "%s=%d", warn_rules[i], warn_rule_counts[i])
+				}
+				out.warning_summary = strings.clone(strings.to_string(summary_builder), context.allocator)
+				strings.builder_destroy(&summary_builder)
+			}
+			delete(warn_rules)
+			delete(warn_rule_counts)
 			if len(tr.errors) > 0 {
 				out.first_error = strings.clone(tr.errors[0].message, context.allocator)
 				out.first_rule = strings.clone(tr.errors[0].rule_id, context.allocator)
@@ -520,7 +631,6 @@ main :: proc() {
 				}
 			}
 			if !tr.success && len(out.rule_ids) > 0 {
-				pair_label := fmt.tprintf("%s->%s", dialect_name(c.from), dialect_name(to))
 				for rule_id in out.rule_ids {
 					group := rule_group_ptr(&rule_groups, pair_label, rule_id)
 					group.count += 1
@@ -623,6 +733,17 @@ main :: proc() {
 				tmp := rule_groups[i]
 				rule_groups[i] = rule_groups[j]
 				rule_groups[j] = tmp
+			}
+		}
+	}
+	for i in 0 ..< len(warning_groups) {
+		for j in i+1 ..< len(warning_groups) {
+			a := fmt.tprintf("%s|%s|%s", warning_groups[i].pair_label, warning_groups[i].category, warning_groups[i].rule_id)
+			b := fmt.tprintf("%s|%s|%s", warning_groups[j].pair_label, warning_groups[j].category, warning_groups[j].rule_id)
+			if b < a {
+				tmp := warning_groups[i]
+				warning_groups[i] = warning_groups[j]
+				warning_groups[j] = tmp
 			}
 		}
 	}
@@ -759,7 +880,7 @@ main :: proc() {
 		strings.write_string(
 			&report,
 			fmt.tprintf(
-				"- [WARN] %s %s->%s warnings=%d(parse=%d compat=%d) shims=%d src_fn=%d out_fn=%d path=%s\n",
+				"- [WARN] %s %s->%s warnings=%d(parse=%d compat=%d) shims=%d src_fn=%d out_fn=%d rules=%s path=%s\n",
 				outcome.case_.name,
 				dialect_name(outcome.case_.from),
 				dialect_name(outcome.to),
@@ -769,9 +890,30 @@ main :: proc() {
 				outcome.shim_count,
 				outcome.source_functions,
 				outcome.target_functions,
+				outcome.warning_summary,
 				outcome.case_.path,
 			),
 		)
+	}
+
+	strings.write_string(&report, "\n## Warning Categories\n\n")
+	if len(warning_groups) == 0 {
+		strings.write_string(&report, "- No warnings recorded.\n")
+	} else {
+		current_pair := ""
+		for group in warning_groups {
+			if group.pair_label != current_pair {
+				current_pair = group.pair_label
+				strings.write_string(&report, fmt.tprintf("\n### %s\n\n", current_pair))
+			}
+			strings.write_string(
+				&report,
+				fmt.tprintf("- `%s/%s`: %d\n", group.category, group.rule_id, group.count),
+			)
+			for example in group.examples {
+				strings.write_string(&report, fmt.tprintf("  - %s\n", example))
+			}
+		}
 	}
 
 	strings.write_string(&report, "\n## Semantic Parity Matrix\n\n")

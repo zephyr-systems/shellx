@@ -237,7 +237,7 @@ translate :: proc(
 	defer compat.destroy_compatibility_result(&compat_result)
 
 	for warning in compat_result.warnings {
-		append(&result.warnings, warning.message)
+		append(&result.warnings, fmt.tprintf("Compat[%s]: %s", warning.feature, warning.message))
 		compat.append_capability_for_feature(&result.required_caps, warning.feature, from, to)
 		if options.insert_shims && compat.needs_shim(warning.feature, from, to) {
 			append_unique(&result.required_shims, warning.feature)
