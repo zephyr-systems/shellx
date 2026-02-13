@@ -122,8 +122,11 @@ convert_zsh_function :: proc(
 		child := child(node, i)
 		child_type := node_type(child)
 
-		if child_type == "word" && func_name == "" {
-			func_name = intern_node_text(arena, child, source)
+		if func_name == "" && (child_type == "function_name" || child_type == "word" || child_type == "name") {
+			func_name = strings.trim_space(intern_node_text(arena, child, source))
+			if strings.has_suffix(func_name, "()") && len(func_name) > 2 {
+				func_name = strings.trim_space(func_name[:len(func_name)-2])
+			}
 		}
 	}
 	func_name = strings.trim_space(func_name)
@@ -920,6 +923,27 @@ convert_zsh_for_to_statement :: proc(
 		}
 	}
 	iterable_text = strings.clone(strings.to_string(iter_builder), context.temp_allocator)
+	if strings.contains(variable_name, " ") || strings.contains(variable_name, "\t") {
+		first, _ := split_first_word(variable_name)
+		variable_name = first
+	}
+	if variable_name == "" || iterable_text == "" {
+		header_var, header_items, ok := parse_zsh_for_header(intern_node_text(arena, node, source))
+		if ok {
+			if variable_name == "" {
+				variable_name = header_var
+			}
+			if iterable_text == "" {
+				iterable_text = header_items
+			}
+		}
+	}
+	if variable_name == "" {
+		variable_name = "_"
+	}
+	if iterable_text == "" {
+		iterable_text = "\"\""
+	}
 
 	loop := ir.Loop {
 		kind     = .ForIn,
@@ -930,6 +954,58 @@ convert_zsh_for_to_statement :: proc(
 	}
 
 	return ir.Statement{type = .Loop, loop = loop, location = location}
+}
+
+parse_zsh_for_header :: proc(raw: string) -> (string, string, bool) {
+	trimmed := strings.trim_space(raw)
+	if !strings.has_prefix(trimmed, "for ") {
+		return "", "", false
+	}
+	line := trimmed
+	nl := strings.index(line, "\n")
+	if nl >= 0 {
+		line = strings.trim_space(line[:nl])
+	}
+	do_idx := strings.index(line, "; do")
+	if do_idx < 0 {
+		do_idx = strings.index(line, " do")
+	}
+	if do_idx > 0 {
+		line = strings.trim_space(line[:do_idx])
+	}
+	rest := strings.trim_space(line[len("for "):])
+	in_idx := strings.index(rest, " in ")
+	if in_idx < 0 {
+		return "", "", false
+	}
+	var_part := strings.trim_space(rest[:in_idx])
+	items_part := strings.trim_space(rest[in_idx+4:])
+	if strings.has_prefix(items_part, "(") && strings.has_suffix(items_part, ")") && len(items_part) >= 2 {
+		items_part = strings.trim_space(items_part[1 : len(items_part)-1])
+	}
+	if strings.contains(var_part, " ") || strings.contains(var_part, "\t") {
+		first, _ := split_first_word(var_part)
+		var_part = first
+	}
+	if var_part == "" || items_part == "" {
+		return "", "", false
+	}
+	return var_part, items_part, true
+}
+
+split_first_word :: proc(s: string) -> (string, string) {
+	trimmed := strings.trim_space(s)
+	if trimmed == "" {
+		return "", ""
+	}
+	i := 0
+	for i < len(trimmed) && trimmed[i] != ' ' && trimmed[i] != '\t' {
+		i += 1
+	}
+	if i >= len(trimmed) {
+		return trimmed, ""
+	}
+	return trimmed[:i], strings.trim_space(trimmed[i+1:])
 }
 
 convert_zsh_while_to_statement :: proc(
