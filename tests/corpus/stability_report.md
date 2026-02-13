@@ -14,22 +14,13 @@ Cross-dialect runs executed: 126
 | fish->bash | 11 | 11/11 | 11/11 | 7/11 | 0 | 10/10 | 1/1 | 1 | 19 | 0.994 | 7.077 | 11 |
 | fish->posix | 11 | 11/11 | 11/11 | 7/11 | 0 | 10/10 | 1/1 | 1 | 18 | 0.935 | 6.714 | 11 |
 | fish->zsh | 11 | 11/11 | 11/11 | 7/11 | 0 | 10/10 | 1/1 | 1 | 19 | 1.143 | 4.430 | 11 |
-| zsh->bash | 15 | 15/15 | 15/15 | 9/15 | 0 | 10/10 | 5/5 | 76 | 4 | 0.830 | 1.840 | 4 |
+| zsh->bash | 15 | 15/15 | 15/15 | 11/15 | 0 | 10/10 | 5/5 | 76 | 4 | 0.819 | 1.913 | 4 |
 | zsh->fish | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 76 | 58 | 1.791 | 9.812 | 15 |
-| zsh->posix | 15 | 15/15 | 15/15 | 9/15 | 0 | 10/10 | 5/5 | 76 | 22 | 1.207 | 5.498 | 14 |
+| zsh->posix | 15 | 15/15 | 15/15 | 10/15 | 0 | 10/10 | 5/5 | 76 | 22 | 1.156 | 5.498 | 14 |
 
 ## Failures
 
-- [FAIL] zsh-autosuggestions (plugin) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=5(parse=4 compat=1) shims=1 src_fn=30 out_fn=29 msg= parser_msg=tests/corpus/.parser_check_zsh-autosuggestions_1.bash: line 632: syntax error near unexpected token `fi'
-tests/corpus/.parser_check_zsh-autosuggestions_1.bash: line 632: `	fi'
- path=tests/corpus/repos/zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
-- [FAIL] zsh-syntax-highlighting (plugin) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=7(parse=6 compat=1) shims=1 src_fn=9 out_fn=17 msg= parser_msg=tests/corpus/.parser_check_zsh-syntax-highlighting_4.bash: line 553: syntax error near unexpected token `newline'
-tests/corpus/.parser_check_zsh-syntax-highlighting_4.bash: line 553: `:'
- path=tests/corpus/repos/zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-- [FAIL] zsh-syntax-highlighting (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=9(parse=6 compat=3) shims=3 src_fn=9 out_fn=24 msg= parser_msg=tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 227: syntax error near unexpected token `;;'
-tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 227: `	                zle -N $cur_widget _zsh_highlight_widget_$prefix-$cur_widget;;'
- path=tests/corpus/repos/zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-- [FAIL] ohmyzsh-z (plugin) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=15(parse=14 compat=1) shims=1 src_fn=14 out_fn=11 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-z_10.bash: line 172: syntax error near unexpected token `('
+- [FAIL] ohmyzsh-z (plugin) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=15(parse=14 compat=1) shims=1 src_fn=14 out_fn=18 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-z_10.bash: line 172: syntax error near unexpected token `('
 tests/corpus/.parser_check_ohmyzsh-z_10.bash: line 172: `  -x    Remove a directory from the database (by default, the current directory)'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
 - [FAIL] ohmyzsh-z (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=17(parse=14 compat=3) shims=3 src_fn=14 out_fn=25 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-z_12.sh: line 142: syntax error near unexpected token `('
@@ -93,15 +84,6 @@ tests/corpus/.parser_check_fish-tide-theme_123.sh: line 183: `}'
 
 ## Parser Validation Failures
 
-- [PARSER-FAIL] zsh-autosuggestions (plugin) zsh->bash command=`bash -n tests/corpus/.parser_check_zsh-autosuggestions_1.bash` exit=2 message=tests/corpus/.parser_check_zsh-autosuggestions_1.bash: line 632: syntax error near unexpected token `fi'
-tests/corpus/.parser_check_zsh-autosuggestions_1.bash: line 632: `	fi'
- path=tests/corpus/repos/zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
-- [PARSER-FAIL] zsh-syntax-highlighting (plugin) zsh->bash command=`bash -n tests/corpus/.parser_check_zsh-syntax-highlighting_4.bash` exit=2 message=tests/corpus/.parser_check_zsh-syntax-highlighting_4.bash: line 553: syntax error near unexpected token `newline'
-tests/corpus/.parser_check_zsh-syntax-highlighting_4.bash: line 553: `:'
- path=tests/corpus/repos/zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-- [PARSER-FAIL] zsh-syntax-highlighting (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh` exit=2 message=tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 227: syntax error near unexpected token `;;'
-tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 227: `	                zle -N $cur_widget _zsh_highlight_widget_$prefix-$cur_widget;;'
- path=tests/corpus/repos/zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 - [PARSER-FAIL] ohmyzsh-z (plugin) zsh->bash command=`bash -n tests/corpus/.parser_check_ohmyzsh-z_10.bash` exit=2 message=tests/corpus/.parser_check_ohmyzsh-z_10.bash: line 172: syntax error near unexpected token `('
 tests/corpus/.parser_check_ohmyzsh-z_10.bash: line 172: `  -x    Remove a directory from the database (by default, the current directory)'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh

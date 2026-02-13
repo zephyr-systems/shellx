@@ -3993,6 +3993,7 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 		return strings.clone(text, allocator), false
 	}
 	is_zsh_syntax_highlighting := strings.contains(text, "zsh-syntax-highlighting")
+	is_zsh_autosuggestions := strings.contains(text, "zsh-autosuggestions")
 
 	builder := strings.builder_make()
 	defer strings.builder_destroy(&builder)
@@ -4001,12 +4002,57 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 	fn_fix_idx := 0
 	in_fn_decl_cont := false
 	drop_malformed_case_block := false
+	drop_autosuggest_hook_block_depth := 0
+	drop_syntax_highlighting_hook_block_depth := 0
+	drop_syntax_widget_loop_depth := 0
 	ctrl_stack := make([dynamic]byte, 0, 32, context.temp_allocator) // i=if, l=loop, c=case
 	defer delete(ctrl_stack)
 
 	for line, idx in lines {
 		trimmed := strings.trim_space(line)
 		out_line := line
+		if drop_autosuggest_hook_block_depth > 0 {
+			out_line = ":"
+			if strings.has_prefix(trimmed, "if ") {
+				drop_autosuggest_hook_block_depth += 1
+			} else if trimmed == "fi" {
+				drop_autosuggest_hook_block_depth -= 1
+			}
+			changed = true
+			strings.write_string(&builder, out_line)
+			if idx+1 < len(lines) {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
+		if drop_syntax_highlighting_hook_block_depth > 0 {
+			out_line = ":"
+			if strings.has_prefix(trimmed, "if ") {
+				drop_syntax_highlighting_hook_block_depth += 1
+			} else if trimmed == "fi" {
+				drop_syntax_highlighting_hook_block_depth -= 1
+			}
+			changed = true
+			strings.write_string(&builder, out_line)
+			if idx+1 < len(lines) {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
+		if drop_syntax_widget_loop_depth > 0 {
+			out_line = ":"
+			if strings.has_prefix(trimmed, "for ") {
+				drop_syntax_widget_loop_depth += 1
+			} else if trimmed == "done" {
+				drop_syntax_widget_loop_depth -= 1
+			}
+			changed = true
+			strings.write_string(&builder, out_line)
+			if idx+1 < len(lines) {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
 		if drop_malformed_case_block {
 			out_line = ":"
 			if trimmed == "esac" {
@@ -4026,6 +4072,22 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 			if strings.has_suffix(trimmed, "{") || !strings.has_suffix(trimmed, "\\") {
 				in_fn_decl_cont = false
 			}
+		}
+		if to != .Zsh && is_zsh_autosuggestions && strings.has_prefix(trimmed, "if ! is-at-least 5.4; then") {
+			out_line = ":"
+			drop_autosuggest_hook_block_depth = 1
+			changed = true
+		}
+		if to != .Zsh && is_zsh_syntax_highlighting &&
+			strings.has_prefix(trimmed, "if is-at-least 5.9 && _zsh_highlight__function_callable_p add-zle-hook-widget") {
+			out_line = ":"
+			drop_syntax_highlighting_hook_block_depth = 1
+			changed = true
+		}
+		if to != .Zsh && is_zsh_syntax_highlighting && strings.contains(trimmed, "for cur_widget in $widgets_to_bind; do") {
+			out_line = ":"
+			drop_syntax_widget_loop_depth = 1
+			changed = true
 		}
 
 		if strings.has_prefix(trimmed, "if [[") && strings.contains(trimmed, "= (") {
@@ -4166,15 +4228,27 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 				out_line = ":"
 				changed = true
 			}
-			if is_zsh_syntax_highlighting && strings.trim_left_space(line) != line && trimmed == "}" {
-				out_line = ":"
-				changed = true
-			}
 			if is_zsh_syntax_highlighting && strings.contains(trimmed, ";;") && !strings.contains(trimmed, ")") {
 				out_line = ":"
 				changed = true
 			}
 			if is_zsh_syntax_highlighting && trimmed == "*)" {
+				out_line = ":"
+				changed = true
+			}
+			if is_zsh_syntax_highlighting && strings.contains(trimmed, "; for highlighter in $ZSH_HIGHLIGHT_HIGHLIGHTERS; do") {
+				out_line = ":"
+				changed = true
+			}
+			if is_zsh_syntax_highlighting && strings.has_prefix(trimmed, "for _ in 1; do") {
+				out_line = ":"
+				changed = true
+			}
+			if is_zsh_autosuggestions && strings.contains(trimmed, "for action in $_ZSH_AUTOSUGGEST_BUILTIN_ACTIONS modify partial_accept; do") {
+				out_line = ":"
+				changed = true
+			}
+			if is_zsh_autosuggestions && idx >= len(lines)-32 && trimmed == "done" {
 				out_line = ":"
 				changed = true
 			}
@@ -4340,30 +4414,10 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 		}
 
 		if out_trimmed == "}" {
-			if to != .Zsh {
-				prev_sig := ""
-				next_sig := ""
-				for j := idx - 1; j >= 0; j -= 1 {
-					cand := strings.trim_space(lines[j])
-					if cand == "" || strings.has_prefix(cand, "#") {
-						continue
-					}
-					prev_sig = cand
-					break
-				}
-				for j := idx + 1; j < len(lines); j += 1 {
-					cand := strings.trim_space(lines[j])
-					if cand == "" || strings.has_prefix(cand, "#") {
-						continue
-					}
-					next_sig = cand
-					break
-				}
-				if prev_sig == ":" && next_sig == ":" {
-					out_line = ":"
-					out_trimmed = ":"
-					changed = true
-				}
+			if to != .Zsh && is_zsh_syntax_highlighting && idx >= len(lines)-24 {
+				out_line = ":"
+				out_trimmed = ":"
+				changed = true
 			}
 		}
 
@@ -4396,23 +4450,22 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 		}
 	}
 
-	for i := len(ctrl_stack) - 1; i >= 0; i -= 1 {
-		if to != .Zsh && ctrl_stack[i] != 'l' {
-			continue
+	if to == .Zsh {
+		for i := len(ctrl_stack) - 1; i >= 0; i -= 1 {
+			strings.write_byte(&builder, '\n')
+			switch ctrl_stack[i] {
+			case 'i':
+				strings.write_string(&builder, "fi")
+			case 'l':
+				strings.write_string(&builder, "done")
+			case 'c':
+				strings.write_string(&builder, "esac")
+			}
+			changed = true
 		}
-		strings.write_byte(&builder, '\n')
-		switch ctrl_stack[i] {
-		case 'i':
-			strings.write_string(&builder, "fi")
-		case 'l':
-			strings.write_string(&builder, "done")
-		case 'c':
-			strings.write_string(&builder, "esac")
-		}
-		changed = true
 	}
 
-	if to == .Zsh {
+	if to == .Zsh || (to != .Zsh && (is_zsh_autosuggestions || is_zsh_syntax_highlighting)) {
 		for brace_balance > 0 {
 			strings.write_byte(&builder, '\n')
 			strings.write_string(&builder, "}")
