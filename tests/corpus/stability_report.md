@@ -12,11 +12,11 @@ Cross-dialect runs executed: 126
 | bash->posix | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 12 | 0.713 | 4.659 | 12 |
 | bash->zsh | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 0 | 0.346 | 0.945 | 0 |
 | fish->bash | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 0 | 1.058 | 7.721 | 11 |
-| fish->posix | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 2 | 0.994 | 7.403 | 11 |
+| fish->posix | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 0 | 0.994 | 7.403 | 11 |
 | fish->zsh | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 0 | 1.140 | 5.827 | 11 |
 | zsh->bash | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 0 | 0.822 | 2.050 | 4 |
 | zsh->fish | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 0 | 2.101 | 10.386 | 15 |
-| zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 22 | 1.262 | 6.444 | 14 |
+| zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 14 | 1.262 | 6.444 | 14 |
 
 ## Failures
 
@@ -53,9 +53,6 @@ Cross-dialect runs executed: 126
 
 ### fish->posix
 
-- `hook_event/prompt_hooks`: 2
-  - fish-done (plugin) Compat[prompt_hooks]: Shell hook/event behavior is not standardized in POSIX sh
-  - fish-tide-theme (theme) Compat[prompt_hooks]: Shell hook/event behavior is not standardized in POSIX sh
 - `parse_recovery/parse_diagnostic`: 1
   - fish-autopair (plugin) Parse diagnostic at <input>:1:1: Parse tree contains syntax errors
 
@@ -72,16 +69,6 @@ Cross-dialect runs executed: 126
   - ohmyzsh-git (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
   - ohmyzsh-z (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
   - ohmyzsh-fzf (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
-- `hook_event/prompt_hooks`: 4
-  - zsh-autosuggestions (plugin) Compat[prompt_hooks]: Shell hook/event behavior is not standardized in POSIX sh
-  - zsh-syntax-highlighting (plugin) Compat[prompt_hooks]: Shell hook/event behavior is not standardized in POSIX sh
-  - ohmyzsh-z (plugin) Compat[prompt_hooks]: Shell hook/event behavior is not standardized in POSIX sh
-  - zsh-spaceship (theme) Compat[prompt_hooks]: Shell hook/event behavior is not standardized in POSIX sh
-- `hook_event/zsh_hooks`: 4
-  - zsh-autosuggestions (plugin) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
-  - zsh-syntax-highlighting (plugin) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
-  - ohmyzsh-z (plugin) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
-  - zsh-spaceship (theme) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
 
 ## Semantic Parity Matrix
 

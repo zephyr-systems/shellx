@@ -1100,6 +1100,50 @@ __shellx_run_preexec cmd`
 }
 
 @(test)
+test_translate_fish_prompt_event_to_posix_shim_api :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_fish_prompt_event_to_posix_shim_api") { return }
+
+	opts := DEFAULT_TRANSLATION_OPTIONS
+	opts.insert_shims = true
+	src := `function __evt_prompt --on-event fish_prompt
+  echo prompt
+end
+__shellx_run_precmd`
+
+	result := translate(src, .Fish, .POSIX, opts)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, result.success, "Fish prompt event should translate to POSIX with hook shim")
+	testing.expect(t, strings.contains(result.output, "__shellx_register_precmd __evt_prompt"), "POSIX output should register prompt hook callback")
+	testing.expect(t, strings.contains(result.output, "__shellx_run_precmd"), "POSIX output should include precmd dispatcher")
+	for w in result.warnings {
+		testing.expect(t, !strings.contains(w, "Compat[prompt_hooks]"), "Prompt hook compatibility warning should be resolved by shim bridge")
+	}
+}
+
+@(test)
+test_translate_fish_prompt_function_to_posix_shim_api :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_fish_prompt_function_to_posix_shim_api") { return }
+
+	opts := DEFAULT_TRANSLATION_OPTIONS
+	opts.insert_shims = true
+	src := `function fish_prompt
+  echo prompt
+end
+__shellx_run_precmd`
+
+	result := translate(src, .Fish, .POSIX, opts)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, result.success, "Fish prompt function should translate to POSIX with hook shim")
+	testing.expect(t, strings.contains(result.output, "fish_prompt() {"), "POSIX output should preserve fish_prompt function body as callable hook function")
+	testing.expect(t, strings.contains(result.output, "__shellx_run_precmd"), "POSIX output should include precmd dispatcher")
+	for w in result.warnings {
+		testing.expect(t, !strings.contains(w, "Compat[prompt_hooks]"), "Prompt hook compatibility warning should be resolved by shim-backed prompt function dispatch")
+	}
+}
+
+@(test)
 test_semantic_condition_string_match_fish_to_bash_runtime :: proc(t: ^testing.T) {
 	if !should_run_test("test_semantic_condition_string_match_fish_to_bash_runtime") { return }
 	source := `set x foobar

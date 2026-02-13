@@ -851,6 +851,14 @@ is_compat_warning_resolved :: proc(
 			return strings.contains(out, "__shellx_register_hook") &&
 				strings.contains(out, "__shellx_run_precmd")
 		}
+		if to == .POSIX {
+			return strings.contains(out, "__shellx_register_hook") &&
+				(strings.contains(out, "__shellx_register_precmd") ||
+					strings.contains(out, "__shellx_register_preexec") ||
+					strings.contains(out, "fish_prompt() {") ||
+					strings.contains(out, "fish_right_prompt() {")) &&
+				strings.contains(out, "__shellx_run_precmd")
+		}
 		return false
 	}
 	return false
