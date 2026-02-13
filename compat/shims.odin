@@ -564,6 +564,47 @@ end
 SHELLX_PRECMD_HOOKS="${SHELLX_PRECMD_HOOKS-}"
 SHELLX_PREEXEC_HOOKS="${SHELLX_PREEXEC_HOOKS-}"
 
+autoload() {
+  return 0
+}
+
+is-at-least() {
+  return 0
+}
+
+add-zsh-hook() {
+  return 0
+}
+
+about-plugin() {
+  :
+}
+
+about-alias() {
+  :
+}
+
+status() {
+  case "$1" in
+    is-interactive|--is-interactive)
+      [ -t 1 ]
+      ;;
+    is-login|--is-login)
+      [ -n "${SHLVL-}" ] && [ "${SHLVL}" -le 1 ]
+      ;;
+    current-command|--current-command)
+      if [ -n "${BASH_COMMAND-}" ]; then
+        printf "%s\n" "$BASH_COMMAND"
+        return 0
+      fi
+      return 1
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 __shellx_append_hook() {
   _zx_list="$1"
   _zx_fn="$2"

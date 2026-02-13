@@ -6548,6 +6548,7 @@ rewrite_fish_to_posix_syntax :: proc(text: string, to: ShellDialect, allocator :
 	defer delete(function_name_stack)
 	function_hook_stack := make([dynamic]byte, 0, 16, context.temp_allocator) // p=precmd x=preexec
 	defer delete(function_hook_stack)
+	prev_status_interactive := false
 
 	for line, idx in lines {
 		indent_len := len(line) - len(strings.trim_left_space(line))
@@ -6560,6 +6561,13 @@ rewrite_fish_to_posix_syntax :: proc(text: string, to: ShellDialect, allocator :
 		out_allocated := false
 		registration_line := ""
 		registration_allocated := false
+		if prev_status_interactive && trimmed == "exit" {
+			out_line = strings.concatenate([]string{indent, "return 0"}, allocator)
+			out_allocated = true
+			changed = true
+			prev_status_interactive = false
+		} else {
+			prev_status_interactive = false
 
 		if strings.has_prefix(trimmed, "function ") {
 			fn_decl := strings.trim_space(trimmed[len("function "):])
@@ -6644,6 +6652,22 @@ rewrite_fish_to_posix_syntax :: proc(text: string, to: ShellDialect, allocator :
 			out_allocated = true
 			changed = true
 			append(&block_stack, 'c')
+		} else if strings.has_prefix(trimmed, "status is-interactive") {
+			rest := strings.trim_space(trimmed[len("status is-interactive"):])
+			if rest == "|| exit" {
+				out_line = strings.concatenate([]string{indent, "[ -t 1 ] || return 0"}, allocator)
+			} else if rest == "" {
+				out_line = strings.concatenate([]string{indent, "[ -t 1 ]"}, allocator)
+				prev_status_interactive = true
+			} else {
+				out_line = strings.concatenate([]string{indent, "[ -t 1 ] ", rest}, allocator)
+			}
+			out_allocated = true
+			changed = true
+		} else if strings.has_suffix(trimmed, "fish_key_bindings") && is_basic_name(trimmed) {
+			out_line = strings.concatenate([]string{indent, "[ -t 1 ] && ", trimmed, " || true"}, allocator)
+			out_allocated = true
+			changed = true
 		} else if strings.has_prefix(trimmed, "case ") && !strings.has_suffix(trimmed, ")") {
 			pats := strings.trim_space(trimmed[len("case "):])
 			pats_repl, pats_changed := replace_simple_all(pats, " ", "|", allocator)
@@ -6751,6 +6775,7 @@ rewrite_fish_to_posix_syntax :: proc(text: string, to: ShellDialect, allocator :
 					}
 				}
 			}
+		}
 		}
 
 		strings.write_string(&builder, out_line)

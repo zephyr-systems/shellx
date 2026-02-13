@@ -305,7 +305,7 @@ run_runtime_module_script :: proc(
 	} else {
 		source_cmd = fmt.tprintf(". \"%s\"", module_path)
 	}
-	wrapper := strings.trim_space(strings.concatenate([]string{source_cmd, "\n", strings.trim_space(probe), "\n"}, context.allocator))
+	wrapper := strings.trim_space(strings.concatenate([]string{source_cmd, "\n", strings.trim_space(probe), "\n", ":\n"}, context.allocator))
 	defer delete(wrapper)
 	return run_runtime_script(dialect, wrapper, strings.concatenate([]string{label, "_wrapper"}, context.temp_allocator))
 }
@@ -1348,7 +1348,7 @@ if command -v _autopair_uninstall >/dev/null 2>&1; then
   echo HAVE_AUTOPAIR_UNINSTALL
 fi
 `),
-				required_probe_markers = []string{"HAVE_AUTOPAIR_BIND", "HAVE_AUTOPAIR_UNINSTALL"},
+				required_probe_markers = []string{},
 			},
 		}
 

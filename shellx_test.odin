@@ -1019,6 +1019,43 @@ test_rewrite_posix_array_bridge_callsites_skips_multiline_quoted_blocks :: proc(
 }
 
 @(test)
+test_rewrite_fish_to_posix_syntax_rewrites_status_is_interactive :: proc(t: ^testing.T) {
+	if !should_run_test("test_rewrite_fish_to_posix_syntax_rewrites_status_is_interactive") { return }
+
+	input := "status is-interactive || exit"
+	output, changed := rewrite_fish_to_posix_syntax(input, .Bash)
+	defer delete(output)
+
+	testing.expect(t, changed, "Fish status is-interactive should be rewritten for sh-like targets")
+	testing.expect(t, strings.contains(output, "[ -t 1 ] || return 0"), "status is-interactive should become sourced-safe interactive-tty check")
+	testing.expect(t, !strings.contains(output, "status is-interactive"), "Fish status builtin should not leak into bash/posix output")
+}
+
+@(test)
+test_rewrite_fish_to_posix_syntax_status_interactive_exit_to_return :: proc(t: ^testing.T) {
+	if !should_run_test("test_rewrite_fish_to_posix_syntax_status_interactive_exit_to_return") { return }
+
+	input := "status is-interactive || exit"
+	output, changed := rewrite_fish_to_posix_syntax(input, .POSIX)
+	defer delete(output)
+
+	testing.expect(t, changed, "Fish interactive guard should be rewritten for sourced plugin semantics")
+	testing.expect(t, strings.contains(output, "[ -t 1 ] || return 0"), "status interactive exit guard should become non-fatal return for sourced sh code")
+}
+
+@(test)
+test_rewrite_fish_to_posix_syntax_guards_fish_key_bindings_callsite :: proc(t: ^testing.T) {
+	if !should_run_test("test_rewrite_fish_to_posix_syntax_guards_fish_key_bindings_callsite") { return }
+
+	input := "_autopair_fish_key_bindings"
+	output, changed := rewrite_fish_to_posix_syntax(input, .Bash)
+	defer delete(output)
+
+	testing.expect(t, changed, "Fish key-bindings callsite should be guarded for non-interactive sh targets")
+	testing.expect(t, strings.contains(output, "[ -t 1 ] && _autopair_fish_key_bindings || true"), "Key-binding callsite should be interactive-guarded without introducing block-balance side effects")
+}
+
+@(test)
 test_repair_fish_split_echo_param_default :: proc(t: ^testing.T) {
 	if !should_run_test("test_repair_fish_split_echo_param_default") { return }
 

@@ -11,12 +11,12 @@ Cross-dialect runs executed: 126
 | bash->fish | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 0 | 1.779 | 8.563 | 15 |
 | bash->posix | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 0 | 1.375 | 6.952 | 12 |
 | bash->zsh | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 0 | 0.346 | 0.945 | 0 |
-| fish->bash | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 0 | 0 | 1.058 | 7.721 | 11 |
-| fish->posix | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 0 | 0 | 1.317 | 9.311 | 11 |
-| fish->zsh | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 0 | 0 | 1.140 | 5.827 | 11 |
-| zsh->bash | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 0 | 0.822 | 2.050 | 4 |
+| fish->bash | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 0 | 0 | 1.069 | 7.971 | 11 |
+| fish->posix | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 0 | 0 | 1.328 | 9.561 | 11 |
+| fish->zsh | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 0 | 0 | 1.180 | 6.259 | 11 |
+| zsh->bash | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 0 | 0.830 | 2.658 | 4 |
 | zsh->fish | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 0 | 2.101 | 10.386 | 15 |
-| zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 0 | 2.139 | 9.442 | 14 |
+| zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 0 | 2.146 | 10.049 | 14 |
 
 ## Failures
 
@@ -91,6 +91,6 @@ Cases: 22, Passed: 19, Skipped: 0
 - [PASS] posix_if_fish posix->fish exit=0 out="one"
 - [PASS] posix_default_zsh posix->zsh exit=0 out="alt"
 - [PASS] posix_case_bash posix->bash exit=0 out="match"
-- [FAIL] plugin_ohmyzsh_z_zsh_to_bash zsh->bash src_exit=0 dst_exit=0 src_out="HAVE_z" dst_out="" src_err="" dst_err="tests/corpus/.semantic_module_plugin_ohmyzsh_z_zsh_to_bash_dst.bash: line 169: autoload: command not found\ntests/corpus/.semantic_module_plugin_ohmyzsh_z_zsh_to_bash_dst.bash: line 171: is-at-least: command not found\n..."
+- [FAIL] plugin_ohmyzsh_z_zsh_to_bash zsh->bash src_exit=0 dst_exit=0 src_out="HAVE_z" dst_out="" src_err="" dst_err="tests/corpus/.semantic_module_plugin_ohmyzsh_z_zsh_to_bash_dst.bash: line 260: zsh/system: division by 0 (error token is \"system\")"
 - [FAIL] plugin_bashit_aliases_bash_to_posix bash->posix src_exit=0 dst_exit=0 src_out="HAVE_ALIAS_COMPLETION_CB" dst_out="" src_err="tests/corpus/.semantic_module_plugin_bashit_aliases_bash_to_posix_src.bash: line 2: about-plugin: command not found" dst_err=""
-- [FAIL] plugin_fish_autopair_fish_to_bash fish->bash src_exit=0 dst_exit=127 src_out="" dst_out="" src_err="" dst_err="tests/corpus/.semantic_module_plugin_fish_autopair_fish_to_bash_dst.bash: line 153: status: command not found"
+- [FAIL] plugin_fish_autopair_fish_to_bash fish->bash src_exit=0 dst_exit=0 src_out="" dst_out="HAVE_AUTOPAIR_BIND\nHAVE_AUTOPAIR_UNINSTALL" src_err="" dst_err=""
