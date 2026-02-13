@@ -9,21 +9,32 @@ Cross-dialect runs executed: 126
 | Pair | Cases | Translate | Parse | Parser Matrix | Parser Skipped | Plugin Parse | Theme Parse | Parse Warn | Compat Warn | Avg Size Ratio | Avg Fn Ratio | With Shims |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | bash->fish | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 1 | 0 | 1.781 | 8.563 | 15 |
-| bash->posix | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 12 | 0.713 | 4.659 | 12 |
+| bash->posix | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 1 | 0 | 0.788 | 4.986 | 12 |
 | bash->zsh | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 0 | 0.346 | 0.945 | 0 |
 | fish->bash | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 0 | 1.058 | 7.721 | 11 |
-| fish->posix | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 0 | 0.994 | 7.403 | 11 |
+| fish->posix | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 0 | 1.028 | 7.675 | 11 |
 | fish->zsh | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 0 | 1.140 | 5.827 | 11 |
 | zsh->bash | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 0 | 0.822 | 2.050 | 4 |
 | zsh->fish | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 0 | 2.101 | 10.386 | 15 |
-| zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 14 | 1.262 | 6.444 | 14 |
+| zsh->posix | 15 | 15/15 | 15/15 | 13/15 | 0 | 10/10 | 5/5 | 0 | 4 | 1.358 | 6.964 | 14 |
 
 ## Failures
 
+- [FAIL] zsh-autosuggestions (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=4 src_fn=30 out_fn=40 msg= parser_msg=tests/corpus/.parser_check_zsh-autosuggestions_3.sh: line 246: syntax error near unexpected token `(' while looking for matching `)'
+tests/corpus/.parser_check_zsh-autosuggestions_3.sh: line 246: `			if [[ -n $(__shellx_list_get ZSH_AUTOSUGGEST_CLEAR_WIDGETS (r)$widget) ]]; then'
+ path=tests/corpus/repos/zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
+- [FAIL] zsh-syntax-highlighting (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=4 src_fn=9 out_fn=28 msg= parser_msg=tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 516: syntax error near unexpected token `(' while looking for matching `)'
+tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 516: `        (( min = $(__shellx_list_get BUFFER (Ib:min:)$needle) ))'
+ path=tests/corpus/repos/zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 
 ## Parser Validation Failures
 
-- No parser validation failures.
+- [PARSER-FAIL] zsh-autosuggestions (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_zsh-autosuggestions_3.sh` exit=2 message=tests/corpus/.parser_check_zsh-autosuggestions_3.sh: line 246: syntax error near unexpected token `(' while looking for matching `)'
+tests/corpus/.parser_check_zsh-autosuggestions_3.sh: line 246: `			if [[ -n $(__shellx_list_get ZSH_AUTOSUGGEST_CLEAR_WIDGETS (r)$widget) ]]; then'
+ path=tests/corpus/repos/zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
+- [PARSER-FAIL] zsh-syntax-highlighting (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh` exit=2 message=tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 516: syntax error near unexpected token `(' while looking for matching `)'
+tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 516: `        (( min = $(__shellx_list_get BUFFER (Ib:min:)$needle) ))'
+ path=tests/corpus/repos/zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 - No parser validation skips.
 
 ## High Warning Runs
@@ -39,12 +50,8 @@ Cross-dialect runs executed: 126
 
 ### bash->posix
 
-- `arrays_maps/indexed_arrays`: 12
-  - bashit-git (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
-  - bashit-aliases (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
-  - bashit-completion (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
-  - bashit-base (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
-  - bashit-fzf (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
+- `parse_recovery/parse_diagnostic`: 1
+  - bashit-aliases (plugin) Parse diagnostic at <input>:20:68: Syntax error
 
 ### fish->bash
 
@@ -63,12 +70,11 @@ Cross-dialect runs executed: 126
 
 ### zsh->posix
 
-- `arrays_maps/indexed_arrays`: 14
-  - zsh-autosuggestions (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
-  - zsh-syntax-highlighting (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
-  - ohmyzsh-git (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
-  - ohmyzsh-z (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
+- `arrays_maps/indexed_arrays`: 4
   - ohmyzsh-fzf (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
+  - ohmyzsh-colored-man-pages (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
+  - ohmyzsh-web-search (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
+  - zsh-powerlevel10k (theme) Compat[indexed_arrays]: Array features are not POSIX portable
 
 ## Semantic Parity Matrix
 

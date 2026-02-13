@@ -982,6 +982,20 @@ test_normalize_bash_preparse_array_literals :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_normalize_posix_preparse_array_literals :: proc(t: ^testing.T) {
+	if !should_run_test("test_normalize_posix_preparse_array_literals") { return }
+
+	input := "declare -a arr=(one two three)\ntypeset -a zs=(red blue)\narr2=(x y)"
+	output, changed := normalize_posix_preparse_array_literals(input)
+	defer delete(output)
+
+	testing.expect(t, changed, "POSIX preparse normalization should rewrite array declarations/assignments")
+	testing.expect(t, strings.contains(output, "__shellx_list_set arr one two three"), "declare -a assignment should lower to list_set shim")
+	testing.expect(t, strings.contains(output, "__shellx_list_set zs red blue"), "typeset -a assignment should lower to list_set shim")
+	testing.expect(t, strings.contains(output, "__shellx_list_set arr2 x y"), "plain array literal assignment should lower to list_set shim")
+}
+
+@(test)
 test_rewrite_parameter_expansion_callsites_bash_index_to_fish :: proc(t: ^testing.T) {
 	if !should_run_test("test_rewrite_parameter_expansion_callsites_bash_index_to_fish") { return }
 
@@ -991,6 +1005,33 @@ test_rewrite_parameter_expansion_callsites_bash_index_to_fish :: proc(t: ^testin
 
 	testing.expect(t, changed, "bash indexed parameter expansion should be rewritten for fish")
 	testing.expect(t, strings.contains(output, "$arr[2]"), "bash index 1 should map to fish index 2")
+}
+
+@(test)
+test_rewrite_posix_array_parameter_expansions_bash :: proc(t: ^testing.T) {
+	if !should_run_test("test_rewrite_posix_array_parameter_expansions_bash") { return }
+
+	input := `echo ${arr[1]} ${#arr[@]} ${arr[@]}`
+	output, changed := rewrite_posix_array_parameter_expansions(input, .Bash)
+	defer delete(output)
+
+	testing.expect(t, changed, "Bash array expansions should lower to POSIX list shim calls")
+	testing.expect(t, strings.contains(output, "$(__shellx_list_get arr 2)"), "Bash index should shift to POSIX list index")
+	testing.expect(t, strings.contains(output, "$(__shellx_list_len arr)"), "Bash array length should lower to list_len shim")
+	testing.expect(t, strings.contains(output, "${arr}") || strings.contains(output, "$arr"), "Bash full array expansion should lower to scalar list text")
+}
+
+@(test)
+test_rewrite_posix_array_parameter_expansions_zsh :: proc(t: ^testing.T) {
+	if !should_run_test("test_rewrite_posix_array_parameter_expansions_zsh") { return }
+
+	input := `echo ${arr[2]} ${#arr[@]}`
+	output, changed := rewrite_posix_array_parameter_expansions(input, .Zsh)
+	defer delete(output)
+
+	testing.expect(t, changed, "Zsh array expansions should lower to POSIX list shim calls")
+	testing.expect(t, strings.contains(output, "$(__shellx_list_get arr 2)"), "Zsh index should keep one-based semantics in POSIX shim")
+	testing.expect(t, strings.contains(output, "$(__shellx_list_len arr)"), "Zsh array length should lower to list_len shim")
 }
 
 @(test)
@@ -1022,6 +1063,48 @@ echo $arr[$i]`
 	out, ok := run_translated_script_runtime(t, source, .Fish, .Bash, "array_list_fish_dynamic_index_to_bash_runtime")
 	if !ok { return }
 	testing.expect(t, out == "blue", "Fish dynamic list indexing should preserve semantic value in Bash output")
+}
+
+@(test)
+test_translate_bash_indexed_array_to_posix_uses_shim_api :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_bash_indexed_array_to_posix_uses_shim_api") { return }
+	source := `arr=(one two three)
+echo ${arr[1]}
+echo ${#arr[@]}`
+	opts := DEFAULT_TRANSLATION_OPTIONS
+	opts.insert_shims = true
+	result := translate(source, .Bash, .POSIX, opts)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, result.success, "Bash indexed arrays should translate to POSIX with shim bridge")
+	testing.expect(t, strings.contains(result.output, "__shellx_list_set arr one two three"), "Bash array assignment should lower to list_set shim")
+	testing.expect(t, strings.contains(result.output, "$(__shellx_list_get arr 2)"), "Bash indexed expansion should lower to list_get shim")
+	testing.expect(t, strings.contains(result.output, "$(__shellx_list_len arr)"), "Bash array length should lower to list_len shim")
+	for w in result.warnings {
+		testing.expect(t, !strings.contains(w, "Compat[indexed_arrays]"), "indexed_arrays warning should be resolved for shim-backed POSIX output")
+	}
+}
+
+@(test)
+test_semantic_array_list_bash_to_posix_runtime :: proc(t: ^testing.T) {
+	if !should_run_test("test_semantic_array_list_bash_to_posix_runtime") { return }
+	source := `arr=(one two three)
+echo ${arr[1]}
+echo ${#arr[@]}`
+	out, ok := run_translated_script_runtime(t, source, .Bash, .POSIX, "array_list_bash_to_posix_runtime")
+	if !ok { return }
+	testing.expect(t, out == "two\n3", "Bash indexed arrays should preserve semantic index/length behavior in POSIX output")
+}
+
+@(test)
+test_semantic_array_list_zsh_to_posix_runtime :: proc(t: ^testing.T) {
+	if !should_run_test("test_semantic_array_list_zsh_to_posix_runtime") { return }
+	source := `arr=(one two three)
+echo ${arr[2]}
+echo ${#arr[@]}`
+	out, ok := run_translated_script_runtime(t, source, .Zsh, .POSIX, "array_list_zsh_to_posix_runtime")
+	if !ok { return }
+	testing.expect(t, out == "two\n3", "Zsh indexed arrays should preserve semantic index/length behavior in POSIX output")
 }
 
 @(test)

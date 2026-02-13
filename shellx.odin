@@ -147,6 +147,18 @@ translate :: proc(
 			delete(normalized)
 		}
 	}
+	if (from == .Bash || from == .Zsh) && to == .POSIX {
+		normalized, changed := normalize_posix_preparse_array_literals(parse_source, context.allocator)
+		if changed {
+			if parse_source_allocated {
+				delete(parse_source)
+			}
+			parse_source = normalized
+			parse_source_allocated = true
+		} else {
+			delete(normalized)
+		}
+	}
 	defer if parse_source_allocated {
 		delete(parse_source)
 	}
@@ -467,7 +479,10 @@ translate :: proc(
 		append(&result.warnings, "Applied POSIX preservation fallback after post-rewrite degradation")
 	}
 	if options.insert_shims {
-		if strings.contains(emitted, "__shellx_list_get ") || strings.contains(emitted, "__shellx_list_to_array ") {
+		if strings.contains(emitted, "__shellx_list_get ") ||
+			strings.contains(emitted, "__shellx_list_len ") ||
+			strings.contains(emitted, "__shellx_list_set ") ||
+			strings.contains(emitted, "__shellx_list_to_array ") {
 			append_unique(&result.required_shims, "fish_list_indexing")
 		}
 		if strings.contains(emitted, "__shellx_register_precmd ") || strings.contains(emitted, "__shellx_register_preexec ") {
@@ -829,6 +844,11 @@ is_compat_warning_resolved :: proc(
 		if to == .Fish {
 			return strings.contains(out, "function __shellx_array_get")
 		}
+		if to == .POSIX && (from == .Bash || from == .Zsh) {
+			return strings.contains(out, "__shellx_list_get") &&
+				strings.contains(out, "__shellx_list_len") &&
+				(strings.contains(out, "__shellx_list_set ") || !strings.contains(out, "=("))
+		}
 		if from == .Fish && (to == .Bash || to == .Zsh || to == .POSIX) {
 			return strings.contains(out, "__shellx_list_get")
 		}
@@ -1143,6 +1163,25 @@ apply_shim_callsite_rewrites :: proc(
 				delete(rewritten)
 			}
 		}
+		if to == .POSIX && (from == .Bash || from == .Zsh) {
+			rewritten, changed := rewrite_posix_array_bridge_callsites(out, allocator)
+			if changed {
+				delete(out)
+				out = rewritten
+				changed_any = true
+			} else {
+				delete(rewritten)
+			}
+
+			rewritten, changed = rewrite_posix_array_parameter_expansions(out, from, allocator)
+			if changed {
+				delete(out)
+				out = rewritten
+				changed_any = true
+			} else {
+				delete(rewritten)
+			}
+		}
 		if from == .Fish && (to == .Bash || to == .Zsh) {
 			rewritten, changed := rewrite_fish_set_list_bridge_callsites(out, allocator)
 			if changed {
@@ -1407,6 +1446,237 @@ rewrite_fish_set_list_bridge_callsites :: proc(text: string, allocator := contex
 		if idx+1 < len(lines) {
 			strings.write_byte(&builder, '\n')
 		}
+	}
+
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+normalize_posix_preparse_array_literals :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	return rewrite_posix_array_bridge_callsites(text, allocator)
+}
+
+rewrite_posix_array_bridge_callsites :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	parse_array_assignment_payload :: proc(payload: string) -> (string, string, bool) {
+		eq_idx := find_substring(payload, "=")
+		if eq_idx <= 0 {
+			return "", "", false
+		}
+		name := strings.trim_space(payload[:eq_idx])
+		rhs := strings.trim_space(payload[eq_idx+1:])
+		if !is_basic_name(name) || len(rhs) < 2 || rhs[0] != '(' || rhs[len(rhs)-1] != ')' {
+			return "", "", false
+		}
+		items := strings.trim_space(rhs[1 : len(rhs)-1])
+		return name, items, true
+	}
+
+	parse_array_decl_payload :: proc(payload: string) -> (string, string, bool, bool) {
+		i := 0
+		has_array_flag := false
+		for i < len(payload) {
+			for i < len(payload) && (payload[i] == ' ' || payload[i] == '\t') {
+				i += 1
+			}
+			if i >= len(payload) {
+				break
+			}
+			if payload[i] != '-' {
+				break
+			}
+			start := i
+			for i < len(payload) && payload[i] != ' ' && payload[i] != '\t' {
+				i += 1
+			}
+			flag := payload[start:i]
+			if strings.contains(flag, "a") {
+				has_array_flag = true
+			}
+		}
+		rest := strings.trim_space(payload[i:])
+		if !has_array_flag || rest == "" {
+			return "", "", false, false
+		}
+		name, items, ok := parse_array_assignment_payload(rest)
+		if ok {
+			return name, items, true, true
+		}
+		if is_basic_name(rest) {
+			return rest, "", true, false
+		}
+		return "", "", false, false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	for line, idx in lines {
+		out_line := line
+		out_allocated := false
+		trimmed := strings.trim_space(line)
+		indent_len := len(line) - len(strings.trim_left_space(line))
+		indent := ""
+		if indent_len > 0 {
+			indent = line[:indent_len]
+		}
+
+		decl_cmd := ""
+		if strings.has_prefix(trimmed, "declare ") {
+			decl_cmd = "declare "
+		} else if strings.has_prefix(trimmed, "typeset ") {
+			decl_cmd = "typeset "
+		} else if strings.has_prefix(trimmed, "local ") {
+			decl_cmd = "local "
+		}
+
+		if decl_cmd != "" {
+			payload := strings.trim_space(trimmed[len(decl_cmd):])
+			name, items, ok, has_items := parse_array_decl_payload(payload)
+			if ok {
+				if has_items {
+					if items == "" {
+						out_line = strings.concatenate([]string{indent, name, "=\"\""}, allocator)
+					} else {
+						out_line = strings.concatenate([]string{indent, "__shellx_list_set ", name, " ", items}, allocator)
+					}
+				} else {
+					out_line = strings.concatenate([]string{indent, name, "=\"\""}, allocator)
+				}
+				out_allocated = true
+				changed = true
+			}
+		} else {
+			name, items, ok := parse_array_assignment_payload(trimmed)
+			if ok {
+				if items == "" {
+					out_line = strings.concatenate([]string{indent, name, "=\"\""}, allocator)
+				} else {
+					out_line = strings.concatenate([]string{indent, "__shellx_list_set ", name, " ", items}, allocator)
+				}
+				out_allocated = true
+				changed = true
+			}
+		}
+
+		strings.write_string(&builder, out_line)
+		if out_allocated {
+			delete(out_line)
+		}
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_posix_array_parameter_expansions :: proc(
+	text: string,
+	from: ShellDialect,
+	allocator := context.allocator,
+) -> (string, bool) {
+	if text == "" {
+		return strings.clone(text, allocator), false
+	}
+
+	adjust_index_for_source :: proc(index_text: string, from: ShellDialect) -> string {
+		trimmed := strings.trim_space(index_text)
+		if from == .Zsh {
+			return trimmed
+		}
+		if trimmed == "" {
+			return ""
+		}
+
+		is_digits := true
+		value := 0
+		for ch in trimmed {
+			if ch < '0' || ch > '9' {
+				is_digits = false
+				break
+			}
+			value = value*10 + int(ch-'0')
+		}
+		if from == .Bash {
+			if is_digits {
+				return fmt.tprintf("%d", value+1)
+			}
+			if strings.has_prefix(trimmed, "$") && len(trimmed) > 1 && is_basic_name(trimmed[1:]) {
+				return fmt.tprintf("$((%s + 1))", trimmed[1:])
+			}
+			if is_basic_name(trimmed) {
+				return fmt.tprintf("$((%s + 1))", trimmed)
+			}
+		}
+		return trimmed
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	i := 0
+	for i < len(text) {
+		if i+1 < len(text) && text[i] == '$' && text[i+1] == '{' {
+			inner_start := i + 2
+			j := find_matching_brace(text, i+1)
+			if j > inner_start {
+				inner := strings.trim_space(text[inner_start:j])
+				repl := ""
+
+				if strings.has_prefix(inner, "#") {
+					len_inner := strings.trim_space(inner[1:])
+					bracket_idx := find_substring(len_inner, "[")
+					if bracket_idx > 0 && strings.has_suffix(len_inner, "]") {
+						name := strings.trim_space(len_inner[:bracket_idx])
+						index := strings.trim_space(len_inner[bracket_idx+1 : len(len_inner)-1])
+						if is_basic_name(name) && (index == "@" || index == "*") {
+							repl = fmt.tprintf("$(__shellx_list_len %s)", name)
+						}
+					}
+				}
+
+				if repl == "" {
+					bracket_idx := find_substring(inner, "[")
+					if bracket_idx > 0 && strings.has_suffix(inner, "]") {
+						name := strings.trim_space(inner[:bracket_idx])
+						index := strings.trim_space(inner[bracket_idx+1 : len(inner)-1])
+						if is_basic_name(name) {
+							if index == "@" || index == "*" {
+								repl = fmt.tprintf("$%s", name)
+							} else if index != "" {
+								idx_text := adjust_index_for_source(index, from)
+								if idx_text != "" {
+									repl = fmt.tprintf("$(__shellx_list_get %s %s)", name, idx_text)
+								}
+							}
+						}
+					}
+				}
+
+				if repl != "" {
+					strings.write_string(&builder, repl)
+					changed = true
+					i = j + 1
+					continue
+				}
+			}
+		}
+
+		strings.write_byte(&builder, text[i])
+		i += 1
 	}
 
 	if !changed {

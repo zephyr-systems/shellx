@@ -371,6 +371,18 @@ __shellx_list_len() {
 `)
 	case .POSIX:
 		return strings.trim_space(`
+__shellx_list_set() {
+  _zx_name="$1"
+  shift
+  _zx_acc=""
+  _zx_sep=""
+  for _zx_item in "$@"; do
+    _zx_acc="${_zx_acc}${_zx_sep}${_zx_item}"
+    _zx_sep=" "
+  done
+  eval "$_zx_name=\$_zx_acc"
+}
+
 __shellx_list_join() {
   printf "%s" "$1"
   shift
@@ -384,6 +396,9 @@ __shellx_list_get() {
   _zx_idx="$2"
   eval "_zx_vals=\${$_zx_name}"
   set -- $_zx_vals
+  if [ -z "$_zx_idx" ]; then
+    return 1
+  fi
   eval "printf '%s' \"\${$_zx_idx}\""
 }
 
