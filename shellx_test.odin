@@ -1035,6 +1035,32 @@ test_rewrite_posix_array_parameter_expansions_zsh :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_rewrite_posix_array_parameter_expansions_zsh_subscript_r :: proc(t: ^testing.T) {
+	if !should_run_test("test_rewrite_posix_array_parameter_expansions_zsh_subscript_r") { return }
+
+	input := `if [[ -n ${ZSH_AUTOSUGGEST_CLEAR_WIDGETS[(r)$widget]} ]]; then :; fi`
+	output, changed := rewrite_posix_array_parameter_expansions(input, .Zsh)
+	defer delete(output)
+
+	testing.expect(t, changed, "Zsh (r) subscript flags should lower to POSIX shim call")
+	testing.expect(t, strings.contains(output, "__shellx_zsh_subscript_r ZSH_AUTOSUGGEST_CLEAR_WIDGETS \"$widget\""), "Zsh (r) array lookup should canonicalize to subscript shim")
+	testing.expect(t, !strings.contains(output, "(r)$widget"), "Raw zsh subscript flags should not remain in POSIX output")
+}
+
+@(test)
+test_rewrite_posix_array_parameter_expansions_zsh_subscript_Ib :: proc(t: ^testing.T) {
+	if !should_run_test("test_rewrite_posix_array_parameter_expansions_zsh_subscript_Ib") { return }
+
+	input := `(( min = ${BUFFER[(Ib:min:)$needle]} ))`
+	output, changed := rewrite_posix_array_parameter_expansions(input, .Zsh)
+	defer delete(output)
+
+	testing.expect(t, changed, "Zsh (Ib:...:) subscript flags should lower to POSIX shim call")
+	testing.expect(t, strings.contains(output, "__shellx_zsh_subscript_Ib BUFFER \"$needle\" \"min\""), "Zsh (Ib:min:) lookup should canonicalize to Ib shim")
+	testing.expect(t, !strings.contains(output, "(Ib:min:)$needle"), "Raw zsh Ib subscript flags should not remain in POSIX output")
+}
+
+@(test)
 test_semantic_array_list_fish_to_bash_runtime :: proc(t: ^testing.T) {
 	if !should_run_test("test_semantic_array_list_fish_to_bash_runtime") { return }
 	source := `set arr one two three
@@ -1105,6 +1131,25 @@ echo ${#arr[@]}`
 	out, ok := run_translated_script_runtime(t, source, .Zsh, .POSIX, "array_list_zsh_to_posix_runtime")
 	if !ok { return }
 	testing.expect(t, out == "two\n3", "Zsh indexed arrays should preserve semantic index/length behavior in POSIX output")
+}
+
+@(test)
+test_translate_zsh_subscript_flags_to_posix_parse_safe :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_zsh_subscript_flags_to_posix_parse_safe") { return }
+	source := `arr=(alpha beta gamma)
+widget='*ta*'
+needle=ta
+echo ${arr[(r)$widget]}
+echo ${arr[(Ib:min:)$needle]}`
+	opts := DEFAULT_TRANSLATION_OPTIONS
+	opts.insert_shims = true
+	result := translate(source, .Zsh, .POSIX, opts)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, result.success, "Zsh subscript flags should translate to POSIX")
+	testing.expect(t, strings.contains(result.output, "__shellx_zsh_subscript_r arr"), "POSIX output should include r-subscript shim callsite")
+	testing.expect(t, strings.contains(result.output, "__shellx_zsh_subscript_Ib arr"), "POSIX output should include Ib-subscript shim callsite")
+	parser_check_snippet(t, result.output, .POSIX, "zsh_subscript_flags_to_posix_parse_safe")
 }
 
 @(test)

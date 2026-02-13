@@ -408,6 +408,61 @@ __shellx_list_len() {
   set -- $_zx_vals
   printf "%d" "$#"
 }
+
+__shellx_zsh_subscript_r() {
+  _zx_name="$1"
+  _zx_pattern="$2"
+  eval "_zx_vals=\${$_zx_name}"
+  set -- $_zx_vals
+  _zx_match=""
+  for _zx_item in "$@"; do
+    case "$_zx_item" in
+      $_zx_pattern) _zx_match="$_zx_item" ;;
+    esac
+  done
+  printf "%s" "$_zx_match"
+}
+
+__shellx_zsh_subscript_I() {
+  _zx_name="$1"
+  _zx_pattern="$2"
+  eval "_zx_vals=\${$_zx_name}"
+  set -- $_zx_vals
+  _zx_idx=0
+  _zx_pos=1
+  for _zx_item in "$@"; do
+    case "$_zx_item" in
+      $_zx_pattern) _zx_idx=$_zx_pos ;;
+    esac
+    _zx_pos=$((_zx_pos + 1))
+  done
+  printf "%s" "$_zx_idx"
+}
+
+__shellx_zsh_subscript_Ib() {
+  _zx_name="$1"
+  _zx_needle="$2"
+  _zx_default_var="$3"
+  eval "_zx_vals=\${$_zx_name}"
+  set -- $_zx_vals
+  _zx_idx=0
+  _zx_pos=1
+  for _zx_item in "$@"; do
+    case "$_zx_item" in
+      *"$_zx_needle"*) _zx_idx=$_zx_pos ;;
+    esac
+    _zx_pos=$((_zx_pos + 1))
+  done
+  if [ "$_zx_idx" -gt 0 ]; then
+    printf "%s" "$_zx_idx"
+    return 0
+  fi
+  if [ -n "$_zx_default_var" ]; then
+    eval "printf '%s' \"\${$_zx_default_var}\""
+    return 0
+  fi
+  printf "0"
+}
 `)
 	}
 	return ""

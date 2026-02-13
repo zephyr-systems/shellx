@@ -482,6 +482,7 @@ translate :: proc(
 		if strings.contains(emitted, "__shellx_list_get ") ||
 			strings.contains(emitted, "__shellx_list_len ") ||
 			strings.contains(emitted, "__shellx_list_set ") ||
+			strings.contains(emitted, "__shellx_zsh_subscript_") ||
 			strings.contains(emitted, "__shellx_list_to_array ") {
 			append_unique(&result.required_shims, "fish_list_indexing")
 		}
@@ -845,9 +846,14 @@ is_compat_warning_resolved :: proc(
 			return strings.contains(out, "function __shellx_array_get")
 		}
 		if to == .POSIX && (from == .Bash || from == .Zsh) {
-			return strings.contains(out, "__shellx_list_get") &&
-				strings.contains(out, "__shellx_list_len") &&
-				(strings.contains(out, "__shellx_list_set ") || !strings.contains(out, "=("))
+			has_lookup := strings.contains(out, "__shellx_list_get") ||
+				strings.contains(out, "__shellx_zsh_subscript_r") ||
+				strings.contains(out, "__shellx_zsh_subscript_I") ||
+				strings.contains(out, "__shellx_zsh_subscript_Ib")
+			has_array_bridge := has_lookup ||
+				strings.contains(out, "__shellx_list_len") ||
+				strings.contains(out, "__shellx_list_set ")
+			return has_array_bridge && !strings.contains(out, "=(")
 		}
 		if from == .Fish && (to == .Bash || to == .Zsh || to == .POSIX) {
 			return strings.contains(out, "__shellx_list_get")
@@ -1591,6 +1597,82 @@ rewrite_posix_array_parameter_expansions :: proc(
 		return strings.clone(text, allocator), false
 	}
 
+	escape_dquote_preserve_dollar :: proc(s: string, allocator := context.allocator) -> string {
+		builder := strings.builder_make()
+		defer strings.builder_destroy(&builder)
+		for i in 0 ..< len(s) {
+			c := s[i]
+			if c == '\\' || c == '"' || c == '`' {
+				strings.write_byte(&builder, '\\')
+			}
+			strings.write_byte(&builder, c)
+		}
+		return strings.clone(strings.to_string(builder), allocator)
+	}
+
+	quote_shell_arg_allow_expansion :: proc(s: string, allocator := context.allocator) -> string {
+		trimmed := strings.trim_space(s)
+		if trimmed == "" {
+			return "\"\""
+		}
+		if (strings.has_prefix(trimmed, "\"") && strings.has_suffix(trimmed, "\"")) ||
+			(strings.has_prefix(trimmed, "'") && strings.has_suffix(trimmed, "'")) {
+			return strings.clone(trimmed, allocator)
+		}
+		escaped := escape_dquote_preserve_dollar(trimmed, allocator)
+		out := strings.concatenate([]string{"\"", escaped, "\""}, allocator)
+		delete(escaped)
+		return out
+	}
+
+	rewrite_zsh_subscript_flag_for_posix :: proc(
+		var_name: string,
+		index_expr: string,
+		allocator := context.allocator,
+	) -> (string, bool) {
+		trimmed := strings.trim_space(index_expr)
+		if len(trimmed) < 4 || trimmed[0] != '(' {
+			return "", false
+		}
+		close_idx := find_substring(trimmed, ")")
+		if close_idx <= 1 || close_idx+1 >= len(trimmed) {
+			return "", false
+		}
+		flags := strings.trim_space(trimmed[1:close_idx])
+		operand := strings.trim_space(trimmed[close_idx+1:])
+		if flags == "" || operand == "" {
+			return "", false
+		}
+
+		operand_arg := quote_shell_arg_allow_expansion(operand, allocator)
+		defer delete(operand_arg)
+
+		if flags == "r" || flags == "R" {
+			return fmt.tprintf("$(__shellx_zsh_subscript_r %s %s)", var_name, operand_arg), true
+		}
+		if flags == "I" {
+			return fmt.tprintf("$(__shellx_zsh_subscript_I %s %s)", var_name, operand_arg), true
+		}
+		if strings.has_prefix(flags, "Ib:") {
+			rest := flags[len("Ib:"):]
+			default_var := ""
+			if rest != "" {
+				end := find_substring(rest, ":")
+				if end >= 0 {
+					default_var = strings.trim_space(rest[:end])
+				} else {
+					default_var = strings.trim_space(rest)
+				}
+			}
+			default_arg := "\"\""
+			if default_var != "" {
+				default_arg = fmt.tprintf("\"%s\"", default_var)
+			}
+			return fmt.tprintf("$(__shellx_zsh_subscript_Ib %s %s %s)", var_name, operand_arg, default_arg), true
+		}
+		return "", false
+	}
+
 	adjust_index_for_source :: proc(index_text: string, from: ShellDialect) -> string {
 		trimmed := strings.trim_space(index_text)
 		if from == .Zsh {
@@ -1657,9 +1739,23 @@ rewrite_posix_array_parameter_expansions :: proc(
 							if index == "@" || index == "*" {
 								repl = fmt.tprintf("$%s", name)
 							} else if index != "" {
-								idx_text := adjust_index_for_source(index, from)
-								if idx_text != "" {
-									repl = fmt.tprintf("$(__shellx_list_get %s %s)", name, idx_text)
+								if from == .Zsh {
+									sub_repl, sub_ok := rewrite_zsh_subscript_flag_for_posix(name, index, allocator)
+									if sub_ok {
+										repl = sub_repl
+									}
+								}
+								if repl == "" {
+									idx_text := adjust_index_for_source(index, from)
+									if idx_text != "" {
+										if from == .Zsh && (strings.contains(idx_text, "(") || strings.contains(idx_text, ")")) {
+											idx_arg := quote_shell_arg_allow_expansion(idx_text, allocator)
+											repl = fmt.tprintf("$(__shellx_list_get %s %s)", name, idx_arg)
+											delete(idx_arg)
+										} else {
+											repl = fmt.tprintf("$(__shellx_list_get %s %s)", name, idx_text)
+										}
+									}
 								}
 							}
 						}
