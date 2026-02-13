@@ -53,23 +53,24 @@ Cross-dialect runs executed: 126
 
 ## Semantic Differential Checks
 
-Cases: 19, Passed: 19, Skipped: 0
+Cases: 22, Passed: 19, Skipped: 0
 
 ### Semantic Pair Summary
 
 | Pair | Cases | Passed | Failed | Skipped |
 |---|---:|---:|---:|---:|
-| fish->bash | 3 | 3 | 0 | 0 |
+| fish->bash | 4 | 3 | 1 | 0 |
 | fish->posix | 1 | 1 | 0 | 0 |
 | fish->zsh | 1 | 1 | 0 | 0 |
 | zsh->fish | 4 | 4 | 0 | 0 |
-| zsh->bash | 2 | 2 | 0 | 0 |
+| zsh->bash | 3 | 2 | 1 | 0 |
 | zsh->posix | 1 | 1 | 0 | 0 |
 | bash->fish | 3 | 3 | 0 | 0 |
 | bash->zsh | 1 | 1 | 0 | 0 |
 | posix->fish | 1 | 1 | 0 | 0 |
 | posix->zsh | 1 | 1 | 0 | 0 |
 | posix->bash | 1 | 1 | 0 | 0 |
+| bash->posix | 1 | 0 | 1 | 0 |
 
 - [PASS] fish_gitnow_branch_compare fish->bash exit=0 out="SAME"
 - [PASS] fish_list_index_bash fish->bash exit=0 out="two"
@@ -90,3 +91,6 @@ Cases: 19, Passed: 19, Skipped: 0
 - [PASS] posix_if_fish posix->fish exit=0 out="one"
 - [PASS] posix_default_zsh posix->zsh exit=0 out="alt"
 - [PASS] posix_case_bash posix->bash exit=0 out="match"
+- [FAIL] plugin_ohmyzsh_z_zsh_to_bash zsh->bash src_exit=0 dst_exit=0 src_out="HAVE_z" dst_out="" src_err="" dst_err="tests/corpus/.semantic_module_plugin_ohmyzsh_z_zsh_to_bash_dst.bash: line 169: autoload: command not found\ntests/corpus/.semantic_module_plugin_ohmyzsh_z_zsh_to_bash_dst.bash: line 171: is-at-least: command not found\n..."
+- [FAIL] plugin_bashit_aliases_bash_to_posix bash->posix src_exit=0 dst_exit=0 src_out="HAVE_ALIAS_COMPLETION_CB" dst_out="" src_err="tests/corpus/.semantic_module_plugin_bashit_aliases_bash_to_posix_src.bash: line 2: about-plugin: command not found" dst_err=""
+- [FAIL] plugin_fish_autopair_fish_to_bash fish->bash src_exit=0 dst_exit=127 src_out="" dst_out="" src_err="" dst_err="tests/corpus/.semantic_module_plugin_fish_autopair_fish_to_bash_dst.bash: line 153: status: command not found"

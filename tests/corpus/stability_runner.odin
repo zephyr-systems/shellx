@@ -102,6 +102,12 @@ WarningGroup :: struct {
 SemanticCase :: struct {
 	name:   string,
 	source: string,
+	source_path: string,
+	probe: string,
+	probe_source: string,
+	probe_target: string,
+	required_probe_markers: []string,
+	module_mode: bool,
 	from:   shellx.ShellDialect,
 	to:     shellx.ShellDialect,
 }
@@ -281,6 +287,29 @@ run_runtime_script :: proc(dialect: shellx.ShellDialect, script: string, label: 
 	return true, state.exit_code, strings.clone(strings.trim_space(string(stdout)), context.allocator), strings.clone(strings.trim_space(string(stderr)), context.allocator), ""
 }
 
+run_runtime_module_script :: proc(
+	dialect: shellx.ShellDialect,
+	module_script: string,
+	probe: string,
+	label: string,
+) -> (ran: bool, exit_code: int, out: string, err_out: string, reason: string) {
+	module_path := fmt.tprintf("tests/corpus/.semantic_module_%s.%s", label, file_ext_for_dialect(dialect))
+	if !os.write_entire_file(module_path, transmute([]byte)module_script) {
+		return false, -1, "", "", "failed to write semantic module temp script"
+	}
+	defer os.remove(module_path)
+
+	source_cmd := ""
+	if dialect == .Fish {
+		source_cmd = fmt.tprintf("source \"%s\"", module_path)
+	} else {
+		source_cmd = fmt.tprintf(". \"%s\"", module_path)
+	}
+	wrapper := strings.trim_space(strings.concatenate([]string{source_cmd, "\n", strings.trim_space(probe), "\n"}, context.allocator))
+	defer delete(wrapper)
+	return run_runtime_script(dialect, wrapper, strings.concatenate([]string{label, "_wrapper"}, context.temp_allocator))
+}
+
 trim_report_text :: proc(s: string, max_len: int) -> string {
 	if len(s) <= max_len {
 		return s
@@ -292,9 +321,24 @@ trim_report_text :: proc(s: string, max_len: int) -> string {
 }
 
 run_semantic_case :: proc(c: SemanticCase) -> SemanticOutcome {
+	source_text := c.source
+	if c.source_path != "" {
+		source_data, ok := os.read_entire_file(c.source_path)
+		if !ok {
+			return SemanticOutcome{
+				name = c.name,
+				from = c.from,
+				to = c.to,
+				skipped = true,
+				reason = strings.clone(fmt.tprintf("missing semantic source path: %s", c.source_path), context.allocator),
+			}
+		}
+		source_text = string(source_data)
+	}
+
 	opts := shellx.DEFAULT_TRANSLATION_OPTIONS
 	opts.insert_shims = true
-	tr := shellx.translate(c.source, c.from, c.to, opts)
+	tr := shellx.translate(source_text, c.from, c.to, opts)
 	defer shellx.destroy_translation_result(&tr)
 
 	outcome := SemanticOutcome{
@@ -310,8 +354,31 @@ run_semantic_case :: proc(c: SemanticCase) -> SemanticOutcome {
 
 	src_label := fmt.tprintf("%s_src", c.name)
 	dst_label := fmt.tprintf("%s_dst", c.name)
-	src_ran, src_exit, src_out, src_err, src_reason := run_runtime_script(c.from, c.source, src_label)
-	dst_ran, dst_exit, dst_out, dst_err, dst_reason := run_runtime_script(c.to, tr.output, dst_label)
+	src_ran := false
+	src_exit := -1
+	src_out := ""
+	src_err := ""
+	src_reason := ""
+	dst_ran := false
+	dst_exit := -1
+	dst_out := ""
+	dst_err := ""
+	dst_reason := ""
+	if c.module_mode {
+		source_probe := c.probe
+		if c.probe_source != "" {
+			source_probe = c.probe_source
+		}
+		target_probe := c.probe
+		if c.probe_target != "" {
+			target_probe = c.probe_target
+		}
+		src_ran, src_exit, src_out, src_err, src_reason = run_runtime_module_script(c.from, source_text, source_probe, src_label)
+		dst_ran, dst_exit, dst_out, dst_err, dst_reason = run_runtime_module_script(c.to, tr.output, target_probe, dst_label)
+	} else {
+		src_ran, src_exit, src_out, src_err, src_reason = run_runtime_script(c.from, source_text, src_label)
+		dst_ran, dst_exit, dst_out, dst_err, dst_reason = run_runtime_script(c.to, tr.output, dst_label)
+	}
 	outcome.src_exit = src_exit
 	outcome.dst_exit = dst_exit
 	outcome.src_out = src_out
@@ -331,9 +398,20 @@ run_semantic_case :: proc(c: SemanticCase) -> SemanticOutcome {
 	}
 
 	outcome.ran = true
-	outcome.pass = src_exit == dst_exit && src_out == dst_out
+	markers_ok := true
+	for marker in c.required_probe_markers {
+		if !strings.contains(src_out, marker) || !strings.contains(dst_out, marker) {
+			markers_ok = false
+			break
+		}
+	}
+	outcome.pass = src_exit == dst_exit && src_out == dst_out && markers_ok
 	if !outcome.pass {
-		outcome.reason = strings.clone("stdout/exit mismatch", context.allocator)
+		if !markers_ok {
+			outcome.reason = strings.clone("probe marker missing in source/translated output", context.allocator)
+		} else {
+			outcome.reason = strings.clone("stdout/exit mismatch", context.allocator)
+		}
 	}
 	return outcome
 }
@@ -1216,6 +1294,61 @@ case "$x" in
   *) echo miss ;;
 esac
 `),
+			},
+
+			// Plugin workflow module-level semantic checks
+			{
+				name = "plugin_ohmyzsh_z_zsh_to_bash",
+				from = .Zsh,
+				to = .Bash,
+				source_path = "tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh",
+				module_mode = true,
+				probe = strings.trim_space(`
+if command -v _z >/dev/null 2>&1; then
+  echo HAVE__z
+fi
+if command -v z >/dev/null 2>&1; then
+  echo HAVE_z
+fi
+`),
+				required_probe_markers = []string{"HAVE_z"},
+			},
+			{
+				name = "plugin_bashit_aliases_bash_to_posix",
+				from = .Bash,
+				to = .POSIX,
+				source_path = "tests/corpus/repos/bash/bash-it/completion/available/aliases.completion.bash",
+				module_mode = true,
+				probe = strings.trim_space(`
+if command -v _bash-it-component-completion-callback-on-init-aliases >/dev/null 2>&1; then
+  echo HAVE_ALIAS_COMPLETION_CB
+fi
+`),
+				required_probe_markers = []string{"HAVE_ALIAS_COMPLETION_CB"},
+			},
+			{
+				name = "plugin_fish_autopair_fish_to_bash",
+				from = .Fish,
+				to = .Bash,
+				source_path = "tests/corpus/repos/fish/autopair.fish/conf.d/autopair.fish",
+				module_mode = true,
+				probe_source = strings.trim_space(`
+if command -v _autopair_fish_key_bindings >/dev/null 2>&1
+  echo HAVE_AUTOPAIR_BIND
+end
+if command -v _autopair_uninstall >/dev/null 2>&1
+  echo HAVE_AUTOPAIR_UNINSTALL
+end
+`),
+				probe_target = strings.trim_space(`
+if command -v _autopair_fish_key_bindings >/dev/null 2>&1; then
+  echo HAVE_AUTOPAIR_BIND
+fi
+if command -v _autopair_uninstall >/dev/null 2>&1; then
+  echo HAVE_AUTOPAIR_UNINSTALL
+fi
+`),
+				required_probe_markers = []string{"HAVE_AUTOPAIR_BIND", "HAVE_AUTOPAIR_UNINSTALL"},
 			},
 		}
 
