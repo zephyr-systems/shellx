@@ -1326,6 +1326,48 @@ rewrite_fish_to_posix_syntax :: proc(text: string, to: ShellDialect, allocator :
 					}
 				}
 			}
+		} else if strings.has_prefix(trimmed, "set -e") || strings.has_prefix(trimmed, "set --erase") {
+			rest := trimmed[len("set "):]
+			is_erase := strings.has_prefix(rest, "--erase") || strings.has_prefix(rest, "-e")
+			if is_erase {
+				var_name := strings.trim_space(rest[7:] if strings.has_prefix(rest, "-e") else rest[8:])
+				if var_name != "" && is_basic_name(var_name) {
+					out_line = strings.concatenate([]string{indent, "unset ", var_name}, allocator)
+					out_allocated = true
+					changed = true
+				}
+			}
+		} else if strings.has_prefix(trimmed, "functions ") || strings.has_prefix(trimmed, "functions -e") || strings.has_prefix(trimmed, "functions --erase") {
+			rest := trimmed[len("functions "):]
+			is_erase := strings.has_prefix(rest, "--erase") || strings.has_prefix(rest, "-e")
+			if is_erase {
+				func_name := strings.trim_space(rest[7:] if strings.has_prefix(rest, "-e") else rest[8:])
+				if func_name != "" {
+					out_line = strings.concatenate([]string{indent, "unset -f ", func_name}, allocator)
+					out_allocated = true
+					changed = true
+				}
+			}
+		} else if strings.has_prefix(trimmed, "complete ") || strings.has_prefix(trimmed, "complete -e") || strings.has_prefix(trimmed, "complete --erase") {
+			if strings.has_prefix(trimmed, "complete --erase ") {
+				comp_name := strings.trim_space(trimmed[len("complete --erase "):])
+				if comp_name != "" {
+					out_line = strings.concatenate([]string{indent, "complete -r ", comp_name}, allocator)
+					out_allocated = true
+					changed = true
+				}
+			} else {
+				rest := trimmed[len("complete "):]
+				is_erase := strings.has_prefix(rest, "--erase") || strings.has_prefix(rest, "-e")
+				if is_erase {
+					comp_name := strings.trim_space(rest[7:] if strings.has_prefix(rest, "-e") else rest[8:])
+					if comp_name != "" {
+						out_line = strings.concatenate([]string{indent, "complete -r ", comp_name}, allocator)
+						out_allocated = true
+						changed = true
+					}
+				}
+			}
 		}
 
 		strings.write_string(&builder, out_line)
@@ -1337,7 +1379,99 @@ rewrite_fish_to_posix_syntax :: proc(text: string, to: ShellDialect, allocator :
 		}
 	}
 
-	return strings.clone(strings.to_string(builder), allocator), changed
+	result := strings.clone(strings.to_string(builder), allocator)
+	changed_any := changed
+
+	result2, changed2 := fix_empty_fish_if_blocks(result, allocator)
+	if raw_data(result2) != raw_data(result) {
+		delete(result)
+	}
+	result = result2
+	changed_any = changed_any || changed2
+
+	result2, changed2 = fix_fish_command_substitution(result, allocator)
+	if raw_data(result2) != raw_data(result) {
+		delete(result)
+	}
+	result = result2
+	changed_any = changed_any || changed2
+
+	return result, changed_any
+}
+
+fix_fish_command_substitution :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	if text == "" {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	i := 0
+	for i < len(text) {
+		if text[i] == '(' && (i == 0 || text[i-1] != '$') {
+			depth := 1
+			j := i + 1
+			for j < len(text) {
+				if text[j] == '(' {
+					depth += 1
+				} else if text[j] == ')' {
+					depth -= 1
+					if depth == 0 {
+						break
+					}
+				}
+				j += 1
+			}
+
+			if j < len(text) && depth == 0 && j > i+1 {
+				inner := strings.trim_space(text[i+1 : j])
+				if inner != "" {
+					strings.write_string(&builder, "$(")
+					strings.write_string(&builder, inner)
+					strings.write_byte(&builder, ')')
+					changed = true
+					i = j + 1
+					continue
+				}
+			}
+		}
+
+		strings.write_byte(&builder, text[i])
+		i += 1
+	}
+
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+fix_empty_fish_if_blocks :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	changed := false
+	result := strings.clone(text, allocator)
+	
+	search_pattern := "; then\nfi"
+	replace_pattern := "; then :\nfi"
+	
+	for {
+		idx := strings.index(result, search_pattern)
+		if idx < 0 {
+			break
+		}
+		new_result, replaced := strings.replace(result, search_pattern, replace_pattern, 1)
+		if replaced {
+			delete(result)
+			result = new_result
+			changed = true
+		} else {
+			delete(new_result)
+			break
+		}
+	}
+	
+	return result, changed
 }
 
 rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator := context.allocator) -> (string, bool) {

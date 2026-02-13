@@ -11,8 +11,8 @@ Cross-dialect runs executed: 126
 | bash->fish | 16 | 16/16 | 16/16 | 5/16 | 0 | 10/10 | 6/6 | 0 | 42 | 0.703 | 2.758 | 15 |
 | bash->posix | 16 | 16/16 | 16/16 | 5/16 | 0 | 10/10 | 6/6 | 0 | 12 | 0.432 | 1.258 | 12 |
 | bash->zsh | 16 | 16/16 | 16/16 | 11/16 | 0 | 10/10 | 6/6 | 0 | 0 | 0.390 | 0.918 | 0 |
-| fish->bash | 11 | 11/11 | 11/11 | 1/11 | 0 | 10/10 | 1/1 | 1 | 19 | 0.738 | 2.761 | 11 |
-| fish->posix | 11 | 11/11 | 11/11 | 1/11 | 0 | 10/10 | 1/1 | 1 | 18 | 0.731 | 2.719 | 11 |
+| fish->bash | 11 | 11/11 | 11/11 | 2/11 | 0 | 10/10 | 1/1 | 1 | 19 | 0.737 | 2.765 | 11 |
+| fish->posix | 11 | 11/11 | 11/11 | 1/11 | 0 | 10/10 | 1/1 | 1 | 18 | 0.728 | 2.719 | 11 |
 | fish->zsh | 11 | 11/11 | 11/11 | 10/11 | 0 | 10/10 | 1/1 | 1 | 19 | 0.891 | 2.765 | 11 |
 | zsh->bash | 15 | 15/15 | 15/15 | 4/15 | 0 | 10/10 | 5/5 | 76 | 4 | 0.988 | 1.454 | 4 |
 | zsh->fish | 15 | 15/15 | 15/15 | 1/15 | 0 | 10/10 | 5/5 | 76 | 58 | 1.169 | 3.121 | 15 |
@@ -176,32 +176,27 @@ warning: Error while reading file tests/corpus/.parser_check_bashit-general_59.f
 - [FAIL] bashit-general (plugin) bash->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=1 out_fn=2 msg= parser_msg=tests/corpus/.parser_check_bashit-general_60.sh: line 14: syntax error near unexpected token `done'
 tests/corpus/.parser_check_bashit-general_60.sh: line 14: `	done'
  path=tests/corpus/repos/bash/bash-it/aliases/available/general.aliases.bash
-- [FAIL] fish-z (plugin) fish->bash translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=2 out_fn=4 msg= parser_msg=tests/corpus/.parser_check_fish-z_61.bash: line 68: syntax error near unexpected token `fi'
-tests/corpus/.parser_check_fish-z_61.bash: line 68: `fi'
+- [FAIL] fish-z (plugin) fish->bash translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=2 out_fn=4 msg= parser_msg=tests/corpus/.parser_check_fish-z_61.bash: line 74: syntax error: unexpected end of file from `if' command on line 71
  path=tests/corpus/repos/fish/z/conf.d/z.fish
-- [FAIL] fish-z (plugin) fish->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=2 out_fn=4 msg= parser_msg=tests/corpus/.parser_check_fish-z_63.sh: line 68: syntax error near unexpected token `fi'
-tests/corpus/.parser_check_fish-z_63.sh: line 68: `fi'
+- [FAIL] fish-z (plugin) fish->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=2 out_fn=4 msg= parser_msg=tests/corpus/.parser_check_fish-z_63.sh: line 74: syntax error: unexpected end of file from `if' command on line 71
  path=tests/corpus/repos/fish/z/conf.d/z.fish
-- [FAIL] fish-fzf (plugin) fish->bash translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=1 out_fn=3 msg= parser_msg=tests/corpus/.parser_check_fish-fzf_64.bash: line 52: syntax error near unexpected token `fi'
-tests/corpus/.parser_check_fish-fzf_64.bash: line 52: `fi'
+- [FAIL] fish-fzf (plugin) fish->bash translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=1 out_fn=3 msg= parser_msg=tests/corpus/.parser_check_fish-fzf_64.bash: line 55: syntax error: unexpected end of file from `if' command on line 51
  path=tests/corpus/repos/fish/fzf.fish/conf.d/fzf.fish
-- [FAIL] fish-fzf (plugin) fish->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=1 out_fn=3 msg= parser_msg=tests/corpus/.parser_check_fish-fzf_66.sh: line 52: syntax error near unexpected token `fi'
-tests/corpus/.parser_check_fish-fzf_66.sh: line 52: `fi'
+- [FAIL] fish-fzf (plugin) fish->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=1 out_fn=3 msg= parser_msg=tests/corpus/.parser_check_fish-fzf_66.sh: line 55: syntax error: unexpected end of file from `if' command on line 51
  path=tests/corpus/repos/fish/fzf.fish/conf.d/fzf.fish
-- [FAIL] fish-tide (plugin) fish->bash translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=3 out_fn=5 msg= parser_msg=tests/corpus/.parser_check_fish-tide_67.bash: line 43: syntax error near unexpected token `functions'
-tests/corpus/.parser_check_fish-tide_67.bash: line 43: `	source (functions --details _tide_sub_configure)'
+- [FAIL] fish-tide (plugin) fish->bash translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=3 out_fn=5 msg= parser_msg=tests/corpus/.parser_check_fish-tide_67.bash: line 47: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_fish-tide_67.bash: line 47: `	fi'
  path=tests/corpus/repos/fish/tide/conf.d/_tide_init.fish
-- [FAIL] fish-tide (plugin) fish->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=3 out_fn=5 msg= parser_msg=tests/corpus/.parser_check_fish-tide_69.sh: line 43: syntax error near unexpected token `functions'
-tests/corpus/.parser_check_fish-tide_69.sh: line 43: `	source (functions --details _tide_sub_configure)'
+- [FAIL] fish-tide (plugin) fish->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=3 out_fn=5 msg= parser_msg=tests/corpus/.parser_check_fish-tide_69.sh: line 47: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_fish-tide_69.sh: line 47: `	fi'
  path=tests/corpus/repos/fish/tide/conf.d/_tide_init.fish
-- [FAIL] fish-done (plugin) fish->bash translate=true parse=true parser=false/true exit=2 err=None warnings=3(parse=0 compat=3) shims=3 src_fn=8 out_fn=17 msg= parser_msg=tests/corpus/.parser_check_fish-done_70.bash: line 103: syntax error near unexpected token `('
-tests/corpus/.parser_check_fish-done_70.bash: line 103: `	powershell_exe=((command --search "powershell.exe"))'
-tests/corpus/.parser_check_fish-done_70.bash: line 105: syntax error near unexpected token `('
-tests/corpus/.parser_check_fish-done_70.bash: line 105: `		powershell_exe=((wslpath (wslvar windir path=tests/corpus/repos/fish/done/conf.d/done.fish
+- [FAIL] fish-done (plugin) fish->bash translate=true parse=true parser=false/true exit=2 err=None warnings=3(parse=0 compat=3) shims=3 src_fn=8 out_fn=17 msg= parser_msg=tests/corpus/.parser_check_fish-done_70.bash: line 142: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_fish-done_70.bash: line 142: `	fi'
+ path=tests/corpus/repos/fish/done/conf.d/done.fish
 - [FAIL] fish-done (plugin) fish->zsh translate=true parse=true parser=false/true exit=1 err=None warnings=3(parse=0 compat=3) shims=3 src_fn=8 out_fn=17 msg= parser_msg=tests/corpus/.parser_check_fish-done_71.zsh:173: parse error near `}'
  path=tests/corpus/repos/fish/done/conf.d/done.fish
-- [FAIL] fish-done (plugin) fish->posix translate=true parse=true parser=false/true exit=2 err=None warnings=3(parse=0 compat=3) shims=3 src_fn=8 out_fn=17 msg= parser_msg=tests/corpus/.parser_check_fish-done_72.sh: line 145: syntax error near unexpected token `fi'
-tests/corpus/.parser_check_fish-done_72.sh: line 145: `	fi'
+- [FAIL] fish-done (plugin) fish->posix translate=true parse=true parser=false/true exit=2 err=None warnings=3(parse=0 compat=3) shims=3 src_fn=8 out_fn=17 msg= parser_msg=tests/corpus/.parser_check_fish-done_72.sh: line 108: syntax error near unexpected token `wslvar' while looking for matching `)'
+tests/corpus/.parser_check_fish-done_72.sh: line 108: `		powershell_exe="$(wslpath (wslvar windir)/System32/WindowsPowerShell/v1.0/powershell.exe)"'
  path=tests/corpus/repos/fish/done/conf.d/done.fish
 - [FAIL] fish-replay (plugin) fish->bash translate=true parse=true parser=false/true exit=2 err=None warnings=2(parse=0 compat=2) shims=2 src_fn=1 out_fn=4 msg= parser_msg=tests/corpus/.parser_check_fish-replay_73.bash: line 48: syntax error near unexpected token `}'
 tests/corpus/.parser_check_fish-replay_73.bash: line 48: `}'
@@ -209,11 +204,8 @@ tests/corpus/.parser_check_fish-replay_73.bash: line 48: `}'
 - [FAIL] fish-replay (plugin) fish->posix translate=true parse=true parser=false/true exit=2 err=None warnings=2(parse=0 compat=2) shims=2 src_fn=1 out_fn=4 msg= parser_msg=tests/corpus/.parser_check_fish-replay_75.sh: line 51: syntax error near unexpected token `}'
 tests/corpus/.parser_check_fish-replay_75.sh: line 51: `}'
  path=tests/corpus/repos/fish/replay.fish/functions/replay.fish
-- [FAIL] fish-autopair (plugin) fish->bash translate=true parse=true parser=false/true exit=2 err=None warnings=3(parse=1 compat=2) shims=2 src_fn=2 out_fn=5 msg= parser_msg=tests/corpus/.parser_check_fish-autopair_79.bash: line 54: syntax error near unexpected token `('
-tests/corpus/.parser_check_fish-autopair_79.bash: line 54: `	functions --erase (functions --all | string match "_autopair_*")'
- path=tests/corpus/repos/fish/autopair.fish/conf.d/autopair.fish
-- [FAIL] fish-autopair (plugin) fish->posix translate=true parse=true parser=false/true exit=2 err=None warnings=2(parse=1 compat=1) shims=1 src_fn=2 out_fn=4 msg= parser_msg=tests/corpus/.parser_check_fish-autopair_81.sh: line 48: syntax error near unexpected token `('
-tests/corpus/.parser_check_fish-autopair_81.sh: line 48: `	functions --erase (functions --all | string match "_autopair_*")'
+- [FAIL] fish-autopair (plugin) fish->posix translate=true parse=true parser=false/true exit=2 err=None warnings=2(parse=1 compat=1) shims=1 src_fn=2 out_fn=4 msg= parser_msg=tests/corpus/.parser_check_fish-autopair_81.sh: line 54: syntax error near unexpected token `('
+tests/corpus/.parser_check_fish-autopair_81.sh: line 54: `autopair_pairs=""()" "[]" "{}" '""' "''""'
  path=tests/corpus/repos/fish/autopair.fish/conf.d/autopair.fish
 - [FAIL] fish-colored-man-pages (plugin) fish->bash translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=1 out_fn=3 msg= parser_msg=tests/corpus/.parser_check_fish-colored-man-pages_82.bash: line 44: syntax error near unexpected token `fi'
 tests/corpus/.parser_check_fish-colored-man-pages_82.bash: line 44: `	fi'
@@ -221,17 +213,15 @@ tests/corpus/.parser_check_fish-colored-man-pages_82.bash: line 44: `	fi'
 - [FAIL] fish-colored-man-pages (plugin) fish->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=1 out_fn=3 msg= parser_msg=tests/corpus/.parser_check_fish-colored-man-pages_84.sh: line 44: syntax error near unexpected token `fi'
 tests/corpus/.parser_check_fish-colored-man-pages_84.sh: line 44: `	fi'
  path=tests/corpus/repos/fish/colored_man_pages.fish/functions/man.fish
-- [FAIL] fish-gitnow (plugin) fish->bash translate=true parse=true parser=false/true exit=2 err=None warnings=2(parse=0 compat=2) shims=2 src_fn=25 out_fn=27 msg= parser_msg=tests/corpus/.parser_check_fish-gitnow_85.bash: line 48: syntax error near unexpected token `gitnow'
-tests/corpus/.parser_check_fish-gitnow_85.bash: line 48: `	echo (gitnow -v)" is installed and ready to use!"'
+- [FAIL] fish-gitnow (plugin) fish->bash translate=true parse=true parser=false/true exit=2 err=None warnings=2(parse=0 compat=2) shims=2 src_fn=25 out_fn=28 msg= parser_msg=tests/corpus/.parser_check_fish-gitnow_85.bash: line 61: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_fish-gitnow_85.bash: line 61: `	fi'
  path=tests/corpus/repos/fish/gitnow/conf.d/gitnow.fish
-- [FAIL] fish-gitnow (plugin) fish->posix translate=true parse=true parser=false/true exit=2 err=None warnings=2(parse=0 compat=2) shims=2 src_fn=25 out_fn=28 msg= parser_msg=tests/corpus/.parser_check_fish-gitnow_87.sh: line 51: syntax error near unexpected token `gitnow'
-tests/corpus/.parser_check_fish-gitnow_87.sh: line 51: `	echo (gitnow -v)" is installed and ready to use!"'
+- [FAIL] fish-gitnow (plugin) fish->posix translate=true parse=true parser=false/true exit=2 err=None warnings=2(parse=0 compat=2) shims=2 src_fn=25 out_fn=28 msg= parser_msg=tests/corpus/.parser_check_fish-gitnow_87.sh: line 64: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_fish-gitnow_87.sh: line 64: `	fi'
  path=tests/corpus/repos/fish/gitnow/conf.d/gitnow.fish
-- [FAIL] fish-fisher (plugin) fish->bash translate=true parse=true parser=false/true exit=2 err=None warnings=2(parse=0 compat=2) shims=2 src_fn=1 out_fn=4 msg= parser_msg=tests/corpus/.parser_check_fish-fisher_88.bash: line 52: syntax error near unexpected token `fi'
-tests/corpus/.parser_check_fish-fisher_88.bash: line 52: `fi'
+- [FAIL] fish-fisher (plugin) fish->bash translate=true parse=true parser=false/true exit=2 err=None warnings=2(parse=0 compat=2) shims=2 src_fn=1 out_fn=4 msg= parser_msg=tests/corpus/.parser_check_fish-fisher_88.bash: line 53: syntax error: unexpected end of file from `if' command on line 51
  path=tests/corpus/repos/fish/fisher/functions/fisher.fish
-- [FAIL] fish-fisher (plugin) fish->posix translate=true parse=true parser=false/true exit=2 err=None warnings=2(parse=0 compat=2) shims=2 src_fn=1 out_fn=4 msg= parser_msg=tests/corpus/.parser_check_fish-fisher_90.sh: line 55: syntax error near unexpected token `fi'
-tests/corpus/.parser_check_fish-fisher_90.sh: line 55: `fi'
+- [FAIL] fish-fisher (plugin) fish->posix translate=true parse=true parser=false/true exit=2 err=None warnings=2(parse=0 compat=2) shims=2 src_fn=1 out_fn=4 msg= parser_msg=tests/corpus/.parser_check_fish-fisher_90.sh: line 56: syntax error: unexpected end of file from `if' command on line 54
  path=tests/corpus/repos/fish/fisher/functions/fisher.fish
 - [FAIL] zsh-powerlevel10k (theme) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=8(parse=4 compat=4) shims=4 src_fn=1 out_fn=5 msg= parser_msg=tests/corpus/.parser_check_zsh-powerlevel10k_92.fish (line 31): Missing end to balance this if statement
 	  if (( ! $+__p9k_locale ))
@@ -479,32 +469,27 @@ warning: Error while reading file tests/corpus/.parser_check_bashit-general_59.f
 - [PARSER-FAIL] bashit-general (plugin) bash->posix command=`bash -n tests/corpus/.parser_check_bashit-general_60.sh` exit=2 message=tests/corpus/.parser_check_bashit-general_60.sh: line 14: syntax error near unexpected token `done'
 tests/corpus/.parser_check_bashit-general_60.sh: line 14: `	done'
  path=tests/corpus/repos/bash/bash-it/aliases/available/general.aliases.bash
-- [PARSER-FAIL] fish-z (plugin) fish->bash command=`bash -n tests/corpus/.parser_check_fish-z_61.bash` exit=2 message=tests/corpus/.parser_check_fish-z_61.bash: line 68: syntax error near unexpected token `fi'
-tests/corpus/.parser_check_fish-z_61.bash: line 68: `fi'
+- [PARSER-FAIL] fish-z (plugin) fish->bash command=`bash -n tests/corpus/.parser_check_fish-z_61.bash` exit=2 message=tests/corpus/.parser_check_fish-z_61.bash: line 74: syntax error: unexpected end of file from `if' command on line 71
  path=tests/corpus/repos/fish/z/conf.d/z.fish
-- [PARSER-FAIL] fish-z (plugin) fish->posix command=`bash -n tests/corpus/.parser_check_fish-z_63.sh` exit=2 message=tests/corpus/.parser_check_fish-z_63.sh: line 68: syntax error near unexpected token `fi'
-tests/corpus/.parser_check_fish-z_63.sh: line 68: `fi'
+- [PARSER-FAIL] fish-z (plugin) fish->posix command=`bash -n tests/corpus/.parser_check_fish-z_63.sh` exit=2 message=tests/corpus/.parser_check_fish-z_63.sh: line 74: syntax error: unexpected end of file from `if' command on line 71
  path=tests/corpus/repos/fish/z/conf.d/z.fish
-- [PARSER-FAIL] fish-fzf (plugin) fish->bash command=`bash -n tests/corpus/.parser_check_fish-fzf_64.bash` exit=2 message=tests/corpus/.parser_check_fish-fzf_64.bash: line 52: syntax error near unexpected token `fi'
-tests/corpus/.parser_check_fish-fzf_64.bash: line 52: `fi'
+- [PARSER-FAIL] fish-fzf (plugin) fish->bash command=`bash -n tests/corpus/.parser_check_fish-fzf_64.bash` exit=2 message=tests/corpus/.parser_check_fish-fzf_64.bash: line 55: syntax error: unexpected end of file from `if' command on line 51
  path=tests/corpus/repos/fish/fzf.fish/conf.d/fzf.fish
-- [PARSER-FAIL] fish-fzf (plugin) fish->posix command=`bash -n tests/corpus/.parser_check_fish-fzf_66.sh` exit=2 message=tests/corpus/.parser_check_fish-fzf_66.sh: line 52: syntax error near unexpected token `fi'
-tests/corpus/.parser_check_fish-fzf_66.sh: line 52: `fi'
+- [PARSER-FAIL] fish-fzf (plugin) fish->posix command=`bash -n tests/corpus/.parser_check_fish-fzf_66.sh` exit=2 message=tests/corpus/.parser_check_fish-fzf_66.sh: line 55: syntax error: unexpected end of file from `if' command on line 51
  path=tests/corpus/repos/fish/fzf.fish/conf.d/fzf.fish
-- [PARSER-FAIL] fish-tide (plugin) fish->bash command=`bash -n tests/corpus/.parser_check_fish-tide_67.bash` exit=2 message=tests/corpus/.parser_check_fish-tide_67.bash: line 43: syntax error near unexpected token `functions'
-tests/corpus/.parser_check_fish-tide_67.bash: line 43: `	source (functions --details _tide_sub_configure)'
+- [PARSER-FAIL] fish-tide (plugin) fish->bash command=`bash -n tests/corpus/.parser_check_fish-tide_67.bash` exit=2 message=tests/corpus/.parser_check_fish-tide_67.bash: line 47: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_fish-tide_67.bash: line 47: `	fi'
  path=tests/corpus/repos/fish/tide/conf.d/_tide_init.fish
-- [PARSER-FAIL] fish-tide (plugin) fish->posix command=`bash -n tests/corpus/.parser_check_fish-tide_69.sh` exit=2 message=tests/corpus/.parser_check_fish-tide_69.sh: line 43: syntax error near unexpected token `functions'
-tests/corpus/.parser_check_fish-tide_69.sh: line 43: `	source (functions --details _tide_sub_configure)'
+- [PARSER-FAIL] fish-tide (plugin) fish->posix command=`bash -n tests/corpus/.parser_check_fish-tide_69.sh` exit=2 message=tests/corpus/.parser_check_fish-tide_69.sh: line 47: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_fish-tide_69.sh: line 47: `	fi'
  path=tests/corpus/repos/fish/tide/conf.d/_tide_init.fish
-- [PARSER-FAIL] fish-done (plugin) fish->bash command=`bash -n tests/corpus/.parser_check_fish-done_70.bash` exit=2 message=tests/corpus/.parser_check_fish-done_70.bash: line 103: syntax error near unexpected token `('
-tests/corpus/.parser_check_fish-done_70.bash: line 103: `	powershell_exe=((command --search "powershell.exe"))'
-tests/corpus/.parser_check_fish-done_70.bash: line 105: syntax error near unexpected token `('
-tests/corpus/.parser_check_fish-done_70.bash: line 105: `		powershell_exe=((wslpath (wslvar windir path=tests/corpus/repos/fish/done/conf.d/done.fish
+- [PARSER-FAIL] fish-done (plugin) fish->bash command=`bash -n tests/corpus/.parser_check_fish-done_70.bash` exit=2 message=tests/corpus/.parser_check_fish-done_70.bash: line 142: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_fish-done_70.bash: line 142: `	fi'
+ path=tests/corpus/repos/fish/done/conf.d/done.fish
 - [PARSER-FAIL] fish-done (plugin) fish->zsh command=`zsh -n tests/corpus/.parser_check_fish-done_71.zsh` exit=1 message=tests/corpus/.parser_check_fish-done_71.zsh:173: parse error near `}'
  path=tests/corpus/repos/fish/done/conf.d/done.fish
-- [PARSER-FAIL] fish-done (plugin) fish->posix command=`bash -n tests/corpus/.parser_check_fish-done_72.sh` exit=2 message=tests/corpus/.parser_check_fish-done_72.sh: line 145: syntax error near unexpected token `fi'
-tests/corpus/.parser_check_fish-done_72.sh: line 145: `	fi'
+- [PARSER-FAIL] fish-done (plugin) fish->posix command=`bash -n tests/corpus/.parser_check_fish-done_72.sh` exit=2 message=tests/corpus/.parser_check_fish-done_72.sh: line 108: syntax error near unexpected token `wslvar' while looking for matching `)'
+tests/corpus/.parser_check_fish-done_72.sh: line 108: `		powershell_exe="$(wslpath (wslvar windir)/System32/WindowsPowerShell/v1.0/powershell.exe)"'
  path=tests/corpus/repos/fish/done/conf.d/done.fish
 - [PARSER-FAIL] fish-replay (plugin) fish->bash command=`bash -n tests/corpus/.parser_check_fish-replay_73.bash` exit=2 message=tests/corpus/.parser_check_fish-replay_73.bash: line 48: syntax error near unexpected token `}'
 tests/corpus/.parser_check_fish-replay_73.bash: line 48: `}'
@@ -512,11 +497,8 @@ tests/corpus/.parser_check_fish-replay_73.bash: line 48: `}'
 - [PARSER-FAIL] fish-replay (plugin) fish->posix command=`bash -n tests/corpus/.parser_check_fish-replay_75.sh` exit=2 message=tests/corpus/.parser_check_fish-replay_75.sh: line 51: syntax error near unexpected token `}'
 tests/corpus/.parser_check_fish-replay_75.sh: line 51: `}'
  path=tests/corpus/repos/fish/replay.fish/functions/replay.fish
-- [PARSER-FAIL] fish-autopair (plugin) fish->bash command=`bash -n tests/corpus/.parser_check_fish-autopair_79.bash` exit=2 message=tests/corpus/.parser_check_fish-autopair_79.bash: line 54: syntax error near unexpected token `('
-tests/corpus/.parser_check_fish-autopair_79.bash: line 54: `	functions --erase (functions --all | string match "_autopair_*")'
- path=tests/corpus/repos/fish/autopair.fish/conf.d/autopair.fish
-- [PARSER-FAIL] fish-autopair (plugin) fish->posix command=`bash -n tests/corpus/.parser_check_fish-autopair_81.sh` exit=2 message=tests/corpus/.parser_check_fish-autopair_81.sh: line 48: syntax error near unexpected token `('
-tests/corpus/.parser_check_fish-autopair_81.sh: line 48: `	functions --erase (functions --all | string match "_autopair_*")'
+- [PARSER-FAIL] fish-autopair (plugin) fish->posix command=`bash -n tests/corpus/.parser_check_fish-autopair_81.sh` exit=2 message=tests/corpus/.parser_check_fish-autopair_81.sh: line 54: syntax error near unexpected token `('
+tests/corpus/.parser_check_fish-autopair_81.sh: line 54: `autopair_pairs=""()" "[]" "{}" '""' "''""'
  path=tests/corpus/repos/fish/autopair.fish/conf.d/autopair.fish
 - [PARSER-FAIL] fish-colored-man-pages (plugin) fish->bash command=`bash -n tests/corpus/.parser_check_fish-colored-man-pages_82.bash` exit=2 message=tests/corpus/.parser_check_fish-colored-man-pages_82.bash: line 44: syntax error near unexpected token `fi'
 tests/corpus/.parser_check_fish-colored-man-pages_82.bash: line 44: `	fi'
@@ -524,17 +506,15 @@ tests/corpus/.parser_check_fish-colored-man-pages_82.bash: line 44: `	fi'
 - [PARSER-FAIL] fish-colored-man-pages (plugin) fish->posix command=`bash -n tests/corpus/.parser_check_fish-colored-man-pages_84.sh` exit=2 message=tests/corpus/.parser_check_fish-colored-man-pages_84.sh: line 44: syntax error near unexpected token `fi'
 tests/corpus/.parser_check_fish-colored-man-pages_84.sh: line 44: `	fi'
  path=tests/corpus/repos/fish/colored_man_pages.fish/functions/man.fish
-- [PARSER-FAIL] fish-gitnow (plugin) fish->bash command=`bash -n tests/corpus/.parser_check_fish-gitnow_85.bash` exit=2 message=tests/corpus/.parser_check_fish-gitnow_85.bash: line 48: syntax error near unexpected token `gitnow'
-tests/corpus/.parser_check_fish-gitnow_85.bash: line 48: `	echo (gitnow -v)" is installed and ready to use!"'
+- [PARSER-FAIL] fish-gitnow (plugin) fish->bash command=`bash -n tests/corpus/.parser_check_fish-gitnow_85.bash` exit=2 message=tests/corpus/.parser_check_fish-gitnow_85.bash: line 61: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_fish-gitnow_85.bash: line 61: `	fi'
  path=tests/corpus/repos/fish/gitnow/conf.d/gitnow.fish
-- [PARSER-FAIL] fish-gitnow (plugin) fish->posix command=`bash -n tests/corpus/.parser_check_fish-gitnow_87.sh` exit=2 message=tests/corpus/.parser_check_fish-gitnow_87.sh: line 51: syntax error near unexpected token `gitnow'
-tests/corpus/.parser_check_fish-gitnow_87.sh: line 51: `	echo (gitnow -v)" is installed and ready to use!"'
+- [PARSER-FAIL] fish-gitnow (plugin) fish->posix command=`bash -n tests/corpus/.parser_check_fish-gitnow_87.sh` exit=2 message=tests/corpus/.parser_check_fish-gitnow_87.sh: line 64: syntax error near unexpected token `fi'
+tests/corpus/.parser_check_fish-gitnow_87.sh: line 64: `	fi'
  path=tests/corpus/repos/fish/gitnow/conf.d/gitnow.fish
-- [PARSER-FAIL] fish-fisher (plugin) fish->bash command=`bash -n tests/corpus/.parser_check_fish-fisher_88.bash` exit=2 message=tests/corpus/.parser_check_fish-fisher_88.bash: line 52: syntax error near unexpected token `fi'
-tests/corpus/.parser_check_fish-fisher_88.bash: line 52: `fi'
+- [PARSER-FAIL] fish-fisher (plugin) fish->bash command=`bash -n tests/corpus/.parser_check_fish-fisher_88.bash` exit=2 message=tests/corpus/.parser_check_fish-fisher_88.bash: line 53: syntax error: unexpected end of file from `if' command on line 51
  path=tests/corpus/repos/fish/fisher/functions/fisher.fish
-- [PARSER-FAIL] fish-fisher (plugin) fish->posix command=`bash -n tests/corpus/.parser_check_fish-fisher_90.sh` exit=2 message=tests/corpus/.parser_check_fish-fisher_90.sh: line 55: syntax error near unexpected token `fi'
-tests/corpus/.parser_check_fish-fisher_90.sh: line 55: `fi'
+- [PARSER-FAIL] fish-fisher (plugin) fish->posix command=`bash -n tests/corpus/.parser_check_fish-fisher_90.sh` exit=2 message=tests/corpus/.parser_check_fish-fisher_90.sh: line 56: syntax error: unexpected end of file from `if' command on line 54
  path=tests/corpus/repos/fish/fisher/functions/fisher.fish
 - [PARSER-FAIL] zsh-powerlevel10k (theme) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_zsh-powerlevel10k_92.fish` exit=127 message=tests/corpus/.parser_check_zsh-powerlevel10k_92.fish (line 31): Missing end to balance this if statement
 	  if (( ! $+__p9k_locale ))
