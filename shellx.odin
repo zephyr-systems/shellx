@@ -2329,6 +2329,44 @@ count_unescaped_double_quotes :: proc(s: string) -> int {
 	return count
 }
 
+build_fish_set_decls_from_tokens :: proc(tokens: []string, scope_flag: string, allocator := context.allocator) -> string {
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	wrote := false
+	for tok in tokens {
+		token := strings.trim_space(tok)
+		if token == "" {
+			continue
+		}
+		eq_idx := find_substring(token, "=")
+		name := token
+		value := "\"\""
+		if eq_idx > 0 {
+			name = strings.trim_space(token[:eq_idx])
+			value = strings.trim_space(token[eq_idx+1:])
+			if value == "" {
+				value = "\"\""
+			}
+		}
+		if !is_basic_name(name) {
+			continue
+		}
+		if wrote {
+			strings.write_string(&builder, "; ")
+		}
+		strings.write_string(&builder, "set ")
+		strings.write_string(&builder, scope_flag)
+		strings.write_string(&builder, name)
+		strings.write_byte(&builder, ' ')
+		strings.write_string(&builder, value)
+		wrote = true
+	}
+	if !wrote {
+		return strings.clone(":", allocator)
+	}
+	return strings.clone(strings.to_string(builder), allocator)
+}
+
 normalize_fish_artifacts :: proc(text: string, allocator := context.allocator) -> (string, bool) {
 	lines := strings.split_lines(text)
 	defer delete(lines)
@@ -2345,6 +2383,83 @@ normalize_fish_artifacts :: proc(text: string, allocator := context.allocator) -
 	for line, idx in lines {
 		out := strings.clone(line, allocator)
 		trimmed := strings.trim_space(out)
+		if strings.has_prefix(trimmed, "setopt ") ||
+			strings.has_prefix(trimmed, "unsetopt ") ||
+			strings.has_prefix(trimmed, "emulate ") ||
+			strings.has_prefix(trimmed, "zmodload ") ||
+			strings.has_prefix(trimmed, "autoload ") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			delete(out)
+			out = strings.concatenate([]string{indent, ":"}, allocator)
+			changed = true
+			trimmed = strings.trim_space(out)
+		}
+		if strings.contains(trimmed, "; and setopt ") ||
+			strings.contains(trimmed, "; or setopt ") ||
+			strings.contains(trimmed, "; and zmodload ") ||
+			strings.contains(trimmed, "; or zmodload ") ||
+			strings.contains(trimmed, "; and typeset ") ||
+			strings.contains(trimmed, "; or typeset ") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			delete(out)
+			out = strings.concatenate([]string{indent, ":"}, allocator)
+			changed = true
+			trimmed = strings.trim_space(out)
+		}
+		if strings.has_prefix(trimmed, "local ") || strings.has_prefix(trimmed, "typeset ") || strings.has_prefix(trimmed, "integer ") {
+			keyword_len := 0
+			scope := "-l "
+			if strings.has_prefix(trimmed, "local ") {
+				keyword_len = len("local ")
+				scope = "-l "
+			} else if strings.has_prefix(trimmed, "typeset ") {
+				keyword_len = len("typeset ")
+				scope = "-g "
+			} else {
+				keyword_len = len("integer ")
+				scope = "-l "
+			}
+			rest := strings.trim_space(trimmed[keyword_len:])
+			fields := strings.fields(rest)
+			defer delete(fields)
+			start := 0
+			for start < len(fields) && strings.has_prefix(fields[start], "-") {
+				flags := fields[start]
+				if strings.contains(flags, "g") {
+					scope = "-g "
+				}
+				if strings.contains(flags, "l") {
+					scope = "-l "
+				}
+				start += 1
+			}
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			scope_copy := strings.clone(scope, allocator)
+			decl := ""
+			if start < len(fields) {
+				decl = build_fish_set_decls_from_tokens(fields[start:], scope_copy, allocator)
+			} else {
+				decl = strings.clone(":", allocator)
+			}
+			delete(scope_copy)
+			delete(out)
+			out = strings.concatenate([]string{indent, decl}, allocator)
+			delete(decl)
+			changed = true
+			trimmed = strings.trim_space(out)
+		}
 
 		if in_print_pipe_quote_block {
 			indent_len := len(line) - len(strings.trim_left_space(line))
