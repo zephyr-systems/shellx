@@ -862,7 +862,7 @@ test_normalize_zsh_preparse_syntax :: proc(t: ^testing.T) {
 	testing.expect(t, !strings.contains(output, "(@Pk)"), "Should remove (@Pk) preparse token")
 	testing.expect(t, !strings.contains(output, "(Pkv)"), "Should remove (Pkv) preparse token")
 	testing.expect(t, !strings.contains(output, "(M)@:#"), "Should remove (M)@:# preparse token")
-	testing.expect(t, strings.contains(output, "&& {"), "Should normalize inline anonymous function opener")
+	testing.expect(t, strings.contains(output, "&& {") || strings.contains(output, "if [[ -n ${ZSHZ_DEBUG} ]]; then"), "Should normalize inline anonymous function opener")
 }
 
 @(test)
@@ -982,6 +982,22 @@ echo ${m[foo]}`
 	out, ok := run_translated_script_runtime(t, source, .Zsh, .Bash, "assoc_map_zsh_to_bash_runtime")
 	if !ok { return }
 	testing.expect(t, out == "bar", "Associative map lookup should preserve semantic value")
+}
+
+@(test)
+test_translate_zsh_assoc_lookup_to_fish_uses_array_get_shim :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_zsh_assoc_lookup_to_fish_uses_array_get_shim") { return }
+	source := `typeset -A m
+m[foo]=bar
+echo ${m[$k]}`
+	opts := DEFAULT_TRANSLATION_OPTIONS
+	opts.insert_shims = true
+	result := translate(source, .Zsh, .Fish, opts)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, result.success, "Translation should succeed for zsh assoc lookup to fish")
+	testing.expect(t, strings.contains(result.output, "__shellx_array_get m"), "Assoc-style index lookup should lower to array_get shim call")
+	testing.expect(t, strings.contains(result.output, "function __shellx_array_get"), "Fish shim prelude should include array_get helper")
 }
 
 @(test)

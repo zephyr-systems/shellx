@@ -1841,7 +1841,13 @@ rewrite_parameter_expansion_callsites :: proc(
 										idx_text := fmt.tprintf("%d", idx)
 										repl = fmt.tprintf("$%s[%s]", var_name, idx_text)
 									} else {
-										repl = fmt.tprintf("$%s", var_name)
+										if strings.contains(index_expr, "\"") || strings.contains(index_expr, "`") || strings.contains(index_expr, "${") {
+											repl = fmt.tprintf("$%s", var_name)
+										} else {
+											escaped_index := escape_double_quoted(index_expr, allocator)
+											repl = fmt.tprintf("(__shellx_array_get %s \"%s\")", var_name, escaped_index)
+											delete(escaped_index)
+										}
 									}
 								} else {
 									repl = fmt.tprintf("$%s", var_name)
@@ -2186,6 +2192,11 @@ __shellx_zsh_expand() {
 		changed_any = changed_any || changed
 
 		rewritten, changed = repair_fish_malformed_command_substitutions(out, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
+
+		rewritten, changed = rewrite_fish_command_substitution_command_position(out, allocator)
 		delete(out)
 		out = rewritten
 		changed_any = changed_any || changed
@@ -4725,6 +4736,55 @@ rewrite_fish_positional_params :: proc(text: string, allocator := context.alloca
 		i += 1
 	}
 
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_fish_command_substitution_command_position :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	for line, i in lines {
+		trimmed := strings.trim_space(line)
+		indent_len := len(line) - len(strings.trim_left_space(line))
+		indent := ""
+		if indent_len > 0 {
+			indent = line[:indent_len]
+		}
+		if strings.has_prefix(trimmed, "(__shellx_array_get ") {
+			close_idx := find_substring(trimmed, ")")
+			if close_idx > 0 && close_idx+1 < len(trimmed) {
+				sub := strings.trim_space(trimmed[:close_idx+1])
+				rest := strings.trim_space(trimmed[close_idx+1:])
+				if rest != "" {
+					strings.write_string(&builder, indent)
+					strings.write_string(&builder, "set -l __shellx_cmd ")
+					strings.write_string(&builder, sub)
+					strings.write_byte(&builder, '\n')
+					strings.write_string(&builder, indent)
+					strings.write_string(&builder, "$__shellx_cmd ")
+					strings.write_string(&builder, rest)
+					changed = true
+					if i+1 < len(lines) {
+						strings.write_byte(&builder, '\n')
+					}
+					continue
+				}
+			}
+		}
+		strings.write_string(&builder, line)
+		if i+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
 	if !changed {
 		return strings.clone(text, allocator), false
 	}

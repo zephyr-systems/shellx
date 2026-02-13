@@ -301,6 +301,28 @@ generate_array_list_bridge_shim :: proc(to: ir.ShellDialect) -> string {
 function __shellx_array_set
     set -g $argv[1] $argv[2..-1]
 end
+
+function __shellx_array_get
+    set -l __name $argv[1]
+    set -l __idx $argv[2]
+    if test -z "$__name"; or test -z "$__idx"
+        return 1
+    end
+    eval "set -l __vals \$$__name"
+    if string match -qr '^[0-9]+$' -- $__idx
+        echo $__vals[$__idx]
+        return 0
+    end
+
+    # Associative-style fallback: entries stored as key=value pairs.
+    for __entry in $__vals
+        if string match -q -- \"$__idx=*\" \"$__entry\"
+            string replace -r '^[^=]*=' '' -- \"$__entry\"
+            return 0
+        end
+    end
+    return 1
+end
 `)
 	case .Bash, .Zsh:
 		return strings.trim_space(`
