@@ -9,14 +9,14 @@ Cross-dialect runs executed: 126
 | Pair | Cases | Translate | Parse | Parser Matrix | Parser Skipped | Plugin Parse | Theme Parse | Parse Warn | Compat Warn | Avg Size Ratio | Avg Fn Ratio | With Shims |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | bash->fish | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 1 | 0 | 1.781 | 8.563 | 15 |
-| bash->posix | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 1 | 0 | 1.088 | 5.969 | 12 |
+| bash->posix | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 2 | 0 | 1.372 | 6.952 | 12 |
 | bash->zsh | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 0 | 0.346 | 0.945 | 0 |
 | fish->bash | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 0 | 1.058 | 7.721 | 11 |
-| fish->posix | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 0 | 1.176 | 8.493 | 11 |
+| fish->posix | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 0 | 1.317 | 9.311 | 11 |
 | fish->zsh | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 0 | 1.140 | 5.827 | 11 |
 | zsh->bash | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 0 | 0.822 | 2.050 | 4 |
 | zsh->fish | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 0 | 2.101 | 10.386 | 15 |
-| zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 8 | 1.771 | 8.205 | 14 |
+| zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 2 | 0 | 2.139 | 9.386 | 14 |
 
 ## Failures
 
@@ -39,7 +39,8 @@ Cross-dialect runs executed: 126
 
 ### bash->posix
 
-- `parse_recovery/parse_diagnostic`: 1
+- `parse_recovery/parse_diagnostic`: 2
+  - bashit-aliases (plugin) Parse diagnostic at <input>:2:1: Syntax error
   - bashit-aliases (plugin) Parse diagnostic at <input>:20:68: Syntax error
 
 ### fish->bash
@@ -59,12 +60,9 @@ Cross-dialect runs executed: 126
 
 ### zsh->posix
 
-- `arrays_maps/indexed_arrays`: 8
-  - zsh-autosuggestions (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
-  - zsh-syntax-highlighting (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
-  - ohmyzsh-z (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
-  - ohmyzsh-fzf (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
-  - ohmyzsh-colored-man-pages (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
+- `parse_recovery/parse_diagnostic`: 2
+  - zsh-powerlevel10k (theme) Parse diagnostic at <input>:14:1: Syntax error
+  - zsh-powerlevel10k (theme) Parse diagnostic at <input>:0:0: 3 additional diagnostics suppressed
 
 ## Semantic Parity Matrix
 

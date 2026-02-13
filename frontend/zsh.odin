@@ -386,7 +386,7 @@ convert_zsh_list_to_logical_statement :: proc(
 
 is_zsh_argument_node :: proc(child_type: string) -> bool {
 	switch child_type {
-	case "string", "word", "raw_string", "simple_expansion", "expansion", "concatenation", "special_variable_name", "command_substitution", "binary_expression", "regex", "flag", "flag_name":
+	case "string", "word", "number", "raw_string", "simple_expansion", "expansion", "concatenation", "special_variable_name", "command_substitution", "binary_expression", "regex", "flag", "flag_name":
 		return true
 	}
 	return false

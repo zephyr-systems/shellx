@@ -383,6 +383,22 @@ __shellx_list_set() {
   eval "$_zx_name=\$_zx_acc"
 }
 
+__shellx_list_append() {
+  _zx_name="$1"
+  shift
+  eval "_zx_cur=\${$_zx_name}"
+  _zx_acc="$_zx_cur"
+  _zx_sep=""
+  if [ -n "$_zx_acc" ]; then
+    _zx_sep=" "
+  fi
+  for _zx_item in "$@"; do
+    _zx_acc="${_zx_acc}${_zx_sep}${_zx_item}"
+    _zx_sep=" "
+  done
+  eval "$_zx_name=\$_zx_acc"
+}
+
 __shellx_list_join() {
   printf "%s" "$1"
   shift
@@ -407,6 +423,45 @@ __shellx_list_len() {
   eval "_zx_vals=\${$_zx_name}"
   set -- $_zx_vals
   printf "%d" "$#"
+}
+
+__shellx_list_has() {
+  _zx_name="$1"
+  _zx_key="$2"
+  eval "_zx_vals=\${$_zx_name}"
+  set -- $_zx_vals
+  for _zx_item in "$@"; do
+    if [ "$_zx_item" = "$_zx_key" ]; then
+      printf "1"
+      return 0
+    fi
+  done
+  printf "0"
+}
+
+__shellx_list_unset_index() {
+  _zx_name="$1"
+  _zx_idx="$2"
+  eval "_zx_vals=\${$_zx_name}"
+  set -- $_zx_vals
+  _zx_len="$#"
+  if [ -z "$_zx_idx" ]; then
+    return 1
+  fi
+  case "$_zx_idx" in
+    -*) _zx_idx=$((_zx_len + _zx_idx + 1)) ;;
+  esac
+  _zx_out=""
+  _zx_sep=""
+  _zx_pos=1
+  for _zx_item in "$@"; do
+    if [ "$_zx_pos" -ne "$_zx_idx" ]; then
+      _zx_out="${_zx_out}${_zx_sep}${_zx_item}"
+      _zx_sep=" "
+    fi
+    _zx_pos=$((_zx_pos + 1))
+  done
+  eval "$_zx_name=\$_zx_out"
 }
 
 __shellx_zsh_subscript_r() {

@@ -481,6 +481,9 @@ translate :: proc(
 	if options.insert_shims {
 		if strings.contains(emitted, "__shellx_list_get ") ||
 			strings.contains(emitted, "__shellx_list_len ") ||
+			strings.contains(emitted, "__shellx_list_has ") ||
+			strings.contains(emitted, "__shellx_list_append ") ||
+			strings.contains(emitted, "__shellx_list_unset_index ") ||
 			strings.contains(emitted, "__shellx_list_set ") ||
 			strings.contains(emitted, "__shellx_zsh_subscript_") ||
 			strings.contains(emitted, "__shellx_list_to_array ") {
@@ -847,11 +850,14 @@ is_compat_warning_resolved :: proc(
 		}
 		if to == .POSIX && (from == .Bash || from == .Zsh) {
 			has_lookup := strings.contains(out, "__shellx_list_get") ||
+				strings.contains(out, "__shellx_list_has") ||
 				strings.contains(out, "__shellx_zsh_subscript_r") ||
 				strings.contains(out, "__shellx_zsh_subscript_I") ||
 				strings.contains(out, "__shellx_zsh_subscript_Ib")
 			has_array_bridge := has_lookup ||
 				strings.contains(out, "__shellx_list_len") ||
+				strings.contains(out, "__shellx_list_append") ||
+				strings.contains(out, "__shellx_list_unset_index") ||
 				strings.contains(out, "__shellx_list_set ")
 			return has_array_bridge && !strings.contains(out, "=(")
 		}
@@ -1471,21 +1477,39 @@ rewrite_posix_array_bridge_callsites :: proc(text: string, allocator := context.
 		return strings.clone(text, allocator), false
 	}
 
-	parse_array_assignment_payload :: proc(payload: string) -> (string, string, bool) {
-		eq_idx := find_substring(payload, "=")
-		if eq_idx <= 0 {
-			return "", "", false
+	parse_array_assignment_payload :: proc(payload: string) -> (name, items: string, append, block_open, ok: bool) {
+		append_mode := false
+		marker_idx := find_substring(payload, "+=(")
+		open_idx := -1
+		if marker_idx >= 0 {
+			append_mode = true
+			open_idx = marker_idx + 2
+		} else {
+			marker_idx = find_substring(payload, "=(")
+			if marker_idx < 0 {
+				return "", "", false, false, false
+			}
+			open_idx = marker_idx + 1
 		}
-		name := strings.trim_space(payload[:eq_idx])
-		rhs := strings.trim_space(payload[eq_idx+1:])
-		if !is_basic_name(name) || len(rhs) < 2 || rhs[0] != '(' || rhs[len(rhs)-1] != ')' {
-			return "", "", false
+		if open_idx < 0 || open_idx >= len(payload) || payload[open_idx] != '(' {
+			return "", "", false, false, false
 		}
-		items := strings.trim_space(rhs[1 : len(rhs)-1])
-		return name, items, true
+		lhs := strings.trim_space(payload[:marker_idx])
+		if !is_basic_name(lhs) {
+			return "", "", false, false, false
+		}
+
+		rhs := strings.trim_space(payload[open_idx+1:])
+		if rhs == "" {
+			return lhs, "", append_mode, true, true
+		}
+		if strings.has_suffix(rhs, ")") {
+			return lhs, strings.trim_space(rhs[:len(rhs)-1]), append_mode, false, true
+		}
+		return lhs, rhs, append_mode, true, true
 	}
 
-	parse_array_decl_payload :: proc(payload: string) -> (string, string, bool, bool) {
+	parse_array_decl_payload :: proc(payload: string) -> (name, items: string, append, block_open, ok, has_items: bool) {
 		i := 0
 		has_array_flag := false
 		for i < len(payload) {
@@ -1509,23 +1533,149 @@ rewrite_posix_array_bridge_callsites :: proc(text: string, allocator := context.
 		}
 		rest := strings.trim_space(payload[i:])
 		if !has_array_flag || rest == "" {
-			return "", "", false, false
+			return "", "", false, false, false, false
 		}
-		name, items, ok := parse_array_assignment_payload(rest)
-		if ok {
-			return name, items, true, true
+		decl_name, decl_items, append_mode, decl_block_open, decl_ok := parse_array_assignment_payload(rest)
+		if decl_ok {
+			return decl_name, decl_items, append_mode, decl_block_open, true, true
 		}
 		if is_basic_name(rest) {
-			return rest, "", true, false
+			return rest, "", false, false, true, false
 		}
-		return "", "", false, false
+		return "", "", false, false, false, false
+	}
+
+	parse_array_unset_payload :: proc(payload: string) -> (name, index: string, ok: bool) {
+		eq_idx := find_substring(payload, "=")
+		if eq_idx <= 0 {
+			return "", "", false
+		}
+		lhs := strings.trim_space(payload[:eq_idx])
+		rhs := strings.trim_space(payload[eq_idx+1:])
+		if rhs != "()" {
+			return "", "", false
+		}
+		open_idx := find_substring(lhs, "[")
+		close_idx := find_substring(lhs, "]")
+		if open_idx <= 0 || close_idx <= open_idx+1 || close_idx != len(lhs)-1 {
+			return "", "", false
+		}
+		name = strings.trim_space(lhs[:open_idx])
+		index = strings.trim_space(lhs[open_idx+1 : close_idx])
+		if !is_basic_name(name) || index == "" {
+			return "", "", false
+		}
+		return name, index, true
+	}
+
+	build_list_call_line :: proc(indent: string, name: string, items: string, append_mode: bool, allocator := context.allocator) -> string {
+		if items == "" {
+			if append_mode {
+				return strings.concatenate([]string{indent, ":"}, allocator)
+			}
+			return strings.concatenate([]string{indent, name, "=\"\""}, allocator)
+		}
+		if append_mode {
+			return strings.concatenate([]string{indent, "__shellx_list_append ", name, " ", items}, allocator)
+		}
+		return strings.concatenate([]string{indent, "__shellx_list_set ", name, " ", items}, allocator)
+	}
+
+	rewrite_inline_array_append_segment :: proc(line: string, allocator := context.allocator) -> (string, bool) {
+		marker_idx := find_substring(line, "+=(")
+		if marker_idx < 0 {
+			return strings.clone(line, allocator), false
+		}
+
+		name_end := marker_idx
+		name_start := name_end
+		for name_start > 0 && is_basic_name_char(line[name_start-1]) {
+			name_start -= 1
+		}
+		if name_start == name_end {
+			return strings.clone(line, allocator), false
+		}
+		name := strings.trim_space(line[name_start:name_end])
+		if !is_basic_name(name) {
+			return strings.clone(line, allocator), false
+		}
+
+		open_idx := marker_idx + 2
+		if open_idx >= len(line) || line[open_idx] != '(' {
+			return strings.clone(line, allocator), false
+		}
+		close_idx := -1
+		for j := open_idx + 1; j < len(line); j += 1 {
+			if line[j] == ')' {
+				close_idx = j
+				break
+			}
+		}
+		if close_idx < 0 {
+			return strings.clone(line, allocator), false
+		}
+
+		items := strings.trim_space(line[open_idx+1 : close_idx])
+		replacement := build_list_call_line("", name, items, true, allocator)
+		defer delete(replacement)
+
+		out := strings.concatenate(
+			[]string{
+				line[:name_start],
+				replacement,
+				line[close_idx+1:],
+			},
+			allocator,
+		)
+		return out, true
 	}
 
 	builder := strings.builder_make()
 	defer strings.builder_destroy(&builder)
 	changed := false
 
-	for line, idx in lines {
+	in_array_block := false
+	block_name := ""
+	block_append := false
+	block_indent := ""
+	block_items := make([dynamic]string, 0, 8, context.temp_allocator)
+	defer delete(block_items)
+
+	for idx := 0; idx < len(lines); idx += 1 {
+		line := lines[idx]
+		if in_array_block {
+			trimmed_block := strings.trim_space(line)
+			if trimmed_block == ")" || trimmed_block == ");" {
+				items := strings.join(block_items[:], " ", allocator)
+				out_line := build_list_call_line(block_indent, block_name, items, block_append, allocator)
+				strings.write_string(&builder, out_line)
+				delete(out_line)
+				delete(items)
+				clear(&block_items)
+				in_array_block = false
+				block_name = ""
+				block_append = false
+				block_indent = ""
+				changed = true
+				if idx+1 < len(lines) {
+					strings.write_byte(&builder, '\n')
+				}
+				continue
+			}
+
+			if trimmed_block != "" && !strings.has_prefix(trimmed_block, "#") {
+				item := strings.trim_space(trimmed_block)
+				if strings.has_suffix(item, "\\") && len(item) > 1 {
+					item = strings.trim_space(item[:len(item)-1])
+				}
+				if item != "" {
+					append(&block_items, item)
+				}
+			}
+			changed = true
+			continue
+		}
+
 		out_line := line
 		out_allocated := false
 		trimmed := strings.trim_space(line)
@@ -1533,6 +1683,16 @@ rewrite_posix_array_bridge_callsites :: proc(text: string, allocator := context.
 		indent := ""
 		if indent_len > 0 {
 			indent = line[:indent_len]
+		}
+
+		inline_rewritten, inline_changed := rewrite_inline_array_append_segment(out_line, allocator)
+		if inline_changed {
+			out_line = inline_rewritten
+			out_allocated = true
+			trimmed = strings.trim_space(out_line)
+			changed = true
+		} else {
+			delete(inline_rewritten)
 		}
 
 		decl_cmd := ""
@@ -1546,30 +1706,76 @@ rewrite_posix_array_bridge_callsites :: proc(text: string, allocator := context.
 
 		if decl_cmd != "" {
 			payload := strings.trim_space(trimmed[len(decl_cmd):])
-			name, items, ok, has_items := parse_array_decl_payload(payload)
+			name, items, append_mode, block_open, ok, has_items := parse_array_decl_payload(payload)
 			if ok {
 				if has_items {
-					if items == "" {
-						out_line = strings.concatenate([]string{indent, name, "=\"\""}, allocator)
-					} else {
-						out_line = strings.concatenate([]string{indent, "__shellx_list_set ", name, " ", items}, allocator)
+					if block_open {
+						in_array_block = true
+						block_name = name
+						block_append = append_mode
+						block_indent = indent
+						clear(&block_items)
+						if items != "" {
+							append(&block_items, items)
+						}
+						changed = true
+						if out_allocated {
+							delete(out_line)
+						}
+						continue
 					}
+					if out_allocated {
+						delete(out_line)
+					}
+					out_line = build_list_call_line(indent, name, items, append_mode, allocator)
+					out_allocated = true
 				} else {
+					if out_allocated {
+						delete(out_line)
+					}
 					out_line = strings.concatenate([]string{indent, name, "=\"\""}, allocator)
+					out_allocated = true
 				}
-				out_allocated = true
 				changed = true
 			}
 		} else {
-			name, items, ok := parse_array_assignment_payload(trimmed)
+			name, items, append_mode, block_open, ok := parse_array_assignment_payload(trimmed)
 			if ok {
-				if items == "" {
-					out_line = strings.concatenate([]string{indent, name, "=\"\""}, allocator)
-				} else {
-					out_line = strings.concatenate([]string{indent, "__shellx_list_set ", name, " ", items}, allocator)
+				if block_open {
+					in_array_block = true
+					block_name = name
+					block_append = append_mode
+					block_indent = indent
+					clear(&block_items)
+					if items != "" {
+						append(&block_items, items)
+					}
+					changed = true
+					if out_allocated {
+						delete(out_line)
+					}
+					continue
 				}
+
+				if out_allocated {
+					delete(out_line)
+				}
+				out_line = build_list_call_line(indent, name, items, append_mode, allocator)
 				out_allocated = true
 				changed = true
+			} else {
+				unset_name, unset_index, unset_ok := parse_array_unset_payload(trimmed)
+				if unset_ok {
+					if out_allocated {
+						delete(out_line)
+					}
+					out_line = strings.concatenate(
+						[]string{indent, "__shellx_list_unset_index ", unset_name, " ", unset_index},
+						allocator,
+					)
+					out_allocated = true
+					changed = true
+				}
 			}
 		}
 
@@ -1580,6 +1786,16 @@ rewrite_posix_array_bridge_callsites :: proc(text: string, allocator := context.
 		if idx+1 < len(lines) {
 			strings.write_byte(&builder, '\n')
 		}
+	}
+
+	if in_array_block {
+		items := strings.join(block_items[:], " ", allocator)
+		out_line := build_list_call_line(block_indent, block_name, items, block_append, allocator)
+		strings.write_byte(&builder, '\n')
+		strings.write_string(&builder, out_line)
+		delete(out_line)
+		delete(items)
+		changed = true
 	}
 
 	if !changed {
@@ -1673,6 +1889,12 @@ rewrite_posix_array_parameter_expansions :: proc(
 		return "", false
 	}
 
+	build_posix_list_has_call :: proc(var_name: string, index_expr: string, allocator := context.allocator) -> string {
+		idx_arg := quote_shell_arg_allow_expansion(index_expr, allocator)
+		defer delete(idx_arg)
+		return fmt.tprintf("$(__shellx_list_has %s %s)", var_name, idx_arg)
+	}
+
 	adjust_index_for_source :: proc(index_text: string, from: ShellDialect) -> string {
 		trimmed := strings.trim_space(index_text)
 		if from == .Zsh {
@@ -1711,12 +1933,88 @@ rewrite_posix_array_parameter_expansions :: proc(
 
 	i := 0
 	for i < len(text) {
+		if from == .Zsh &&
+			i+3 < len(text) &&
+			text[i] == '$' &&
+			text[i+1] == '+' &&
+			is_basic_name_char(text[i+2]) {
+			name_start := i + 2
+			name_end := name_start
+			for name_end < len(text) && is_basic_name_char(text[name_end]) {
+				name_end += 1
+			}
+			if name_end < len(text) && text[name_end] == '[' {
+				idx_start := name_end + 1
+				idx_end := idx_start
+				for idx_end < len(text) && text[idx_end] != ']' {
+					idx_end += 1
+				}
+				if idx_end > idx_start && idx_end < len(text) {
+					name := text[name_start:name_end]
+					index := strings.trim_space(text[idx_start:idx_end])
+					if is_basic_name(name) && index != "" {
+						idx_text := adjust_index_for_source(index, from)
+						repl := build_posix_list_has_call(name, idx_text, allocator)
+						strings.write_string(&builder, repl)
+						changed = true
+						i = idx_end + 1
+						continue
+					}
+				}
+			}
+		}
+
 		if i+1 < len(text) && text[i] == '$' && text[i+1] == '{' {
 			inner_start := i + 2
 			j := find_matching_brace(text, i+1)
 			if j > inner_start {
 				inner := strings.trim_space(text[inner_start:j])
 				repl := ""
+
+				// ${+arr[idx]} -> presence probe.
+				if strings.has_prefix(inner, "+") {
+					plus_inner := strings.trim_space(inner[1:])
+					bracket_idx := find_substring(plus_inner, "[")
+					if bracket_idx > 0 && strings.has_suffix(plus_inner, "]") {
+						name := strings.trim_space(plus_inner[:bracket_idx])
+						index := strings.trim_space(plus_inner[bracket_idx+1 : len(plus_inner)-1])
+						if is_basic_name(name) && index != "" {
+							idx_text := adjust_index_for_source(index, from)
+							repl = build_posix_list_has_call(name, idx_text, allocator)
+						}
+					}
+				}
+
+				// ${!arr[@][(r)pat]} style key/subscript probes.
+				if repl == "" && strings.has_prefix(inner, "!") {
+					rest := strings.trim_space(inner[1:])
+					keys_idx := find_substring(rest, "[@][")
+					if keys_idx > 0 && strings.has_suffix(rest, "]") {
+						name := strings.trim_space(rest[:keys_idx])
+						index := strings.trim_space(rest[keys_idx+4 : len(rest)-1])
+						if is_basic_name(name) {
+							sub_repl, sub_ok := rewrite_zsh_subscript_flag_for_posix(name, index, allocator)
+							if sub_ok {
+								repl = sub_repl
+							}
+						}
+					}
+				}
+
+				// ${arr[idx]+1} -> index/key existence probe.
+				if repl == "" && strings.has_suffix(inner, "+1") {
+					open_idx := find_substring(inner, "[")
+					close_idx := find_substring(inner, "]")
+					if open_idx > 0 && close_idx > open_idx {
+						name := strings.trim_space(inner[:open_idx])
+						suffix := strings.trim_space(inner[close_idx+1:])
+						index := strings.trim_space(inner[open_idx+1 : close_idx])
+						if suffix == "+1" && is_basic_name(name) && index != "" && !strings.has_prefix(index, "(") {
+							idx_text := adjust_index_for_source(index, from)
+							repl = build_posix_list_has_call(name, idx_text, allocator)
+						}
+					}
+				}
 
 				if strings.has_prefix(inner, "#") {
 					len_inner := strings.trim_space(inner[1:])

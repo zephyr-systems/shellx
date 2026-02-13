@@ -996,6 +996,21 @@ test_normalize_posix_preparse_array_literals :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_rewrite_posix_array_bridge_callsites_multiline_and_append :: proc(t: ^testing.T) {
+	if !should_run_test("test_rewrite_posix_array_bridge_callsites_multiline_and_append") { return }
+
+	input := "urls=(\n  google\n  github\n)\nenvironment+=( PATH=\"$HOME/bin\" )\n[[ true ]] || opts+=('aliases')\nregion_highlight[-1]=()"
+	output, changed := rewrite_posix_array_bridge_callsites(input)
+	defer delete(output)
+
+	testing.expect(t, changed, "Multiline and append array forms should lower to POSIX list bridge shims")
+	testing.expect(t, strings.contains(output, "__shellx_list_set urls google github"), "Multiline array assignment should lower to list_set shim")
+	testing.expect(t, strings.contains(output, "__shellx_list_append environment PATH=\"$HOME/bin\""), "Inline append should lower to list_append shim")
+	testing.expect(t, strings.contains(output, "[[ true ]] || __shellx_list_append opts 'aliases'"), "Conditional append segment should lower to list_append shim")
+	testing.expect(t, strings.contains(output, "__shellx_list_unset_index region_highlight -1"), "Indexed unset assignment should lower to list_unset_index shim")
+}
+
+@(test)
 test_rewrite_parameter_expansion_callsites_bash_index_to_fish :: proc(t: ^testing.T) {
 	if !should_run_test("test_rewrite_parameter_expansion_callsites_bash_index_to_fish") { return }
 
@@ -1058,6 +1073,20 @@ test_rewrite_posix_array_parameter_expansions_zsh_subscript_Ib :: proc(t: ^testi
 	testing.expect(t, changed, "Zsh (Ib:...:) subscript flags should lower to POSIX shim call")
 	testing.expect(t, strings.contains(output, "__shellx_zsh_subscript_Ib BUFFER \"$needle\" \"min\""), "Zsh (Ib:min:) lookup should canonicalize to Ib shim")
 	testing.expect(t, !strings.contains(output, "(Ib:min:)$needle"), "Raw zsh Ib subscript flags should not remain in POSIX output")
+}
+
+@(test)
+test_rewrite_posix_array_parameter_expansions_zsh_plus_probes :: proc(t: ^testing.T) {
+	if !should_run_test("test_rewrite_posix_array_parameter_expansions_zsh_plus_probes") { return }
+
+	input := `(( ${commands[fzf]+1} )) && (( $+commands[brew] )) && (( ${+commands[apt]} ))`
+	output, changed := rewrite_posix_array_parameter_expansions(input, .Zsh)
+	defer delete(output)
+
+	testing.expect(t, changed, "Zsh +1 / $+ probes should lower to list_has shim calls")
+	testing.expect(t, strings.contains(output, "$(__shellx_list_has commands \"fzf\")"), "${commands[fzf]+1} should lower to list_has")
+	testing.expect(t, strings.contains(output, "$(__shellx_list_has commands \"brew\")"), "$+commands[brew] should lower to list_has")
+	testing.expect(t, strings.contains(output, "$(__shellx_list_has commands \"apt\")"), "${+commands[apt]} should lower to list_has")
 }
 
 @(test)
@@ -1131,6 +1160,29 @@ echo ${#arr[@]}`
 	out, ok := run_translated_script_runtime(t, source, .Zsh, .POSIX, "array_list_zsh_to_posix_runtime")
 	if !ok { return }
 	testing.expect(t, out == "two\n3", "Zsh indexed arrays should preserve semantic index/length behavior in POSIX output")
+}
+
+@(test)
+test_semantic_array_append_zsh_to_posix_runtime :: proc(t: ^testing.T) {
+	if !should_run_test("test_semantic_array_append_zsh_to_posix_runtime") { return }
+	source := `arr=(one)
+arr+=(two)
+echo ${arr[2]}`
+	out, ok := run_translated_script_runtime(t, source, .Zsh, .POSIX, "array_append_zsh_to_posix_runtime")
+	if !ok { return }
+	testing.expect(t, out == "two", "Zsh array append should preserve element semantics in POSIX output via list bridge")
+}
+
+@(test)
+test_semantic_array_unset_index_zsh_to_posix_runtime :: proc(t: ^testing.T) {
+	if !should_run_test("test_semantic_array_unset_index_zsh_to_posix_runtime") { return }
+	source := `arr=(one two three)
+arr[-1]=()
+echo ${arr[2]}
+echo ${#arr[@]}`
+	out, ok := run_translated_script_runtime(t, source, .Zsh, .POSIX, "array_unset_index_zsh_to_posix_runtime")
+	if !ok { return }
+	testing.expect(t, out == "two\n2", "Zsh indexed unset should preserve list element and length behavior in POSIX output")
 }
 
 @(test)
