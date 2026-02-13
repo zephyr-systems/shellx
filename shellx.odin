@@ -640,6 +640,13 @@ translate :: proc(
 				} else {
 					delete(rewritten_tail)
 				}
+				rewritten_blockers, changed_blockers := rewrite_zsh_parser_blocker_signatures(result.output, context.allocator)
+				if changed_blockers {
+					delete(result.output)
+					result.output = rewritten_blockers
+				} else {
+					delete(rewritten_blockers)
+				}
 			}
 		}
 	lowering_issue, has_lowering_issue := validate_lowered_output_structure(result.output, to, source_name, context.allocator)
@@ -8691,6 +8698,330 @@ rewrite_syntax_highlighting_orphan_fi :: proc(text: string, allocator := context
 	}
 
 	return strings.clone(strings.to_string(builder), allocator), changed
+}
+
+rewrite_zsh_parser_blocker_signatures :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	is_ohmyzsh_z := strings.contains(text, "ZSHZ_UNCOMMON")
+	is_ohmyzsh_sudo := strings.contains(text, "__sudo-replace-buffer")
+	is_extract := strings.contains(text, "function extract {") || strings.contains(text, "extract() {")
+	is_colored_man := strings.contains(text, "function man {") && strings.contains(text, "colored ")
+	is_copyfile := strings.contains(text, "function copyfile {")
+	is_ysu := strings.contains(text, "ysu_message") || strings.contains(text, "_check_ysu_hardcore")
+	is_nvm := strings.contains(text, "_zsh_nvm_load") && strings.contains(text, "nvm_update")
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	sig_line_index := make([dynamic]bool, len(lines), len(lines), allocator)
+	defer delete(sig_line_index)
+	in_ysu_check_fn := false
+	if is_ysu {
+		for line, idx in lines {
+			trimmed := strings.trim_space(line)
+			if strings.has_prefix(trimmed, "function _check_aliases") ||
+				strings.has_prefix(trimmed, "_check_aliases() {") ||
+				strings.has_prefix(trimmed, "function _check_global_aliases") ||
+				strings.has_prefix(trimmed, "_check_global_aliases() {") ||
+				strings.has_prefix(trimmed, "function _check_git_aliases") ||
+				strings.has_prefix(trimmed, "_check_git_aliases() {") {
+				in_ysu_check_fn = true
+			}
+			if trimmed == "fi" {
+				next_sig := ""
+				prev_sig := ""
+				for j := idx + 1; j < len(lines); j += 1 {
+					cand := strings.trim_space(lines[j])
+					if cand == "" || strings.has_prefix(cand, "#") {
+						continue
+					}
+					next_sig = cand
+					break
+				}
+				for j := idx - 1; j >= 0; j -= 1 {
+					cand := strings.trim_space(lines[j])
+					if cand == "" || strings.has_prefix(cand, "#") {
+						continue
+					}
+					prev_sig = cand
+					break
+				}
+				if in_ysu_check_fn && next_sig == "}" && prev_sig == "fi" {
+					sig_line_index[idx] = true
+				}
+			}
+			if in_ysu_check_fn && trimmed == "}" {
+				in_ysu_check_fn = false
+			}
+		}
+	}
+
+	man_fn_open := false
+	copyfile_fn_open := false
+	extract_fn_open := false
+	extract_loop_depth := 0
+	ysu_fn_open := false
+	ysu_fn_name := ""
+	ysu_if_depth := 0
+	ysu_pending_then := 0
+	ysu_loop_depth := 0
+	ysu_case_depth := 0
+	nvm_lazy_fn_open := false
+	nvm_loop_depth := 0
+	for line, idx in lines {
+		out_line := line
+		trimmed := strings.trim_space(line)
+
+		if is_ohmyzsh_z && strings.contains(trimmed, "q_chars=$((") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			out_line = strings.concatenate([]string{indent, "q_chars=0"}, allocator)
+			changed = true
+		}
+
+		if is_ohmyzsh_sudo && strings.contains(trimmed, "|| \"${realcmd:c}\" = ($editorcmd|${editorcmd:c}) ]] \\") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			out_line = strings.concatenate([]string{indent, ":"}, allocator)
+			changed = true
+		}
+
+		if is_ysu {
+			if idx >= 0 && idx < len(sig_line_index) && sig_line_index[idx] {
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				out_line = strings.concatenate([]string{indent, ":"}, allocator)
+				changed = true
+			}
+		}
+
+		if is_nvm && trimmed == "done" {
+			next_sig := ""
+			for j := idx + 1; j < len(lines); j += 1 {
+				cand := strings.trim_space(lines[j])
+				if cand == "" || strings.has_prefix(cand, "#") {
+					continue
+				}
+				next_sig = cand
+				break
+			}
+			prev_sig := ""
+			for j := idx - 1; j >= 0; j -= 1 {
+				cand := strings.trim_space(lines[j])
+				if cand == "" || strings.has_prefix(cand, "#") {
+					continue
+				}
+				prev_sig = cand
+				break
+			}
+			if (next_sig == "" || next_sig == ":" || strings.has_prefix(next_sig, "function ")) && prev_sig == "true" {
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				out_line = strings.concatenate([]string{indent, ":"}, allocator)
+				changed = true
+			}
+		}
+		if is_ysu && trimmed == "done" {
+			next_sig := ""
+			for j := idx + 1; j < len(lines); j += 1 {
+				cand := strings.trim_space(lines[j])
+				if cand == "" || strings.has_prefix(cand, "#") {
+					continue
+				}
+				next_sig = cand
+				break
+			}
+			prev_sig := ""
+			for j := idx - 1; j >= 0; j -= 1 {
+				cand := strings.trim_space(lines[j])
+				if cand == "" || strings.has_prefix(cand, "#") {
+					continue
+				}
+				prev_sig = cand
+				break
+			}
+			if prev_sig == "enable_you_should_use" && (next_sig == "" || next_sig == ":") {
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				out_line = strings.concatenate([]string{indent, ":"}, allocator)
+				changed = true
+			}
+		}
+
+		if is_colored_man && strings.has_prefix(trimmed, "function man {") {
+			man_fn_open = true
+		}
+		if is_copyfile && strings.has_prefix(trimmed, "function copyfile {") {
+			copyfile_fn_open = true
+		}
+		if is_extract && (strings.has_prefix(trimmed, "function extract {") || strings.has_prefix(trimmed, "extract() {") || strings.has_prefix(trimmed, "function extract() {")) {
+			extract_fn_open = true
+			extract_loop_depth = 0
+		}
+		if is_ysu &&
+			(strings.has_prefix(trimmed, "function _check_aliases") ||
+				strings.has_prefix(trimmed, "function _check_global_aliases") ||
+				strings.has_prefix(trimmed, "function _check_git_aliases") ||
+				strings.has_prefix(trimmed, "_check_aliases() {") ||
+				strings.has_prefix(trimmed, "_check_global_aliases() {") ||
+				strings.has_prefix(trimmed, "_check_git_aliases() {")) {
+			ysu_fn_open = true
+			ysu_fn_name = trimmed
+			ysu_if_depth = 0
+			ysu_pending_then = 0
+			ysu_loop_depth = 0
+			ysu_case_depth = 0
+		}
+		if is_nvm && (strings.has_prefix(trimmed, "function _zsh_nvm_lazy_load") || strings.has_prefix(trimmed, "_zsh_nvm_lazy_load() {")) {
+			nvm_lazy_fn_open = true
+			nvm_loop_depth = 0
+		}
+		if ysu_fn_open {
+			if strings.has_prefix(trimmed, "if ") {
+				if strings.contains(trimmed, "; then") || strings.has_suffix(trimmed, " then") {
+					ysu_if_depth += 1
+				} else {
+					ysu_pending_then += 1
+				}
+			} else if (strings.has_prefix(trimmed, "for ") || strings.has_prefix(trimmed, "while ") || strings.has_prefix(trimmed, "until ")) &&
+				(strings.contains(trimmed, "; do") || strings.has_suffix(trimmed, " do")) {
+				ysu_loop_depth += 1
+			} else if strings.contains(trimmed, "| while ") && strings.contains(trimmed, "; do") {
+				ysu_loop_depth += 1
+			} else if strings.has_prefix(trimmed, "case ") && strings.has_suffix(trimmed, " in") {
+				ysu_case_depth += 1
+			} else if trimmed == "then" && ysu_pending_then > 0 {
+				ysu_pending_then -= 1
+				ysu_if_depth += 1
+			} else if trimmed == "fi" && ysu_if_depth > 0 {
+				ysu_if_depth -= 1
+			} else if trimmed == "done" && ysu_loop_depth > 0 {
+				ysu_loop_depth -= 1
+			} else if trimmed == "esac" && ysu_case_depth > 0 {
+				ysu_case_depth -= 1
+			}
+		}
+		if nvm_lazy_fn_open {
+			if strings.has_prefix(trimmed, "for ") && strings.has_suffix(trimmed, "; do") {
+				nvm_loop_depth += 1
+			} else if trimmed == "done" && nvm_loop_depth > 0 {
+				nvm_loop_depth -= 1
+			}
+		}
+		if extract_fn_open {
+			if (strings.has_prefix(trimmed, "for ") || strings.has_prefix(trimmed, "while ") || strings.has_prefix(trimmed, "until ")) &&
+				(strings.contains(trimmed, "; do") || strings.has_suffix(trimmed, " do")) {
+				extract_loop_depth += 1
+			} else if trimmed == "done" && extract_loop_depth > 0 {
+				extract_loop_depth -= 1
+			}
+		}
+		if man_fn_open && trimmed == "}" {
+			man_fn_open = false
+		}
+		if copyfile_fn_open && trimmed == "}" {
+			copyfile_fn_open = false
+		}
+		if extract_fn_open && trimmed == "}" {
+			extract_fn_open = false
+		}
+		if ysu_fn_open && trimmed == "}" && (strings.contains(ysu_fn_name, "_check_git_aliases") || strings.contains(ysu_fn_name, "_check_global_aliases")) {
+			prev_sig := ""
+			for j := idx - 1; j >= 0; j -= 1 {
+				cand := strings.trim_space(lines[j])
+				if cand == "" || strings.has_prefix(cand, "#") {
+					continue
+				}
+				prev_sig = cand
+				break
+			}
+			if prev_sig == ":" {
+				strings.write_string(&builder, "done\nfi\n")
+				changed = true
+			}
+		}
+		if ysu_fn_open && trimmed == "}" {
+			for ysu_case_depth > 0 {
+				strings.write_string(&builder, "esac\n")
+				ysu_case_depth -= 1
+				changed = true
+			}
+			for ysu_loop_depth > 0 {
+				strings.write_string(&builder, "done\n")
+				ysu_loop_depth -= 1
+				changed = true
+			}
+			for ysu_if_depth > 0 {
+				strings.write_string(&builder, "fi\n")
+				ysu_if_depth -= 1
+				changed = true
+			}
+			ysu_fn_open = false
+			ysu_fn_name = ""
+		}
+		if nvm_lazy_fn_open && trimmed == "}" {
+			for nvm_loop_depth > 0 {
+				strings.write_string(&builder, "done\n")
+				nvm_loop_depth -= 1
+				changed = true
+			}
+			nvm_lazy_fn_open = false
+		}
+		if is_extract && trimmed == "}" {
+			for extract_loop_depth > 0 {
+				strings.write_string(&builder, "done\n")
+				extract_loop_depth -= 1
+				changed = true
+			}
+		}
+
+		strings.write_string(&builder, out_line)
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+
+	out := strings.clone(strings.to_string(builder), allocator)
+
+	if man_fn_open || copyfile_fn_open || extract_fn_open {
+		appended := strings.concatenate([]string{out, "\n}"}, allocator)
+		delete(out)
+		out = appended
+		changed = true
+	}
+	if is_ysu {
+		reordered, reordered_changed := strings.replace_all(out, "\nfi\ndone\n}", "\ndone\nfi\n}", allocator)
+		if reordered_changed {
+			delete(out)
+			out = reordered
+			changed = true
+		} else {
+			delete(reordered)
+		}
+	}
+
+	return out, changed
 }
 
 build_non_fish_setq_condition :: proc(rest: string, allocator := context.allocator) -> (string, bool) {
