@@ -114,7 +114,12 @@ mark_hook_features_from_text :: proc(text: string, features: ^UsedFeatures) {
 	if strings.contains(text, "add-zsh-hook ") {
 		features.zsh_hooks = true
 	}
-	if strings.contains(text, "--on-event fish_preexec") || strings.contains(text, "--on-event fish_postexec") || strings.contains(text, "function fish_preexec") || strings.contains(text, "function fish_postexec") {
+	if strings.contains(text, "--on-event fish_preexec") ||
+		strings.contains(text, "--on-event fish_postexec") ||
+		strings.contains(text, "--on-event fish_prompt") ||
+		strings.contains(text, "--on-event fish_right_prompt") ||
+		strings.contains(text, "function fish_preexec") ||
+		strings.contains(text, "function fish_postexec") {
 		features.fish_events = true
 	}
 	if strings.contains(text, "function precmd") ||

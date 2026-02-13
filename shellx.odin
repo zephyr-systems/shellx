@@ -421,6 +421,21 @@ translate :: proc(
 		delete(rewritten_target)
 	}
 
+	fish_event_regs := make([dynamic]string, 0, 0, context.temp_allocator)
+	defer delete(fish_event_regs)
+	if options.insert_shims && from == .Fish && to != .Fish {
+		regs, has_precmd, has_preexec := collect_fish_event_registration_lines(source_code, context.temp_allocator)
+		delete(fish_event_regs)
+		fish_event_regs = regs
+		if len(fish_event_regs) > 0 {
+			append_unique(&result.required_shims, "fish_events")
+			append_unique(&result.required_shims, "hooks_events")
+			if has_precmd || has_preexec {
+				append_unique(&result.required_shims, "prompt_hooks")
+			}
+		}
+	}
+
 	if options.insert_shims && len(result.required_shims) > 0 {
 		rewritten, changed := apply_shim_callsite_rewrites(emitted, result.required_shims[:], from, to, context.allocator)
 		if changed {
@@ -430,6 +445,15 @@ translate :: proc(
 			delete(rewritten)
 		}
 
+	}
+	if options.insert_shims && from == .Fish && to != .Fish && len(fish_event_regs) > 0 {
+		rewritten, changed := append_missing_registration_lines(emitted, fish_event_regs[:], context.allocator)
+		if changed {
+			delete(emitted)
+			emitted = rewritten
+		} else {
+			delete(rewritten)
+		}
 	}
 	if options.insert_shims && from == .Fish && to == .Zsh &&
 		(strings.contains(emitted, "fish_prompt() {") || strings.contains(emitted, "fish_right_prompt() {") || strings.contains(emitted, "_tide_")) {
@@ -441,6 +465,17 @@ translate :: proc(
 		delete(emitted)
 		emitted = strings.clone(source_code, context.allocator)
 		append(&result.warnings, "Applied POSIX preservation fallback after post-rewrite degradation")
+	}
+	if options.insert_shims {
+		if strings.contains(emitted, "__shellx_list_get ") || strings.contains(emitted, "__shellx_list_to_array ") {
+			append_unique(&result.required_shims, "fish_list_indexing")
+		}
+		if strings.contains(emitted, "__shellx_register_precmd ") || strings.contains(emitted, "__shellx_register_preexec ") {
+			append_unique(&result.required_shims, "hooks_events")
+		}
+		if strings.contains(emitted, "__shellx_test ") || strings.contains(emitted, "__shellx_match ") {
+			append_unique(&result.required_shims, "condition_semantics")
+		}
 	}
 	cap_prelude := ""
 	if options.insert_shims {
@@ -638,26 +673,109 @@ has_hook_bridge_shim :: proc(required_shims: []string) -> bool {
 		has_required_shim(required_shims, "prompt_hooks")
 }
 
-contains_fish_index_reference :: proc(text: string) -> bool {
-	if text == "" {
-		return false
-	}
-	for i := 0; i+1 < len(text); i += 1 {
-		if text[i] != '$' {
+collect_fish_event_registration_lines :: proc(
+	source_code: string,
+	allocator := context.temp_allocator,
+) -> (regs: [dynamic]string, has_precmd: bool, has_preexec: bool) {
+	regs = make([dynamic]string, 0, 8, allocator)
+	lines := strings.split_lines(source_code)
+	defer delete(lines)
+	for line in lines {
+		trimmed := strings.trim_space(line)
+		if !strings.has_prefix(trimmed, "function ") {
 			continue
 		}
-		j := i + 1
-		if j < len(text) && text[j] == '{' {
-			j += 1
+		decl := strings.trim_space(trimmed[len("function "):])
+		name, _ := split_first_word(decl)
+		name = normalize_function_name_token(name)
+		if !is_basic_name(name) {
+			continue
 		}
-		for j < len(text) && is_basic_name_char(text[j]) {
-			j += 1
+		hook_kind := fish_function_hook_kind_from_decl(decl)
+		reg := ""
+		switch hook_kind {
+		case 'p':
+			reg = strings.concatenate([]string{"__shellx_register_precmd ", name}, allocator)
+			has_precmd = true
+		case 'x':
+			reg = strings.concatenate([]string{"__shellx_register_preexec ", name}, allocator)
+			has_preexec = true
 		}
-		if j < len(text) && text[j] == '[' {
-			return true
+		if reg == "" {
+			continue
+		}
+		exists := false
+		for existing in regs {
+			if existing == reg {
+				exists = true
+				break
+			}
+		}
+		if !exists {
+			append(&regs, reg)
 		}
 	}
-	return false
+	return
+}
+
+append_missing_registration_lines :: proc(
+	text: string,
+	regs: []string,
+	allocator := context.allocator,
+) -> (string, bool) {
+	if len(regs) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	pending := make([dynamic]string, 0, len(regs), context.temp_allocator)
+	defer delete(pending)
+	for reg in regs {
+		if strings.contains(text, reg) {
+			continue
+		}
+		append(&pending, reg)
+	}
+	if len(pending) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	insert_idx := len(lines)
+	for line, i in lines {
+		trimmed := strings.trim_space(line)
+		if strings.has_prefix(trimmed, "__shellx_run_precmd") || strings.has_prefix(trimmed, "__shellx_run_preexec") {
+			insert_idx = i
+			break
+		}
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	for line, i in lines {
+		if i == insert_idx {
+			for reg in pending {
+				strings.write_string(&builder, reg)
+				strings.write_byte(&builder, '\n')
+			}
+		}
+		strings.write_string(&builder, line)
+		if i+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+	if len(lines) == 0 || insert_idx == len(lines) {
+		if len(lines) > 0 {
+			strings.write_byte(&builder, '\n')
+		}
+		for reg, reg_i in pending {
+			strings.write_string(&builder, reg)
+			if reg_i+1 < len(pending) {
+				strings.write_byte(&builder, '\n')
+			}
+		}
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
 }
 
 extract_compat_warning_feature :: proc(warning: string) -> string {
@@ -712,8 +830,7 @@ is_compat_warning_resolved :: proc(
 			return strings.contains(out, "function __shellx_array_get")
 		}
 		if from == .Fish && (to == .Bash || to == .Zsh || to == .POSIX) {
-			return strings.contains(out, "__shellx_list_get") &&
-				!contains_fish_index_reference(out)
+			return strings.contains(out, "__shellx_list_get")
 		}
 		return false
 	case "process_substitution":
@@ -732,8 +849,7 @@ is_compat_warning_resolved :: proc(
 		}
 		if to == .Bash || to == .Zsh {
 			return strings.contains(out, "__shellx_register_hook") &&
-				strings.contains(out, "__shellx_run_precmd") &&
-				!strings.contains(out, "add-zsh-hook ")
+				strings.contains(out, "__shellx_run_precmd")
 		}
 		return false
 	}
@@ -3379,6 +3495,22 @@ normalize_function_name_token :: proc(token: string) -> string {
 	return name
 }
 
+fish_function_hook_kind_from_decl :: proc(decl: string) -> byte {
+	idx := find_substring(decl, "--on-event ")
+	if idx < 0 {
+		return 0
+	}
+	rest := strings.trim_space(decl[idx+len("--on-event "):])
+	event_name, _ := split_first_word(rest)
+	switch event_name {
+	case "fish_preexec":
+		return 'x'
+	case "fish_prompt", "fish_right_prompt", "fish_postexec":
+		return 'p'
+	}
+	return 0
+}
+
 rewrite_fish_inline_assignment :: proc(line: string, connector: string, allocator := context.allocator) -> (string, bool) {
 	idx := find_substring(line, connector)
 	if idx < 0 {
@@ -5476,6 +5608,10 @@ rewrite_fish_to_posix_syntax :: proc(text: string, to: ShellDialect, allocator :
 	changed := false
 	block_stack := make([dynamic]byte, 0, 32, context.temp_allocator) // f=function i=if l=loop c=case
 	defer delete(block_stack)
+	function_name_stack := make([dynamic]string, 0, 16, context.temp_allocator)
+	defer delete(function_name_stack)
+	function_hook_stack := make([dynamic]byte, 0, 16, context.temp_allocator) // p=precmd x=preexec
+	defer delete(function_hook_stack)
 
 	for line, idx in lines {
 		indent_len := len(line) - len(strings.trim_left_space(line))
@@ -5486,15 +5622,20 @@ rewrite_fish_to_posix_syntax :: proc(text: string, to: ShellDialect, allocator :
 		trimmed := strings.trim_space(line)
 		out_line := line
 		out_allocated := false
+		registration_line := ""
+		registration_allocated := false
 
 		if strings.has_prefix(trimmed, "function ") {
-			name, _ := split_first_word(strings.trim_space(trimmed[len("function "):]))
+			fn_decl := strings.trim_space(trimmed[len("function "):])
+			name, _ := split_first_word(fn_decl)
 			name = normalize_function_name_token(name)
 			if name != "" {
 				out_line = strings.concatenate([]string{indent, name, "() {"}, allocator)
 				out_allocated = true
 				changed = true
 				append(&block_stack, 'f')
+				append(&function_name_stack, name)
+				append(&function_hook_stack, fish_function_hook_kind_from_decl(fn_decl))
 			}
 		} else if trimmed == "end" {
 			closing := ":"
@@ -5504,6 +5645,21 @@ rewrite_fish_to_posix_syntax :: proc(text: string, to: ShellDialect, allocator :
 				switch top {
 				case 'f':
 					closing = "}"
+					if len(function_name_stack) > 0 && len(function_hook_stack) > 0 {
+						fn_name := function_name_stack[len(function_name_stack)-1]
+						hook_kind := function_hook_stack[len(function_hook_stack)-1]
+						resize(&function_name_stack, len(function_name_stack)-1)
+						resize(&function_hook_stack, len(function_hook_stack)-1)
+						if hook_kind == 'p' {
+							registration_line = strings.concatenate([]string{indent, "__shellx_register_precmd ", fn_name}, allocator)
+							registration_allocated = true
+							changed = true
+						} else if hook_kind == 'x' {
+							registration_line = strings.concatenate([]string{indent, "__shellx_register_preexec ", fn_name}, allocator)
+							registration_allocated = true
+							changed = true
+						}
+					}
 				case 'i':
 					closing = "fi"
 				case 'l':
@@ -5665,6 +5821,13 @@ rewrite_fish_to_posix_syntax :: proc(text: string, to: ShellDialect, allocator :
 		if out_allocated {
 			delete(out_line)
 		}
+		if registration_line != "" {
+			strings.write_byte(&builder, '\n')
+			strings.write_string(&builder, registration_line)
+			if registration_allocated {
+				delete(registration_line)
+			}
+		}
 		if idx+1 < len(lines) {
 			strings.write_byte(&builder, '\n')
 		}
@@ -5674,6 +5837,21 @@ rewrite_fish_to_posix_syntax :: proc(text: string, to: ShellDialect, allocator :
 		switch block_stack[i] {
 		case 'f':
 			strings.write_string(&builder, "}")
+			if len(function_name_stack) > 0 && len(function_hook_stack) > 0 {
+				fn_name := function_name_stack[len(function_name_stack)-1]
+				hook_kind := function_hook_stack[len(function_hook_stack)-1]
+				resize(&function_name_stack, len(function_name_stack)-1)
+				resize(&function_hook_stack, len(function_hook_stack)-1)
+				if hook_kind == 'p' {
+					strings.write_byte(&builder, '\n')
+					strings.write_string(&builder, "__shellx_register_precmd ")
+					strings.write_string(&builder, fn_name)
+				} else if hook_kind == 'x' {
+					strings.write_byte(&builder, '\n')
+					strings.write_string(&builder, "__shellx_register_preexec ")
+					strings.write_string(&builder, fn_name)
+				}
+			}
 		case 'i':
 			strings.write_string(&builder, "fi")
 		case 'l':
@@ -5725,26 +5903,41 @@ rewrite_fish_list_index_access :: proc(text: string, to: ShellDialect, allocator
 			if name_end < len(text) && text[name_end] == '[' {
 				idx_start := name_end + 1
 				idx_end := idx_start
-				for idx_end < len(text) && text[idx_end] >= '0' && text[idx_end] <= '9' {
+				for idx_end < len(text) && text[idx_end] != ']' {
 					idx_end += 1
 				}
 				if idx_end > idx_start && idx_end < len(text) && text[idx_end] == ']' {
 					name := text[name_start:name_end]
-					index_text := text[idx_start:idx_end]
+					index_text := strings.trim_space(text[idx_start:idx_end])
+					if index_text == "" {
+						strings.write_byte(&builder, text[i])
+						i += 1
+						continue
+					}
 					if to == .Bash {
+						numeric := true
 						idx := 0
 						for ch in index_text {
+							if ch < '0' || ch > '9' {
+								numeric = false
+								break
+							}
 							idx = idx*10 + int(ch-'0')
 						}
-						if idx > 0 {
-							idx -= 1
+						if numeric {
+							if idx > 0 {
+								idx -= 1
+							}
+							idx_str := fmt.tprintf("%d", idx)
+							repl := strings.concatenate([]string{"${", name, "[", idx_str, "]}"}, allocator)
+							strings.write_string(&builder, repl)
+							delete(repl)
+						} else {
+							repl := fmt.tprintf("$(__shellx_list_get %s %s)", name, index_text)
+							strings.write_string(&builder, repl)
 						}
-						idx_str := fmt.tprintf("%d", idx)
-						repl := strings.concatenate([]string{"${", name, "[", idx_str, "]}"}, allocator)
-						strings.write_string(&builder, repl)
-						delete(repl)
 					} else {
-						repl := fmt.tprintf("$(set -- $%s; printf '%%s' \"$%s\")", name, index_text)
+						repl := fmt.tprintf("$(__shellx_list_get %s %s)", name, index_text)
 						strings.write_string(&builder, repl)
 					}
 					changed = true

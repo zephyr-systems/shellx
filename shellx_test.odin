@@ -1014,6 +1014,17 @@ echo $arr[2]`
 }
 
 @(test)
+test_semantic_array_list_fish_dynamic_index_to_bash_runtime :: proc(t: ^testing.T) {
+	if !should_run_test("test_semantic_array_list_fish_dynamic_index_to_bash_runtime") { return }
+	source := `set arr red blue green
+set i (echo 2)
+echo $arr[$i]`
+	out, ok := run_translated_script_runtime(t, source, .Fish, .Bash, "array_list_fish_dynamic_index_to_bash_runtime")
+	if !ok { return }
+	testing.expect(t, out == "blue", "Fish dynamic list indexing should preserve semantic value in Bash output")
+}
+
+@(test)
 test_semantic_assoc_map_zsh_to_bash_runtime :: proc(t: ^testing.T) {
 	if !should_run_test("test_semantic_assoc_map_zsh_to_bash_runtime") { return }
 	source := `typeset -A m
@@ -1062,6 +1073,30 @@ __shellx_run_precmd`
 	out, ok := run_translated_script_runtime(t, source, .Zsh, .Bash, "hook_multi_precmd_zsh_to_bash_runtime")
 	if !ok { return }
 	testing.expect(t, out == "one\ntwo", "Hook bridge should preserve multiple precmd registrations in order")
+}
+
+@(test)
+test_semantic_hook_fish_prompt_event_to_bash_runtime :: proc(t: ^testing.T) {
+	if !should_run_test("test_semantic_hook_fish_prompt_event_to_bash_runtime") { return }
+	source := `function __evt_prompt --on-event fish_prompt
+  echo prompt
+end
+__shellx_run_precmd`
+	out, ok := run_translated_script_runtime(t, source, .Fish, .Bash, "hook_fish_prompt_event_to_bash_runtime")
+	if !ok { return }
+	testing.expect(t, out == "prompt", "Fish prompt event handlers should register as precmd hooks in Bash output")
+}
+
+@(test)
+test_semantic_hook_fish_preexec_event_to_bash_runtime :: proc(t: ^testing.T) {
+	if !should_run_test("test_semantic_hook_fish_preexec_event_to_bash_runtime") { return }
+	source := `function __evt_preexec --on-event fish_preexec
+  echo preexec
+end
+__shellx_run_preexec cmd`
+	out, ok := run_translated_script_runtime(t, source, .Fish, .Bash, "hook_fish_preexec_event_to_bash_runtime")
+	if !ok { return }
+	testing.expect(t, strings.contains(out, "preexec"), "Fish preexec event handlers should register as preexec hooks in Bash output")
 }
 
 @(test)

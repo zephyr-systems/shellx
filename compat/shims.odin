@@ -334,6 +334,9 @@ __shellx_list_to_array() {
 __shellx_list_get() {
   local __name="$1"
   local __idx="$2"
+  if [ "${__idx#\\$}" != "$__idx" ]; then
+    eval "__idx=${__idx}"
+  fi
   local __adj="$__idx"
   case "$__idx" in
     ''|*[!0-9]*) __adj="$__idx" ;;

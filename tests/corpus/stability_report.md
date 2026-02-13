@@ -11,10 +11,10 @@ Cross-dialect runs executed: 126
 | bash->fish | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 1 | 0 | 1.781 | 8.563 | 15 |
 | bash->posix | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 12 | 0.713 | 4.659 | 12 |
 | bash->zsh | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 0 | 0.346 | 0.945 | 0 |
-| fish->bash | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 8 | 1.046 | 7.721 | 11 |
-| fish->posix | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 2 | 0.969 | 7.267 | 11 |
-| fish->zsh | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 8 | 1.139 | 5.588 | 11 |
-| zsh->bash | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 4 | 0.822 | 2.050 | 4 |
+| fish->bash | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 0 | 1.058 | 7.721 | 11 |
+| fish->posix | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 2 | 0.994 | 7.403 | 11 |
+| fish->zsh | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 0 | 1.140 | 5.827 | 11 |
+| zsh->bash | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 0 | 0.822 | 2.050 | 4 |
 | zsh->fish | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 0 | 2.101 | 10.386 | 15 |
 | zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 22 | 1.262 | 6.444 | 14 |
 
@@ -48,15 +48,6 @@ Cross-dialect runs executed: 126
 
 ### fish->bash
 
-- `arrays_maps/fish_list_indexing`: 6
-  - fish-done (plugin) Compat[fish_list_indexing]: Fish list behavior may not map one-to-one to Bash/Zsh arrays
-  - fish-replay (plugin) Compat[fish_list_indexing]: Fish list behavior may not map one-to-one to Bash/Zsh arrays
-  - fish-autopair (plugin) Compat[fish_list_indexing]: Fish list behavior may not map one-to-one to Bash/Zsh arrays
-  - fish-gitnow (plugin) Compat[fish_list_indexing]: Fish list behavior may not map one-to-one to Bash/Zsh arrays
-  - fish-fisher (plugin) Compat[fish_list_indexing]: Fish list behavior may not map one-to-one to Bash/Zsh arrays
-- `hook_event/fish_events`: 2
-  - fish-done (plugin) Compat[fish_events]: Fish event functions do not directly map to Bash/Zsh hooks
-  - fish-tide-theme (theme) Compat[fish_events]: Fish event functions do not directly map to Bash/Zsh hooks
 - `parse_recovery/parse_diagnostic`: 1
   - fish-autopair (plugin) Parse diagnostic at <input>:1:1: Parse tree contains syntax errors
 
@@ -70,25 +61,8 @@ Cross-dialect runs executed: 126
 
 ### fish->zsh
 
-- `arrays_maps/fish_list_indexing`: 6
-  - fish-done (plugin) Compat[fish_list_indexing]: Fish list behavior may not map one-to-one to Bash/Zsh arrays
-  - fish-replay (plugin) Compat[fish_list_indexing]: Fish list behavior may not map one-to-one to Bash/Zsh arrays
-  - fish-autopair (plugin) Compat[fish_list_indexing]: Fish list behavior may not map one-to-one to Bash/Zsh arrays
-  - fish-gitnow (plugin) Compat[fish_list_indexing]: Fish list behavior may not map one-to-one to Bash/Zsh arrays
-  - fish-fisher (plugin) Compat[fish_list_indexing]: Fish list behavior may not map one-to-one to Bash/Zsh arrays
-- `hook_event/fish_events`: 2
-  - fish-done (plugin) Compat[fish_events]: Fish event functions do not directly map to Bash/Zsh hooks
-  - fish-tide-theme (theme) Compat[fish_events]: Fish event functions do not directly map to Bash/Zsh hooks
 - `parse_recovery/parse_diagnostic`: 1
   - fish-autopair (plugin) Parse diagnostic at <input>:1:1: Parse tree contains syntax errors
-
-### zsh->bash
-
-- `hook_event/zsh_hooks`: 4
-  - zsh-autosuggestions (plugin) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
-  - zsh-syntax-highlighting (plugin) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
-  - ohmyzsh-z (plugin) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
-  - zsh-spaceship (theme) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
 
 ### zsh->posix
 
@@ -117,7 +91,7 @@ Cross-dialect runs executed: 126
 | bash->posix | 16 | 12 | 0 | 0 | 0 | 0 | 0 |
 | bash->zsh | 16 | 0 | 0 | 0 | 0 | 0 | 0 |
 | fish->bash | 11 | 6 | 2 | 11 | 0 | 0 | 0 |
-| fish->posix | 11 | 5 | 2 | 11 | 0 | 0 | 0 |
+| fish->posix | 11 | 6 | 2 | 11 | 0 | 0 | 0 |
 | fish->zsh | 11 | 6 | 3 | 11 | 0 | 0 | 0 |
 | zsh->bash | 15 | 0 | 4 | 0 | 0 | 0 | 0 |
 | zsh->fish | 15 | 15 | 4 | 15 | 14 | 1 | 0 |
