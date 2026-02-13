@@ -14,9 +14,9 @@ Cross-dialect runs executed: 126
 | fish->bash | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 19 | 1.012 | 7.679 | 11 |
 | fish->posix | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 18 | 0.954 | 7.225 | 11 |
 | fish->zsh | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 19 | 1.100 | 5.528 | 11 |
-| zsh->bash | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 24 | 4 | 0.816 | 1.949 | 4 |
-| zsh->fish | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 16 | 0 | 2.121 | 10.303 | 15 |
-| zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 24 | 22 | 1.257 | 6.342 | 14 |
+| zsh->bash | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 4 | 4 | 0.816 | 1.949 | 4 |
+| zsh->fish | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 0 | 0 | 2.101 | 10.386 | 15 |
+| zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 4 | 22 | 1.257 | 6.342 | 14 |
 
 ## Failures
 
@@ -113,21 +113,11 @@ Cross-dialect runs executed: 126
   - zsh-syntax-highlighting (plugin) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
   - ohmyzsh-z (plugin) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
   - zsh-spaceship (theme) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
-- `parse_recovery/parse_diagnostic`: 24
-  - ohmyzsh-git (plugin) Parse diagnostic at <input>:3:12: Syntax error
-  - ohmyzsh-git (plugin) Parse diagnostic at <input>:176:14: Syntax error
-  - ohmyzsh-git (plugin) Parse diagnostic at <input>:337:29: Syntax error
-  - ohmyzsh-git (plugin) Parse diagnostic at <input>:0:0: 1 additional diagnostics suppressed
-  - ohmyzsh-z (plugin) Parse diagnostic at <input>:232:11: Syntax error
-
-### zsh->fish
-
-- `parse_recovery/parse_diagnostic`: 16
+- `parse_recovery/parse_diagnostic`: 4
   - ohmyzsh-sudo (plugin) Parse diagnostic at <input>:103:6: Syntax error
   - ohmyzsh-sudo (plugin) Parse diagnostic at <input>:0:0: 8 additional diagnostics suppressed
-  - ohmyzsh-extract (plugin) Parse diagnostic at <input>:1:1: Parse tree contains syntax errors
-  - ohmyzsh-colored-man-pages (plugin) Parse diagnostic at <input>:22:8: Syntax error
-  - ohmyzsh-colored-man-pages (plugin) Parse diagnostic at <input>:38:27: Syntax error
+  - ohmyzsh-colored-man-pages (plugin) Parse diagnostic at <input>:22:6: Syntax error
+  - ohmyzsh-colored-man-pages (plugin) Parse diagnostic at <input>:0:0: 3 additional diagnostics suppressed
 
 ### zsh->posix
 
@@ -147,12 +137,11 @@ Cross-dialect runs executed: 126
   - zsh-syntax-highlighting (plugin) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
   - ohmyzsh-z (plugin) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
   - zsh-spaceship (theme) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
-- `parse_recovery/parse_diagnostic`: 24
-  - ohmyzsh-git (plugin) Parse diagnostic at <input>:3:12: Syntax error
-  - ohmyzsh-git (plugin) Parse diagnostic at <input>:176:14: Syntax error
-  - ohmyzsh-git (plugin) Parse diagnostic at <input>:337:29: Syntax error
-  - ohmyzsh-git (plugin) Parse diagnostic at <input>:0:0: 1 additional diagnostics suppressed
-  - ohmyzsh-z (plugin) Parse diagnostic at <input>:232:11: Syntax error
+- `parse_recovery/parse_diagnostic`: 4
+  - ohmyzsh-sudo (plugin) Parse diagnostic at <input>:103:6: Syntax error
+  - ohmyzsh-sudo (plugin) Parse diagnostic at <input>:0:0: 8 additional diagnostics suppressed
+  - ohmyzsh-colored-man-pages (plugin) Parse diagnostic at <input>:22:6: Syntax error
+  - ohmyzsh-colored-man-pages (plugin) Parse diagnostic at <input>:0:0: 3 additional diagnostics suppressed
 
 ## Semantic Parity Matrix
 

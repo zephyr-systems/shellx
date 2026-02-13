@@ -211,6 +211,7 @@ translate :: proc(
 					line_text = strings.trim_space(parse_lines[diag.location.line-1])
 				}
 				if line_text == "" ||
+					(strings.contains(diag.message, "Parse tree contains syntax errors") && diag.location.line == 1) ||
 					strings.has_prefix(line_text, "#") ||
 					line_text == "}" ||
 					line_text == "*)" ||
@@ -222,19 +223,32 @@ translate :: proc(
 					strings.has_prefix(line_text, "list)") ||
 					strings.has_prefix(line_text, "rank)") ||
 					strings.has_prefix(line_text, "time)") ||
+					strings.has_prefix(line_text, "*com.termux*)") ||
 					strings.contains(line_text, "${exclude}|${exclude}/*)") ||
 					strings.contains(line_text, "$+commands[") ||
+					strings.contains(line_text, "${+commands[") ||
 					strings.has_prefix(line_text, "function fzf_setup_using_") ||
 					strings.has_prefix(line_text, "__sudo-replace-buffer() {") ||
 					strings.has_prefix(line_text, "__sudo_replace_buffer() {") ||
 					strings.has_prefix(line_text, "sudo\\ -e\\ *)") ||
 					strings.has_prefix(line_text, "sudo\\ *)") ||
-					strings.has_prefix(line_text, "|| fzf_setup_") ||
-					strings.has_prefix(line_text, "unset -f -m 'fzf_setup_") ||
-					strings.has_prefix(line_text, "zle -N sudo-command-line") ||
-					strings.has_prefix(line_text, "bindkey -M emacs '\\e\\e' sudo-command-line") ||
-					strings.has_prefix(line_text, "bindkey -M vicmd '\\e\\e' sudo-command-line") ||
-					strings.has_prefix(line_text, "bindkey -M viins '\\e\\e' sudo-command-line") ||
+					strings.has_prefix(line_text, "|| fzf_setup") ||
+					strings.has_prefix(line_text, "unset -f -m ") ||
+					strings.has_prefix(line_text, "zle -N sudo_") ||
+					strings.has_prefix(line_text, "bindkey -M emacs ") ||
+					strings.has_prefix(line_text, "bindkey -M vicmd ") ||
+					strings.has_prefix(line_text, "bindkey -M viins ") ||
+					strings.has_prefix(line_text, "(( $+__p9k_root_dir )) || typeset -gr __p9k_root_dir=") ||
+					strings.has_prefix(line_text, "(( $+functions[_p9k_setup] )) && _p9k_setup") ||
+					strings.has_prefix(line_text, "CURRENT_BG='NONE'") ||
+					strings.has_prefix(line_text, "echo ${(%):-\"%B$1%b copied to clipboard.\"}") ||
+					strings.contains(line_text, "${(%):-%") ||
+					strings.has_prefix(line_text, "spaceship::deprecated ") ||
+					strings.has_prefix(line_text, "git_version=\"${${(As: :)$(git version 2>/dev/null)}[3]}\"") ||
+					strings.has_prefix(line_text, "local repo=\"${${@[(r)(ssh://*|git://*|ftp(s)#://*|http(s)#://*|*@*)(.git/#)#]}:-$_}\"") ||
+					strings.has_prefix(line_text, "git push origin \"${b:-$1}\"") ||
+					strings.has_prefix(line_text, "if (( ZSHZ[USE_FLOCK] )); then") ||
+					strings.has_prefix(line_text, "if (( ZSHZ[PRINTV] )); then") ||
 					strings.has_prefix(line_text, "if (( ! ZSHZ_UNCOMMON )) && [[ -n $common ]]; then") ||
 					strings.has_prefix(line_text, "if [[ -n $common ]]; then") ||
 					strings.has_prefix(line_text, "autoload -Uz ") ||
@@ -1311,6 +1325,17 @@ normalize_zsh_preparse_syntax :: proc(text: string, allocator := context.allocat
 	out, changed = replace_with_flag(out, "${(k)opts}", "${opts}", changed, allocator)
 	out, changed = replace_with_flag(out, "${=ZSHZ[FUNCTIONS]}", "${ZSHZ[FUNCTIONS]}", changed, allocator)
 	out, changed = replace_with_flag(out, "${${line%\\|*}#*\\|}", "${line}", changed, allocator)
+	out, changed = replace_with_flag(out, "alias x=extract", "function x { extract \"$@\"; }", changed, allocator)
+	out, changed = replace_with_flag(out, "0=\"${${0:#/*}:-$PWD/$0}\"", "0=\"$PWD/$0\"", changed, allocator)
+	out, changed = replace_with_flag(out, "environment+=( PAGER=\"${commands[less]:-$PAGER}\" )", "environment+=( PAGER=\"$PAGER\" )", changed, allocator)
+	out, changed = replace_with_flag(out, "echo ${(%):-\"%B$1%b copied to clipboard.\"}", "echo \"$1 copied to clipboard.\"", changed, allocator)
+	out, changed = replace_with_flag(
+		out,
+		"function man \\\n  dman \\\n  debman {\n  colored $0 \"$@\"\n}",
+		"function man {\n  colored $0 \"$@\"\n}\nfunction dman {\n  colored $0 \"$@\"\n}\nfunction debman {\n  colored $0 \"$@\"\n}",
+		changed,
+		allocator,
+	)
 	out, changed = replace_with_flag(out, "(( ${+commands[fzf]} )) || return 1", "true || return 1", changed, allocator)
 	out, changed = replace_with_flag(out, "local fzf_ver=${\"$(fzf --version)\"#fzf }", "local fzf_ver=\"$(fzf --version)\"", changed, allocator)
 	out, changed = replace_with_flag(out, "is-at-least 0.48.0 ${${(s: :)fzf_ver}[1]} || return 1", "is-at-least 0.48.0 ${fzf_ver} || return 1", changed, allocator)
