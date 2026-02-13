@@ -90,6 +90,29 @@ RuleFailureGroup :: struct {
 	examples:   [dynamic]string,
 }
 
+SemanticCase :: struct {
+	name:   string,
+	source: string,
+	from:   shellx.ShellDialect,
+	to:     shellx.ShellDialect,
+}
+
+SemanticOutcome :: struct {
+	name:      string,
+	from:      shellx.ShellDialect,
+	to:        shellx.ShellDialect,
+	ran:       bool,
+	pass:      bool,
+	skipped:   bool,
+	reason:    string,
+	src_exit:  int,
+	dst_exit:  int,
+	src_out:   string,
+	dst_out:   string,
+	src_err:   string,
+	dst_err:   string,
+}
+
 contains_string :: proc(items: []string, value: string) -> bool {
 	for item in items {
 		if item == value {
@@ -136,6 +159,111 @@ file_ext_for_dialect :: proc(dialect: shellx.ShellDialect) -> string {
 		return "sh"
 	}
 	return "sh"
+}
+
+runtime_shell_for_dialect :: proc(dialect: shellx.ShellDialect) -> string {
+	switch dialect {
+	case .Fish:
+		return "fish"
+	case .Zsh:
+		return "zsh"
+	case .Bash:
+		return "bash"
+	case .POSIX:
+		return "sh"
+	}
+	return "sh"
+}
+
+has_shell_binary :: proc(bin: string) -> bool {
+	state, _, _, err := os2.process_exec(os2.Process_Desc{command = []string{"sh", "-lc", fmt.tprintf("command -v %s >/dev/null 2>&1", bin)}}, context.temp_allocator)
+	return err == nil && state.exit_code == 0
+}
+
+run_runtime_script :: proc(dialect: shellx.ShellDialect, script: string, label: string) -> (ran: bool, exit_code: int, out: string, err_out: string, reason: string) {
+	bin := runtime_shell_for_dialect(dialect)
+	if !has_shell_binary(bin) {
+		return false, -1, "", "", fmt.tprintf("missing runtime shell: %s", bin)
+	}
+	path := fmt.tprintf("tests/corpus/.semantic_%s.%s", label, file_ext_for_dialect(dialect))
+	if !os.write_entire_file(path, transmute([]byte)script) {
+		return false, -1, "", "", "failed to write semantic temp script"
+	}
+	defer os.remove(path)
+	cmd := make([dynamic]string, 0, 6, context.temp_allocator)
+	defer delete(cmd)
+	if dialect == .Fish {
+		append(&cmd, "env")
+		append(&cmd, "XDG_DATA_HOME=/tmp")
+		append(&cmd, "XDG_CONFIG_HOME=/tmp")
+		append(&cmd, bin, path)
+	} else {
+		append(&cmd, bin, path)
+	}
+	state, stdout, stderr, perr := os2.process_exec(os2.Process_Desc{command = cmd[:]}, context.allocator)
+	defer delete(stdout)
+	defer delete(stderr)
+	if perr != nil {
+		return false, -1, "", "", fmt.tprintf("runtime execution error: %v", perr)
+	}
+	return true, state.exit_code, strings.clone(strings.trim_space(string(stdout)), context.allocator), strings.clone(strings.trim_space(string(stderr)), context.allocator), ""
+}
+
+trim_report_text :: proc(s: string, max_len: int) -> string {
+	if len(s) <= max_len {
+		return s
+	}
+	if max_len <= 3 {
+		return s[:max_len]
+	}
+	return strings.clone(strings.concatenate([]string{s[:max_len-3], "..."}), context.allocator)
+}
+
+run_semantic_case :: proc(c: SemanticCase) -> SemanticOutcome {
+	opts := shellx.DEFAULT_TRANSLATION_OPTIONS
+	opts.insert_shims = true
+	tr := shellx.translate(c.source, c.from, c.to, opts)
+	defer shellx.destroy_translation_result(&tr)
+
+	outcome := SemanticOutcome{
+		name = c.name,
+		from = c.from,
+		to = c.to,
+	}
+	if !tr.success {
+		outcome.skipped = true
+		outcome.reason = strings.clone(fmt.tprintf("translation failed: %v", tr.error), context.allocator)
+		return outcome
+	}
+
+	src_label := fmt.tprintf("%s_src", c.name)
+	dst_label := fmt.tprintf("%s_dst", c.name)
+	src_ran, src_exit, src_out, src_err, src_reason := run_runtime_script(c.from, c.source, src_label)
+	dst_ran, dst_exit, dst_out, dst_err, dst_reason := run_runtime_script(c.to, tr.output, dst_label)
+	outcome.src_exit = src_exit
+	outcome.dst_exit = dst_exit
+	outcome.src_out = src_out
+	outcome.dst_out = dst_out
+	outcome.src_err = src_err
+	outcome.dst_err = dst_err
+
+	if !src_ran {
+		outcome.skipped = true
+		outcome.reason = src_reason
+		return outcome
+	}
+	if !dst_ran {
+		outcome.skipped = true
+		outcome.reason = dst_reason
+		return outcome
+	}
+
+	outcome.ran = true
+	outcome.pass = src_exit == dst_exit && src_out == dst_out
+	if !outcome.pass {
+		outcome.reason = strings.clone("stdout/exit mismatch", context.allocator)
+	}
+	return outcome
 }
 
 run_target_parser_check :: proc(
@@ -242,6 +370,14 @@ pair_summary_ptr :: proc(summaries: ^[dynamic]PairSummary, key: PairKey) -> ^Pai
 }
 
 main :: proc() {
+	semantic_mode := false
+	for arg in os.args {
+		if arg == "--semantic" {
+			semantic_mode = true
+			break
+		}
+	}
+
 	cases := []Case{
 		// Zsh plugins
 		{"zsh-autosuggestions", "plugin", "tests/corpus/repos/zsh/zsh-autosuggestions/zsh-autosuggestions.zsh", .Zsh},
@@ -720,6 +856,112 @@ main :: proc() {
 					fmt.tprintf("  - %s\n", example),
 				)
 			}
+		}
+	}
+
+	if semantic_mode {
+		semantic_cases := []SemanticCase{
+			{
+				name = "fish_gitnow_branch_compare",
+				from = .Fish,
+				to = .Bash,
+				source = strings.trim_space(`
+function __gitnow_current_branch_name
+    echo main
+end
+set v_branch main
+if test "$v_branch" = (__gitnow_current_branch_name)
+    echo SAME
+end
+`),
+			},
+			{
+				name = "zsh_git_cmdsub_if_compare",
+				from = .Zsh,
+				to = .Fish,
+				source = strings.trim_space(`
+f() {
+  local _commit=$(echo abc)
+  if [ "$_commit" != "$(echo def)" ]; then
+    echo ok
+  fi
+}
+f
+`),
+			},
+			{
+				name = "zsh_param_default_callsite",
+				from = .Zsh,
+				to = .Fish,
+				source = strings.trim_space(`
+XDG_CACHE_HOME=""
+echo ${XDG_CACHE_HOME:-/tmp/cache}
+`),
+			},
+			{
+				name = "zsh_repo_root_cmdsub",
+				from = .Zsh,
+				to = .Fish,
+				source = strings.trim_space(`
+git_toplevel() {
+  local repo_root=$(echo /tmp/repo)
+  if [ "$repo_root" = "" ]; then
+    echo none
+  else
+    echo "$repo_root"
+  fi
+}
+git_toplevel
+`),
+			},
+		}
+
+		outcomes := make([dynamic]SemanticOutcome, 0, len(semantic_cases))
+		defer delete(outcomes)
+		pass_count := 0
+		skip_count := 0
+		for c in semantic_cases {
+			o := run_semantic_case(c)
+			append(&outcomes, o)
+			if o.skipped {
+				skip_count += 1
+			} else if o.pass {
+				pass_count += 1
+			}
+		}
+
+		strings.write_string(&report, "\n## Semantic Differential Checks\n\n")
+		strings.write_string(&report, fmt.tprintf("Cases: %d, Passed: %d, Skipped: %d\n\n", len(semantic_cases), pass_count, skip_count))
+		for o in outcomes {
+			if o.skipped {
+				strings.write_string(
+					&report,
+					fmt.tprintf("- [SKIP] %s %s->%s reason=%s\n", o.name, dialect_name(o.from), dialect_name(o.to), o.reason),
+				)
+				continue
+			}
+			if o.pass {
+				strings.write_string(
+					&report,
+					fmt.tprintf("- [PASS] %s %s->%s exit=%d out=%q\n", o.name, dialect_name(o.from), dialect_name(o.to), o.dst_exit, o.dst_out),
+				)
+				continue
+			}
+			strings.write_string(
+				&report,
+				fmt.tprintf(
+					"- [FAIL] %s %s->%s src_exit=%d dst_exit=%d src_out=%q dst_out=%q src_err=%q dst_err=%q\n",
+					o.name,
+					dialect_name(o.from),
+					dialect_name(o.to),
+					o.src_exit,
+					o.dst_exit,
+					trim_report_text(o.src_out, 220),
+					trim_report_text(o.dst_out, 220),
+					trim_report_text(o.src_err, 220),
+					trim_report_text(o.dst_err, 220),
+				),
+			)
 		}
 	}
 

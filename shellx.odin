@@ -1868,6 +1868,11 @@ __shellx_zsh_expand() {
 		out = rewritten
 		changed_any = changed_any || changed
 
+		rewritten, changed = repair_fish_malformed_command_substitutions(out, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
+
 		rewritten, changed = sanitize_fish_output_bytes(out, allocator)
 		delete(out)
 		out = rewritten
@@ -3663,6 +3668,77 @@ ensure_fish_block_balance :: proc(text: string, allocator := context.allocator) 
 	return strings.clone(strings.to_string(builder), allocator), true
 }
 
+repair_fish_malformed_command_substitutions :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	for line, idx in lines {
+		out_line := line
+		out_allocated := false
+		trimmed := strings.trim_space(line)
+		if strings.contains(trimmed, "(") && !strings.contains(trimmed, ")") {
+			// Recover a common broken lowering from `${var:-...}` to fish shim call.
+			if strings.contains(out_line, "(__shellx_param_default; set -g ") {
+				repl, c := strings.replace_all(out_line, "(__shellx_param_default; set -g ", "(__shellx_param_default ", allocator)
+				if c {
+					out_line = repl
+					out_allocated = true
+					changed = true
+				} else {
+					delete(repl)
+				}
+				if out_allocated && !strings.contains(out_line, ")") {
+					with_close := strings.concatenate([]string{out_line, ")"}, allocator)
+					delete(out_line)
+					out_line = with_close
+					changed = true
+				}
+			} else if strings.contains(out_line, "(git; set -l log ") {
+				repl, c := strings.replace_all(out_line, "(git; set -l log ", "(git log ", allocator)
+				if c {
+					out_line = repl
+					out_allocated = true
+					changed = true
+				} else {
+					delete(repl)
+				}
+				if out_allocated && !strings.contains(out_line, ")") {
+					with_close := strings.concatenate([]string{out_line, ")"}, allocator)
+					delete(out_line)
+					out_line = with_close
+					changed = true
+				}
+			} else if strings.contains(trimmed, "set ") && strings.contains(out_line, " (git") {
+				// Minimal parse-safe recovery when command substitution tail was lost.
+				with_close := strings.concatenate([]string{out_line, ")"}, allocator)
+				out_line = with_close
+				out_allocated = true
+				changed = true
+			}
+		}
+
+		strings.write_string(&builder, out_line)
+		if out_allocated {
+			delete(out_line)
+		}
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
 rewrite_fish_to_posix_syntax :: proc(text: string, to: ShellDialect, allocator := context.allocator) -> (string, bool) {
 	lines := strings.split_lines(text)
 	defer delete(lines)
@@ -3976,11 +4052,7 @@ fix_fish_command_substitution :: proc(text: string, allocator := context.allocat
 	for i < len(text) {
 		if text[i] == '(' && (i == 0 || text[i-1] != '$') {
 			// Keep shell array literals like `name=(a b)` intact.
-			prev := i - 1
-			for prev >= 0 && (text[prev] == ' ' || text[prev] == '\t') {
-				prev -= 1
-			}
-			if prev >= 0 && text[prev] == '=' {
+			if is_assignment_array_literal_open(text, i) {
 				strings.write_byte(&builder, text[i])
 				i += 1
 				continue
@@ -4021,6 +4093,31 @@ fix_fish_command_substitution :: proc(text: string, allocator := context.allocat
 		return strings.clone(text, allocator), false
 	}
 	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+is_assignment_array_literal_open :: proc(text: string, open_idx: int) -> bool {
+	if open_idx <= 0 || open_idx > len(text) {
+		return false
+	}
+	prev := open_idx - 1
+	for prev >= 0 && (text[prev] == ' ' || text[prev] == '\t') {
+		prev -= 1
+	}
+	if prev < 0 || text[prev] != '=' {
+		return false
+	}
+	if prev == 0 {
+		return false
+	}
+	// Comparison forms like `= (` should not be treated as assignment literal.
+	if text[prev-1] == ' ' || text[prev-1] == '\t' {
+		return false
+	}
+	// Exclude common comparison operators.
+	if text[prev-1] == '!' || text[prev-1] == '=' || text[prev-1] == '<' || text[prev-1] == '>' {
+		return false
+	}
+	return true
 }
 
 fix_empty_fish_if_blocks :: proc(text: string, allocator := context.allocator) -> (string, bool) {

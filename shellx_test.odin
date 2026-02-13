@@ -812,6 +812,32 @@ test_shim_rewrite_declare_array_is_line_scoped :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_fish_command_substitution_rewrite_keeps_array_literal_but_rewrites_comparison :: proc(t: ^testing.T) {
+	if !should_run_test("test_fish_command_substitution_rewrite_keeps_array_literal_but_rewrites_comparison") { return }
+
+	input := "arr=(one two)\nif [ \"$x\" = (my_fn) ]; then\n  :\nfi"
+	output, changed := fix_fish_command_substitution(input)
+	defer delete(output)
+
+	testing.expect(t, changed, "Comparison command substitution should be rewritten")
+	testing.expect(t, strings.contains(output, "arr=(one two)"), "Array literal assignment should stay unchanged")
+	testing.expect(t, strings.contains(output, "[ \"$x\" = $(my_fn) ]"), "Comparison command substitution should become POSIX form")
+}
+
+@(test)
+test_repair_fish_malformed_command_substitutions_signatures :: proc(t: ^testing.T) {
+	if !should_run_test("test_repair_fish_malformed_command_substitutions_signatures") { return }
+
+	input := "set -l _commit (git; set -l log \"\"\nset -g __p9k_dump_file (__shellx_param_default; set -g XDG_CACHE_HOME \"\""
+	output, changed := repair_fish_malformed_command_substitutions(input)
+	defer delete(output)
+
+	testing.expect(t, changed, "Known malformed command-substitution signatures should be repaired")
+	testing.expect(t, strings.contains(output, "set -l _commit (git log \"\")"), "git-log malformed substitution should be repaired")
+	testing.expect(t, strings.contains(output, "set -g __p9k_dump_file (__shellx_param_default XDG_CACHE_HOME \"\")"), "param-default malformed substitution should be repaired")
+}
+
+@(test)
 test_semantic_array_list_fish_to_bash_runtime :: proc(t: ^testing.T) {
 	if !should_run_test("test_semantic_array_list_fish_to_bash_runtime") { return }
 	source := `set arr one two three
@@ -864,4 +890,19 @@ echo ${name:u}`
 	out, ok := run_translated_script_runtime(t, source, .Zsh, .Bash, "param_modifiers_zsh_to_bash_runtime")
 	if !ok { return }
 	testing.expect(t, out == "hello\nHELLO", "Zsh lower/upper parameter modifiers should preserve output semantics in Bash")
+}
+
+@(test)
+test_semantic_corpus_pattern_fish_gitnow_branch_compare :: proc(t: ^testing.T) {
+	if !should_run_test("test_semantic_corpus_pattern_fish_gitnow_branch_compare") { return }
+	source := `function __gitnow_current_branch_name
+    echo main
+end
+set v_branch main
+if test "$v_branch" = (__gitnow_current_branch_name)
+    echo SAME
+end`
+	out, ok := run_translated_script_runtime(t, source, .Fish, .Bash, "corpus_pattern_fish_gitnow_branch_compare")
+	if !ok { return }
+	testing.expect(t, out == "SAME", "Fish gitnow-like branch compare should preserve runtime behavior")
 }
