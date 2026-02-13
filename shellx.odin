@@ -328,6 +328,11 @@ translate :: proc(
 		}
 
 	}
+	if options.insert_shims && from == .Fish && to == .Zsh &&
+		(strings.contains(emitted, "fish_prompt() {") || strings.contains(emitted, "fish_right_prompt() {") || strings.contains(emitted, "_tide_")) {
+		append_unique(&result.required_shims, "prompt_hooks")
+		append_unique(&result.required_shims, "hooks_events")
+	}
 
 	if from == .POSIX && (to == .Bash || to == .Zsh) && posix_output_likely_degraded(source_code, emitted) {
 		delete(emitted)
@@ -2159,6 +2164,21 @@ __shellx_zsh_expand() {
 			delete(out)
 			out = rewritten
 			changed_any = changed_any || changed
+
+			rewritten, changed = rewrite_zsh_tide_colon_structural_noops(out, allocator)
+			delete(out)
+			out = rewritten
+			changed_any = changed_any || changed
+
+			rewritten, changed = rewrite_zsh_drop_redundant_fi_before_brace(out, allocator)
+			delete(out)
+			out = rewritten
+			changed_any = changed_any || changed
+
+			rewritten, changed = rewrite_zsh_drop_orphan_fi_in_functions(out, allocator)
+			delete(out)
+			out = rewritten
+			changed_any = changed_any || changed
 		}
 	}
 
@@ -2383,14 +2403,36 @@ rewrite_zsh_balance_if_fi :: proc(text: string, allocator := context.allocator) 
 	defer strings.builder_destroy(&builder)
 	changed := false
 	if_depth := 0
+
+	is_fn_start :: proc(trimmed: string) -> bool {
+		return strings.has_suffix(trimmed, "() {") ||
+			(strings.has_prefix(trimmed, "function ") && strings.has_suffix(trimmed, "{"))
+	}
+
 	for line, idx in lines {
 		out_line := line
 		trimmed := strings.trim_space(line)
-		if strings.has_suffix(trimmed, "() {") || strings.has_prefix(trimmed, "function ") {
+
+		// If malformed recovery left a top-level/open if in flight, close it
+		// before starting a new function so zsh parser scope remains valid.
+		if is_fn_start(trimmed) && if_depth > 0 {
+			for n := 0; n < if_depth; n += 1 {
+				strings.write_string(&builder, "fi\n")
+			}
+			if_depth = 0
+			changed = true
+		}
+
+		if is_fn_start(trimmed) {
 			if_depth = 0
 		}
 		if strings.has_prefix(trimmed, "if ") && strings.has_suffix(trimmed, "then") {
 			if_depth += 1
+		} else if strings.has_prefix(trimmed, "else") || strings.has_prefix(trimmed, "elif ") {
+			if if_depth == 0 {
+				out_line = ":"
+				changed = true
+			}
 		} else if trimmed == "}" && if_depth > 0 {
 			for n := 0; n < if_depth; n += 1 {
 				strings.write_string(&builder, "fi\n")
@@ -2410,6 +2452,12 @@ rewrite_zsh_balance_if_fi :: proc(text: string, allocator := context.allocator) 
 		if idx+1 < len(lines) {
 			strings.write_byte(&builder, '\n')
 		}
+	}
+	if if_depth > 0 {
+		for n := 0; n < if_depth; n += 1 {
+			strings.write_string(&builder, "\nfi")
+		}
+		changed = true
 	}
 	if !changed {
 		return strings.clone(text, allocator), false
@@ -2440,7 +2488,7 @@ rewrite_zsh_drop_redundant_fi_before_brace :: proc(text: string, allocator := co
 	has_prev_fi_before_scope :: proc(lines: []string, idx: int) -> bool {
 		for j := idx - 1; j >= 0; j -= 1 {
 			t := strings.trim_space(lines[j])
-			if t == "" || strings.has_prefix(t, "#") || t == ":" {
+			if t == "" || strings.has_prefix(t, "#") || t == ":" || t == ":;" {
 				continue
 			}
 			if t == "fi" {
@@ -2463,6 +2511,128 @@ rewrite_zsh_drop_redundant_fi_before_brace :: proc(text: string, allocator := co
 				changed = true
 			}
 		}
+		strings.write_string(&builder, out_line)
+		if i+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_zsh_tide_colon_structural_noops :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	in_function := false
+	if_depth := 0
+	for i := 0; i < len(lines); i += 1 {
+		line := lines[i]
+		trimmed := strings.trim_space(line)
+		out_line := line
+
+		is_fn_start := strings.has_suffix(trimmed, "() {") ||
+			(strings.has_prefix(trimmed, "function ") && strings.has_suffix(trimmed, "{"))
+		if is_fn_start {
+			in_function = true
+		}
+
+		if strings.has_prefix(trimmed, "if ") && strings.has_suffix(trimmed, "then") {
+			if_depth += 1
+		} else if strings.has_prefix(trimmed, "else") || strings.has_prefix(trimmed, "elif ") {
+			if if_depth == 0 {
+				out_line = ":"
+				changed = true
+			}
+		} else if trimmed == "fi" {
+			if if_depth > 0 {
+				if_depth -= 1
+			} else {
+				out_line = ":"
+				changed = true
+			}
+		}
+
+		// Normalize malformed colon-only lines by structural context.
+		// In control scope use `true` (safe simple command); otherwise `:`.
+		if trimmed == ":" || trimmed == ":;" {
+			if if_depth > 0 || in_function {
+				out_line = "true"
+			} else {
+				out_line = ":"
+			}
+			changed = true
+		}
+
+		// Before function close, close any still-open if blocks so trailing no-ops
+		// aren't parsed as malformed control flow.
+		if trimmed == "}" && if_depth > 0 {
+			for n := 0; n < if_depth; n += 1 {
+				strings.write_string(&builder, "fi\n")
+			}
+			if_depth = 0
+			changed = true
+		}
+		if trimmed == "}" {
+			in_function = false
+		}
+
+		strings.write_string(&builder, out_line)
+		if i+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_zsh_drop_orphan_fi_in_functions :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	in_fn := false
+	fn_if_depth := 0
+	for line, i in lines {
+		out_line := line
+		trimmed := strings.trim_space(line)
+		if strings.has_suffix(trimmed, "() {") || strings.has_prefix(trimmed, "function ") {
+			in_fn = true
+			fn_if_depth = 0
+		} else if in_fn && trimmed == "}" {
+			in_fn = false
+			fn_if_depth = 0
+		}
+
+		if in_fn {
+			if strings.has_prefix(trimmed, "if ") && strings.has_suffix(trimmed, "then") {
+				fn_if_depth += 1
+			} else if trimmed == "fi" {
+				if fn_if_depth > 0 {
+					fn_if_depth -= 1
+				} else {
+					out_line = ":"
+					changed = true
+				}
+			}
+		}
+
 		strings.write_string(&builder, out_line)
 		if i+1 < len(lines) {
 			strings.write_byte(&builder, '\n')

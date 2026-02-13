@@ -900,6 +900,19 @@ test_repair_shell_case_arms :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_rewrite_zsh_tide_colon_structural_noops :: proc(t: ^testing.T) {
+	if !should_run_test("test_rewrite_zsh_tide_colon_structural_noops") { return }
+
+	input := "if true; then\n:\nfi\n:\n"
+	output, changed := rewrite_zsh_tide_colon_structural_noops(input)
+	defer delete(output)
+
+	testing.expect(t, changed, "colon structural pass should normalize colon-only lines")
+	testing.expect(t, strings.contains(output, "true"), "colon-only lines inside control/function scope should become true")
+	testing.expect(t, strings.contains(output, "\n:"), "top-level colon-only lines should remain shell no-op")
+}
+
+@(test)
 test_rewrite_fish_positional_params :: proc(t: ^testing.T) {
 	if !should_run_test("test_rewrite_fish_positional_params") { return }
 

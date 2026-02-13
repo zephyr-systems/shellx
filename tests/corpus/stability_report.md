@@ -13,20 +13,17 @@ Cross-dialect runs executed: 126
 | bash->zsh | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 0 | 0.346 | 0.945 | 0 |
 | fish->bash | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 19 | 1.012 | 7.679 | 11 |
 | fish->posix | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 18 | 0.954 | 7.225 | 11 |
-| fish->zsh | 11 | 11/11 | 11/11 | 10/11 | 0 | 10/10 | 1/1 | 1 | 19 | 1.004 | 5.346 | 11 |
+| fish->zsh | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 19 | 1.100 | 5.528 | 11 |
 | zsh->bash | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 76 | 4 | 0.817 | 1.949 | 4 |
 | zsh->fish | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 76 | 58 | 1.854 | 9.812 | 15 |
 | zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 76 | 22 | 1.257 | 6.342 | 14 |
 
 ## Failures
 
-- [FAIL] fish-tide-theme (theme) fish->zsh translate=true parse=true parser=false/true exit=1 err=None warnings=3(parse=0 compat=3) shims=3 src_fn=3 out_fn=29 msg= parser_msg=tests/corpus/.parser_check_fish-tide-theme_122.zsh:297: parse error near `:'
- path=tests/corpus/repos/fish/tide/functions/fish_prompt.fish
 
 ## Parser Validation Failures
 
-- [PARSER-FAIL] fish-tide-theme (theme) fish->zsh command=`zsh -n tests/corpus/.parser_check_fish-tide-theme_122.zsh` exit=1 message=tests/corpus/.parser_check_fish-tide-theme_122.zsh:297: parse error near `:'
- path=tests/corpus/repos/fish/tide/functions/fish_prompt.fish
+- No parser validation failures.
 - No parser validation skips.
 
 ## High Warning Runs
@@ -42,7 +39,7 @@ Cross-dialect runs executed: 126
 | bash->zsh | 16 | 0 | 0 | 0 | 0 | 0 | 0 |
 | fish->bash | 11 | 6 | 2 | 11 | 0 | 0 | 0 |
 | fish->posix | 11 | 5 | 2 | 11 | 0 | 0 | 0 |
-| fish->zsh | 11 | 6 | 2 | 11 | 0 | 0 | 0 |
+| fish->zsh | 11 | 6 | 3 | 11 | 0 | 0 | 0 |
 | zsh->bash | 15 | 0 | 4 | 0 | 0 | 0 | 0 |
 | zsh->fish | 15 | 15 | 4 | 15 | 14 | 1 | 0 |
 | zsh->posix | 15 | 14 | 4 | 0 | 0 | 0 | 0 |
