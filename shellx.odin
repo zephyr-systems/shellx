@@ -995,6 +995,18 @@ normalize_zsh_recovered_fish_text :: proc(text: string, allocator := context.all
 				}
 			}
 		}
+		if in_switch &&
+			!strings.has_prefix(current, "case ") &&
+			((strings.has_prefix(current, "\"") && strings.has_suffix(current, "\"")) ||
+				(strings.has_prefix(current, "'") && strings.has_suffix(current, "'"))) {
+			if out_allocated {
+				delete(out_line)
+			}
+			out_line = strings.concatenate([]string{indent, "case ", current}, allocator)
+			out_allocated = true
+			changed = true
+			current = strings.trim_space(out_line)
+		}
 		if !strings.has_prefix(current, "case ") &&
 			!strings.has_prefix(current, "if ") &&
 			!strings.has_prefix(current, "for ") &&
@@ -1558,6 +1570,11 @@ rewrite_fish_special_parameters :: proc(line: string, allocator := context.alloc
 				changed = true
 				i += 2
 				continue
+			case '?':
+				strings.write_string(&builder, "$status")
+				changed = true
+				i += 2
+				continue
 			}
 		}
 		strings.write_byte(&builder, c)
@@ -1687,6 +1704,11 @@ __shellx_zsh_expand() {
 		changed_any = changed_any || changed
 
 		rewritten, changed = normalize_fish_artifacts(out, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
+
+		rewritten, changed = sanitize_fish_output_bytes(out, allocator)
 		delete(out)
 		out = rewritten
 		changed_any = changed_any || changed
@@ -2393,6 +2415,28 @@ normalize_fish_artifacts :: proc(text: string, allocator := context.allocator) -
 			changed = true
 			trimmed = strings.trim_space(out)
 		}
+		if strings.contains(trimmed, "+=(") && strings.has_suffix(trimmed, ")") {
+			app_idx := find_substring(trimmed, "+=(")
+			if app_idx > 0 {
+				name := strings.trim_space(trimmed[:app_idx])
+				values := strings.trim_space(trimmed[app_idx+3 : len(trimmed)-1])
+				if is_basic_name(name) {
+					indent_len := len(line) - len(strings.trim_left_space(line))
+					indent := ""
+					if indent_len > 0 {
+						indent = line[:indent_len]
+					}
+					name_copy := strings.clone(name, allocator)
+					values_copy := strings.clone(values, allocator)
+					delete(out)
+					out = strings.concatenate([]string{indent, "set -a ", name_copy, " ", values_copy}, allocator)
+					delete(name_copy)
+					delete(values_copy)
+					changed = true
+					trimmed = strings.trim_space(out)
+				}
+			}
+		}
 		if strings.contains(trimmed, "; for ") && strings.has_suffix(trimmed, "; do") {
 			for_idx := find_substring(trimmed, "; for ")
 			if for_idx >= 0 {
@@ -2513,6 +2557,73 @@ normalize_fish_artifacts :: proc(text: string, allocator := context.allocator) -
 				delete(head_copy)
 				changed = true
 			}
+			trimmed = strings.trim_space(out)
+		}
+		if strings.has_prefix(trimmed, "builtin unalias ") || strings.has_prefix(trimmed, "unalias ") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			delete(out)
+			out = strings.concatenate([]string{indent, ":"}, allocator)
+			changed = true
+			trimmed = strings.trim_space(out)
+		}
+		if strings.has_prefix(trimmed, "builtin zle ") || strings.has_prefix(trimmed, "zle ") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			delete(out)
+			out = strings.concatenate([]string{indent, ":"}, allocator)
+			changed = true
+			trimmed = strings.trim_space(out)
+		}
+		if strings.has_prefix(trimmed, "builtin unset ") || strings.has_prefix(trimmed, "unset ") {
+			rest := ""
+			if strings.has_prefix(trimmed, "builtin unset ") {
+				rest = strings.trim_space(trimmed[len("builtin unset "):])
+			} else {
+				rest = strings.trim_space(trimmed[len("unset "):])
+			}
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			rest_copy := strings.clone(rest, allocator)
+			delete(out)
+			if rest_copy != "" {
+				out = strings.concatenate([]string{indent, "set -e ", rest_copy}, allocator)
+			} else {
+				out = strings.concatenate([]string{indent, ":"}, allocator)
+			}
+			delete(rest_copy)
+			changed = true
+			trimmed = strings.trim_space(out)
+		}
+		if strings.contains(trimmed, "=(<") || strings.contains(trimmed, "(<") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			delete(out)
+			out = strings.concatenate([]string{indent, ":"}, allocator)
+			changed = true
+			trimmed = strings.trim_space(out)
+		}
+		if strings.contains(trimmed, "]=()") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			delete(out)
+			out = strings.concatenate([]string{indent, ":"}, allocator)
+			changed = true
 			trimmed = strings.trim_space(out)
 		}
 		if strings.has_suffix(trimmed, "()") {
@@ -2706,6 +2817,28 @@ normalize_fish_artifacts :: proc(text: string, allocator := context.allocator) -
 		}
 	}
 	return strings.clone(strings.to_string(builder), allocator), changed
+}
+
+sanitize_fish_output_bytes :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	if text == "" {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	for i in 0 ..< len(text) {
+		c := text[i]
+		if c == '\n' || c == '\t' || (c >= 32 && c <= 126) {
+			strings.write_byte(&builder, c)
+		} else {
+			strings.write_byte(&builder, ':')
+			changed = true
+		}
+	}
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
 }
 
 ensure_fish_block_balance :: proc(text: string, allocator := context.allocator) -> (string, bool) {

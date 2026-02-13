@@ -8,14 +8,14 @@ Cross-dialect runs executed: 126
 
 | Pair | Cases | Translate | Parse | Parser Matrix | Parser Skipped | Plugin Parse | Theme Parse | Parse Warn | Compat Warn | Avg Size Ratio | Avg Fn Ratio | With Shims |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| bash->fish | 16 | 16/16 | 16/16 | 14/16 | 0 | 10/10 | 6/6 | 0 | 42 | 1.556 | 8.195 | 15 |
+| bash->fish | 16 | 16/16 | 16/16 | 15/16 | 0 | 10/10 | 6/6 | 0 | 42 | 1.556 | 8.195 | 15 |
 | bash->posix | 16 | 16/16 | 16/16 | 11/16 | 0 | 10/10 | 6/6 | 0 | 12 | 0.699 | 4.206 | 12 |
 | bash->zsh | 16 | 16/16 | 16/16 | 11/16 | 0 | 10/10 | 6/6 | 0 | 0 | 0.393 | 0.921 | 0 |
 | fish->bash | 11 | 11/11 | 11/11 | 9/11 | 0 | 10/10 | 1/1 | 1 | 19 | 0.999 | 7.157 | 11 |
 | fish->posix | 11 | 11/11 | 11/11 | 7/11 | 0 | 10/10 | 1/1 | 1 | 18 | 0.940 | 6.793 | 11 |
 | fish->zsh | 11 | 11/11 | 11/11 | 10/11 | 0 | 10/10 | 1/1 | 1 | 19 | 1.151 | 4.793 | 11 |
 | zsh->bash | 15 | 15/15 | 15/15 | 8/15 | 0 | 10/10 | 5/5 | 76 | 4 | 0.990 | 1.656 | 4 |
-| zsh->fish | 15 | 15/15 | 15/15 | 8/15 | 0 | 10/10 | 5/5 | 76 | 58 | 1.808 | 9.729 | 15 |
+| zsh->fish | 15 | 15/15 | 15/15 | 9/15 | 0 | 10/10 | 5/5 | 76 | 58 | 1.806 | 9.729 | 15 |
 | zsh->posix | 15 | 15/15 | 15/15 | 7/15 | 0 | 10/10 | 5/5 | 76 | 22 | 1.367 | 5.315 | 14 |
 
 ## Failures
@@ -29,11 +29,6 @@ tests/corpus/.parser_check_zsh-autosuggestions_3.sh: line 781: `}'
 - [FAIL] zsh-syntax-highlighting (plugin) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=7(parse=6 compat=1) shims=1 src_fn=9 out_fn=16 msg= parser_msg=tests/corpus/.parser_check_zsh-syntax-highlighting_4.bash: line 171: syntax error near unexpected token `}'
 tests/corpus/.parser_check_zsh-syntax-highlighting_4.bash: line 171: `}'
  path=tests/corpus/repos/zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-- [FAIL] zsh-syntax-highlighting (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=12(parse=6 compat=6) shims=6 src_fn=9 out_fn=38 msg= parser_msg=tests/corpus/.parser_check_zsh-syntax-highlighting_5.fish (line 406): Missing end to balance this switch statement
-    switch $region_highlight
-    ^~~~~^
-warning: Error while reading file tests/corpus/.parser_check_zsh-syntax-highlighting_5.fish
- path=tests/corpus/repos/zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 - [FAIL] zsh-syntax-highlighting (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=9(parse=6 compat=3) shims=3 src_fn=9 out_fn=16 msg= parser_msg=tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 164: syntax error near unexpected token `}'
 tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 164: `}'
  path=tests/corpus/repos/zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
@@ -45,9 +40,9 @@ warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-git_8.fish
 - [FAIL] ohmyzsh-z (plugin) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=15(parse=14 compat=1) shims=1 src_fn=14 out_fn=16 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-z_10.bash: line 435: syntax error near unexpected token `done'
 tests/corpus/.parser_check_ohmyzsh-z_10.bash: line 435: `        done'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
-- [FAIL] ohmyzsh-z (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=20(parse=14 compat=6) shims=6 src_fn=14 out_fn=36 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-z_11.fish (line 976): Unsupported use of '='. In fish, please use 'set prefix "$PWD "'.
-        __zx_test $argv == $PWD/* ; $PWD == '/'  ; prefix="$PWD "
-                                                   ^~~~~~~~~~~~~^
+- [FAIL] ohmyzsh-z (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=20(parse=14 compat=6) shims=6 src_fn=14 out_fn=36 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-z_11.fish (line 310): 'else' builtin not inside of if block
+	    else
+	    ^~~^
 warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-z_11.fish
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
 - [FAIL] ohmyzsh-z (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=17(parse=14 compat=3) shims=3 src_fn=14 out_fn=22 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-z_12.sh: line 306: syntax error near unexpected token `done'
@@ -148,11 +143,6 @@ tests/corpus/.parser_check_fish-tide-theme_123.sh: line 183: `}'
  path=tests/corpus/repos/fish/tide/functions/fish_prompt.fish
 - [FAIL] fish-starship-init (theme) bash->zsh translate=true parse=true parser=false/true exit=1 err=None warnings=0(parse=0 compat=0) shims=0 src_fn=21 out_fn=20 msg= parser_msg=tests/corpus/.parser_check_fish-starship-init_124.zsh:164: parse error
  path=tests/corpus/repos/fish/starship/install/install.sh
-- [FAIL] fish-starship-init (theme) bash->fish translate=true parse=true parser=false/true exit=127 err=None warnings=3(parse=0 compat=3) shims=3 src_fn=21 out_fn=38 msg= parser_msg=tests/corpus/.parser_check_fish-starship-init_125.fish (line 181): $? is not the exit status. In fish, please use $status.
-	__zx_set rc $? default 0
-	             ^
-warning: Error while reading file tests/corpus/.parser_check_fish-starship-init_125.fish
- path=tests/corpus/repos/fish/starship/install/install.sh
 - [FAIL] fish-starship-init (theme) bash->posix translate=true parse=true parser=false/true exit=2 err=None warnings=1(parse=0 compat=1) shims=1 src_fn=21 out_fn=30 msg= parser_msg=tests/corpus/.parser_check_fish-starship-init_126.sh: line 220: syntax error: arithmetic expression required
 tests/corpus/.parser_check_fish-starship-init_126.sh: line 220: syntax error: `((  ))'
  path=tests/corpus/repos/fish/starship/install/install.sh
@@ -168,11 +158,6 @@ tests/corpus/.parser_check_zsh-autosuggestions_3.sh: line 781: `}'
 - [PARSER-FAIL] zsh-syntax-highlighting (plugin) zsh->bash command=`bash -n tests/corpus/.parser_check_zsh-syntax-highlighting_4.bash` exit=2 message=tests/corpus/.parser_check_zsh-syntax-highlighting_4.bash: line 171: syntax error near unexpected token `}'
 tests/corpus/.parser_check_zsh-syntax-highlighting_4.bash: line 171: `}'
  path=tests/corpus/repos/zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-- [PARSER-FAIL] zsh-syntax-highlighting (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_zsh-syntax-highlighting_5.fish` exit=127 message=tests/corpus/.parser_check_zsh-syntax-highlighting_5.fish (line 406): Missing end to balance this switch statement
-    switch $region_highlight
-    ^~~~~^
-warning: Error while reading file tests/corpus/.parser_check_zsh-syntax-highlighting_5.fish
- path=tests/corpus/repos/zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 - [PARSER-FAIL] zsh-syntax-highlighting (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh` exit=2 message=tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 164: syntax error near unexpected token `}'
 tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 164: `}'
  path=tests/corpus/repos/zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
@@ -184,9 +169,9 @@ warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-git_8.fish
 - [PARSER-FAIL] ohmyzsh-z (plugin) zsh->bash command=`bash -n tests/corpus/.parser_check_ohmyzsh-z_10.bash` exit=2 message=tests/corpus/.parser_check_ohmyzsh-z_10.bash: line 435: syntax error near unexpected token `done'
 tests/corpus/.parser_check_ohmyzsh-z_10.bash: line 435: `        done'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
-- [PARSER-FAIL] ohmyzsh-z (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-z_11.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-z_11.fish (line 976): Unsupported use of '='. In fish, please use 'set prefix "$PWD "'.
-        __zx_test $argv == $PWD/* ; $PWD == '/'  ; prefix="$PWD "
-                                                   ^~~~~~~~~~~~~^
+- [PARSER-FAIL] ohmyzsh-z (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-z_11.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-z_11.fish (line 310): 'else' builtin not inside of if block
+	    else
+	    ^~~^
 warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-z_11.fish
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
 - [PARSER-FAIL] ohmyzsh-z (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-z_12.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-z_12.sh: line 306: syntax error near unexpected token `done'
@@ -286,11 +271,6 @@ tests/corpus/.parser_check_fish-tide-theme_121.bash: line 180: `}'
 tests/corpus/.parser_check_fish-tide-theme_123.sh: line 183: `}'
  path=tests/corpus/repos/fish/tide/functions/fish_prompt.fish
 - [PARSER-FAIL] fish-starship-init (theme) bash->zsh command=`zsh -n tests/corpus/.parser_check_fish-starship-init_124.zsh` exit=1 message=tests/corpus/.parser_check_fish-starship-init_124.zsh:164: parse error
- path=tests/corpus/repos/fish/starship/install/install.sh
-- [PARSER-FAIL] fish-starship-init (theme) bash->fish command=`fish --no-execute tests/corpus/.parser_check_fish-starship-init_125.fish` exit=127 message=tests/corpus/.parser_check_fish-starship-init_125.fish (line 181): $? is not the exit status. In fish, please use $status.
-	__zx_set rc $? default 0
-	             ^
-warning: Error while reading file tests/corpus/.parser_check_fish-starship-init_125.fish
  path=tests/corpus/repos/fish/starship/install/install.sh
 - [PARSER-FAIL] fish-starship-init (theme) bash->posix command=`bash -n tests/corpus/.parser_check_fish-starship-init_126.sh` exit=2 message=tests/corpus/.parser_check_fish-starship-init_126.sh: line 220: syntax error: arithmetic expression required
 tests/corpus/.parser_check_fish-starship-init_126.sh: line 220: syntax error: `((  ))'
