@@ -934,6 +934,39 @@ test_normalize_zsh_preparse_parser_safety_plus_probes :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_normalize_fish_preparse_parser_safety_open_paren_literal :: proc(t: ^testing.T) {
+	if !should_run_test("test_normalize_fish_preparse_parser_safety_open_paren_literal") { return }
+
+	input := "set --global autopair_left \"(\" \"[\" \"{\" '\"' \"'\"\n"
+	fe := frontend.create_frontend(.Fish)
+	defer frontend.destroy_frontend(&fe)
+
+	tree_in, parse_err_in := frontend.parse(&fe, input)
+	testing.expect(t, parse_err_in.error == .None && tree_in != nil, "Original fish snippet should parse to tree for diagnostics collection")
+	if parse_err_in.error == .None && tree_in != nil {
+		defer frontend.destroy_tree(tree_in)
+		diags_in := frontend.collect_parse_diagnostics(tree_in, input, "<input>")
+		defer delete(diags_in)
+		testing.expect(t, len(diags_in) > 0, "Original fish snippet should reproduce parser diagnostic signature")
+	}
+
+	output, changed := normalize_fish_preparse_parser_safety(input)
+	defer delete(output)
+	testing.expect(t, changed, "Fish parser-safety normalization should rewrite quoted open-paren literal")
+	testing.expect(t, strings.contains(output, "'('"), "Open-paren literal should be canonicalized to single-quoted form")
+	testing.expect(t, !strings.contains(output, "\"(\""), "Double-quoted open-paren literal should be removed from parse source")
+
+	tree_out, parse_err_out := frontend.parse(&fe, output)
+	testing.expect(t, parse_err_out.error == .None && tree_out != nil, "Normalized fish snippet should parse to tree")
+	if parse_err_out.error == .None && tree_out != nil {
+		defer frontend.destroy_tree(tree_out)
+		diags_out := frontend.collect_parse_diagnostics(tree_out, output, "<input>")
+		defer delete(diags_out)
+		testing.expect(t, len(diags_out) == 0, fmt.tprintf("Expected no fish parse diagnostics after normalization, got %d", len(diags_out)))
+	}
+}
+
+@(test)
 test_repair_fish_split_echo_param_default :: proc(t: ^testing.T) {
 	if !should_run_test("test_repair_fish_split_echo_param_default") { return }
 

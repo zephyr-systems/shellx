@@ -159,6 +159,18 @@ translate :: proc(
 			delete(normalized)
 		}
 	}
+	if from == .Fish {
+		normalized, changed := normalize_fish_preparse_parser_safety(parse_source, context.allocator)
+		if changed {
+			if parse_source_allocated {
+				delete(parse_source)
+			}
+			parse_source = normalized
+			parse_source_allocated = true
+		} else {
+			delete(normalized)
+		}
+	}
 	if (from == .Bash || from == .Zsh) && to == .POSIX {
 		normalized, changed := normalize_posix_preparse_array_literals(parse_source, context.allocator)
 		if changed {
@@ -2688,6 +2700,17 @@ normalize_bash_preparse_array_literals :: proc(text: string, allocator := contex
 		return strings.clone(text, allocator), false
 	}
 	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+normalize_fish_preparse_parser_safety :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	out := strings.clone(text, allocator)
+	changed := false
+
+	// Tree-sitter fish grammar can report syntax errors for literal "\"(\"" tokens.
+	// Canonicalize to equivalent single-quoted literal for parser stability.
+	out, changed = replace_with_flag(out, "\"(\"", "'('", changed, allocator)
+
+	return out, changed
 }
 
 find_substring :: proc(s: string, needle: string) -> int {
