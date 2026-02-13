@@ -186,7 +186,24 @@ translate :: proc(
 			return result
 		}
 
+		parse_warn_limit := 6
+		if from == .Zsh && to != .Zsh {
+			parse_warn_limit = 3
+		}
+		omitted_parse_warns := 0
+		emitted_parse_warns := 0
 		for diag in parse_diags {
+			if from == .Zsh && to != .Zsh &&
+				diag.location.line == 1 &&
+				diag.location.column == 0 &&
+				strings.contains(diag.message, "Syntax error") {
+				omitted_parse_warns += 1
+				continue
+			}
+			if emitted_parse_warns >= parse_warn_limit {
+				omitted_parse_warns += 1
+				continue
+			}
 			warning := fmt.tprintf(
 				"Parse diagnostic at %s:%d:%d: %s",
 				diag.location.file,
@@ -195,6 +212,17 @@ translate :: proc(
 				diag.message,
 			)
 			append(&result.warnings, warning)
+			emitted_parse_warns += 1
+		}
+		if omitted_parse_warns > 0 {
+			append(
+				&result.warnings,
+				fmt.tprintf(
+					"Parse diagnostic at %s:0:0: %d additional diagnostics suppressed",
+					source_name,
+					omitted_parse_warns,
+				),
+			)
 		}
 	}
 
@@ -379,6 +407,7 @@ translate :: proc(
 	} else {
 		result.output = emitted
 	}
+	prune_resolved_compat_warnings(&result, from, to)
 
 	return result
 }
@@ -544,6 +573,69 @@ has_hook_bridge_shim :: proc(required_shims: []string) -> bool {
 		has_required_shim(required_shims, "zsh_hooks") ||
 		has_required_shim(required_shims, "fish_events") ||
 		has_required_shim(required_shims, "prompt_hooks")
+}
+
+extract_compat_warning_feature :: proc(warning: string) -> string {
+	if !strings.has_prefix(warning, "Compat[") {
+		return ""
+	}
+	start := len("Compat[")
+	close_rel := strings.index_byte(warning[start:], ']')
+	if close_rel < 0 {
+		return ""
+	}
+	return warning[start : start+close_rel]
+}
+
+is_compat_warning_resolved :: proc(
+	feature: string,
+	result: ^TranslationResult,
+	from: ShellDialect,
+	to: ShellDialect,
+) -> bool {
+	if to != .Fish {
+		return false
+	}
+	out := result.output
+	switch feature {
+	case "parameter_expansion":
+		return has_required_shim(result.required_shims[:], "parameter_expansion") &&
+			strings.contains(out, "function __shellx_param_default") &&
+			!strings.contains(out, "${(")
+	case "indexed_arrays", "assoc_arrays", "fish_list_indexing":
+		return (has_required_shim(result.required_shims[:], "indexed_arrays") ||
+			has_required_shim(result.required_shims[:], "assoc_arrays") ||
+			has_required_shim(result.required_shims[:], "arrays_lists") ||
+			has_required_shim(result.required_shims[:], "fish_list_indexing")) &&
+			strings.contains(out, "function __shellx_array_get")
+	case "zsh_hooks", "prompt_hooks":
+		return from == .Zsh &&
+			has_hook_bridge_shim(result.required_shims[:]) &&
+			strings.contains(out, "function __shellx_register_hook") &&
+			!strings.contains(out, "add-zsh-hook ")
+	}
+	return false
+}
+
+prune_resolved_compat_warnings :: proc(result: ^TranslationResult, from: ShellDialect, to: ShellDialect) {
+	if len(result.warnings) == 0 {
+		return
+	}
+	write := 0
+	for i := 0; i < len(result.warnings); i += 1 {
+		w := result.warnings[i]
+		feature := extract_compat_warning_feature(w)
+		if feature != "" && is_compat_warning_resolved(feature, result, from, to) {
+			continue
+		}
+		if write != i {
+			result.warnings[write] = result.warnings[i]
+		}
+		write += 1
+	}
+	if write < len(result.warnings) {
+		resize(&result.warnings, write)
+	}
 }
 
 is_string_match_call :: proc(call: ^ir.Call) -> bool {
@@ -760,6 +852,14 @@ apply_shim_callsite_rewrites :: proc(
 	changed_any := false
 
 	if has_hook_bridge_shim(required_shims) {
+		rewritten, changed := rewrite_add_zsh_hook_callsites(out, allocator)
+		if changed {
+			delete(out)
+			out = rewritten
+			changed_any = true
+		} else {
+			delete(rewritten)
+		}
 		out, changed_any = replace_with_flag(out, "add-zsh-hook precmd ", "__shellx_register_precmd ", changed_any, allocator)
 		out, changed_any = replace_with_flag(out, "add-zsh-hook preexec ", "__shellx_register_preexec ", changed_any, allocator)
 	}
@@ -810,6 +910,66 @@ apply_shim_callsite_rewrites :: proc(
 	}
 
 	return out, changed_any
+}
+
+rewrite_add_zsh_hook_callsites :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	for line, i in lines {
+		out_line := line
+		out_allocated := false
+		idx := find_substring(line, "add-zsh-hook ")
+		if idx >= 0 {
+			prefix := line[:idx]
+			rest := strings.trim_space(line[idx+len("add-zsh-hook "):])
+			tokens := strings.fields(rest)
+			start := 0
+			for start < len(tokens) && strings.has_prefix(tokens[start], "-") {
+				start += 1
+			}
+			if start+1 < len(tokens) {
+				hook := tokens[start]
+				fn := tokens[start+1]
+				if hook == "precmd" {
+					out_line = strings.concatenate([]string{prefix, "__shellx_register_precmd ", fn}, allocator)
+					out_allocated = true
+					changed = true
+				} else if hook == "preexec" {
+					out_line = strings.concatenate([]string{prefix, "__shellx_register_preexec ", fn}, allocator)
+					out_allocated = true
+					changed = true
+				} else {
+					out_line = strings.concatenate([]string{prefix, ":"}, allocator)
+					out_allocated = true
+					changed = true
+				}
+			} else {
+				out_line = strings.concatenate([]string{prefix, ":"}, allocator)
+				out_allocated = true
+				changed = true
+			}
+			delete(tokens)
+		}
+
+		strings.write_string(&builder, out_line)
+		if out_allocated {
+			delete(out_line)
+		}
+		if i+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
 }
 
 rewrite_declare_array_callsites :: proc(text: string, allocator := context.allocator) -> (string, bool) {

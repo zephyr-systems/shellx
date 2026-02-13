@@ -8,15 +8,15 @@ Cross-dialect runs executed: 126
 
 | Pair | Cases | Translate | Parse | Parser Matrix | Parser Skipped | Plugin Parse | Theme Parse | Parse Warn | Compat Warn | Avg Size Ratio | Avg Fn Ratio | With Shims |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| bash->fish | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 1 | 42 | 1.781 | 8.563 | 15 |
+| bash->fish | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 1 | 16 | 1.781 | 8.563 | 15 |
 | bash->posix | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 12 | 0.713 | 4.659 | 12 |
 | bash->zsh | 16 | 16/16 | 16/16 | 16/16 | 0 | 10/10 | 6/6 | 0 | 0 | 0.346 | 0.945 | 0 |
 | fish->bash | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 19 | 1.012 | 7.679 | 11 |
 | fish->posix | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 18 | 0.954 | 7.225 | 11 |
 | fish->zsh | 11 | 11/11 | 11/11 | 11/11 | 0 | 10/10 | 1/1 | 1 | 19 | 1.100 | 5.528 | 11 |
-| zsh->bash | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 76 | 4 | 0.817 | 1.949 | 4 |
-| zsh->fish | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 68 | 58 | 2.119 | 10.303 | 15 |
-| zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 76 | 22 | 1.257 | 6.342 | 14 |
+| zsh->bash | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 39 | 4 | 0.816 | 1.949 | 4 |
+| zsh->fish | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 39 | 16 | 2.119 | 10.303 | 15 |
+| zsh->posix | 15 | 15/15 | 15/15 | 15/15 | 0 | 10/10 | 5/5 | 39 | 22 | 1.257 | 6.342 | 14 |
 
 ## Failures
 
@@ -34,24 +34,12 @@ Cross-dialect runs executed: 126
 
 ### bash->fish
 
-- `arrays_maps/indexed_arrays`: 12
-  - bashit-git (plugin) Compat[indexed_arrays]: Indexed array semantics may not translate directly to Fish lists
-  - bashit-aliases (plugin) Compat[indexed_arrays]: Indexed array semantics may not translate directly to Fish lists
-  - bashit-completion (plugin) Compat[indexed_arrays]: Indexed array semantics may not translate directly to Fish lists
-  - bashit-base (plugin) Compat[indexed_arrays]: Indexed array semantics may not translate directly to Fish lists
-  - bashit-fzf (plugin) Compat[indexed_arrays]: Indexed array semantics may not translate directly to Fish lists
 - `condition_test/condition_semantics`: 12
   - bashit-git (plugin) Compat[condition_semantics]: Condition/test semantics may differ in Fish
   - bashit-aliases (plugin) Compat[condition_semantics]: Condition/test semantics may differ in Fish
   - bashit-completion (plugin) Compat[condition_semantics]: Condition/test semantics may differ in Fish
   - bashit-base (plugin) Compat[condition_semantics]: Condition/test semantics may differ in Fish
   - bashit-fzf (plugin) Compat[condition_semantics]: Condition/test semantics may differ in Fish
-- `parameter_expansion/parameter_expansion`: 14
-  - bashit-git (plugin) Compat[parameter_expansion]: Parameter expansion modifiers may not be compatible with Fish
-  - bashit-aliases (plugin) Compat[parameter_expansion]: Parameter expansion modifiers may not be compatible with Fish
-  - bashit-completion (plugin) Compat[parameter_expansion]: Parameter expansion modifiers may not be compatible with Fish
-  - bashit-base (plugin) Compat[parameter_expansion]: Parameter expansion modifiers may not be compatible with Fish
-  - bashit-fzf (plugin) Compat[parameter_expansion]: Parameter expansion modifiers may not be compatible with Fish
 - `parse_recovery/parse_diagnostic`: 1
   - bashit-aliases (plugin) Parse diagnostic at <input>:20:54: Syntax error
 - `process_substitution/process_substitution`: 4
@@ -136,57 +124,27 @@ Cross-dialect runs executed: 126
   - zsh-syntax-highlighting (plugin) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
   - ohmyzsh-z (plugin) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
   - zsh-spaceship (theme) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
-- `parse_recovery/parse_diagnostic`: 76
-  - zsh-autosuggestions (plugin) Parse diagnostic at <input>:1:1: Syntax error
+- `parse_recovery/parse_diagnostic`: 39
   - zsh-autosuggestions (plugin) Parse diagnostic at <input>:853:1: Syntax error
   - zsh-autosuggestions (plugin) Parse diagnostic at <input>:856:11: Syntax error
   - zsh-autosuggestions (plugin) Parse diagnostic at <input>:863:11: Syntax error
-  - zsh-syntax-highlighting (plugin) Parse diagnostic at <input>:1:1: Syntax error
+  - zsh-autosuggestions (plugin) Parse diagnostic at <input>:0:0: 1 additional diagnostics suppressed
+  - zsh-syntax-highlighting (plugin) Parse diagnostic at <input>:478:21: Syntax error
 
 ### zsh->fish
 
-- `arrays_maps/assoc_arrays`: 4
-  - zsh-syntax-highlighting (plugin) Compat[assoc_arrays]: Associative arrays are not natively compatible with Fish
-  - ohmyzsh-z (plugin) Compat[assoc_arrays]: Associative arrays are not natively compatible with Fish
-  - ohmyzsh-colored-man-pages (plugin) Compat[assoc_arrays]: Associative arrays are not natively compatible with Fish
-  - ohmyzsh-web-search (plugin) Compat[assoc_arrays]: Associative arrays are not natively compatible with Fish
-- `arrays_maps/fish_list_indexing`: 5
-  - zsh-autosuggestions (plugin) Compat[fish_list_indexing]: List indexing semantics may differ after translation to Fish
-  - zsh-syntax-highlighting (plugin) Compat[fish_list_indexing]: List indexing semantics may differ after translation to Fish
-  - ohmyzsh-web-search (plugin) Compat[fish_list_indexing]: List indexing semantics may differ after translation to Fish
-  - zsh-powerlevel10k (theme) Compat[fish_list_indexing]: List indexing semantics may differ after translation to Fish
-  - zsh-eastwood (theme) Compat[fish_list_indexing]: List indexing semantics may differ after translation to Fish
-- `arrays_maps/indexed_arrays`: 14
-  - zsh-autosuggestions (plugin) Compat[indexed_arrays]: Indexed array semantics may not translate directly to Fish lists
-  - zsh-syntax-highlighting (plugin) Compat[indexed_arrays]: Indexed array semantics may not translate directly to Fish lists
-  - ohmyzsh-git (plugin) Compat[indexed_arrays]: Indexed array semantics may not translate directly to Fish lists
-  - ohmyzsh-z (plugin) Compat[indexed_arrays]: Indexed array semantics may not translate directly to Fish lists
-  - ohmyzsh-fzf (plugin) Compat[indexed_arrays]: Indexed array semantics may not translate directly to Fish lists
 - `condition_test/condition_semantics`: 15
   - zsh-autosuggestions (plugin) Compat[condition_semantics]: Condition/test semantics may differ in Fish
   - zsh-syntax-highlighting (plugin) Compat[condition_semantics]: Condition/test semantics may differ in Fish
   - ohmyzsh-git (plugin) Compat[condition_semantics]: Condition/test semantics may differ in Fish
   - ohmyzsh-z (plugin) Compat[condition_semantics]: Condition/test semantics may differ in Fish
   - ohmyzsh-fzf (plugin) Compat[condition_semantics]: Condition/test semantics may differ in Fish
-- `hook_event/prompt_hooks`: 1
-  - ohmyzsh-z (plugin) Compat[prompt_hooks]: Prompt hook function semantics differ in Fish
-- `hook_event/zsh_hooks`: 4
-  - zsh-autosuggestions (plugin) Compat[zsh_hooks]: Zsh hook registration APIs differ in Fish
-  - zsh-syntax-highlighting (plugin) Compat[zsh_hooks]: Zsh hook registration APIs differ in Fish
-  - ohmyzsh-z (plugin) Compat[zsh_hooks]: Zsh hook registration APIs differ in Fish
-  - zsh-spaceship (theme) Compat[zsh_hooks]: Zsh hook registration APIs differ in Fish
-- `parameter_expansion/parameter_expansion`: 14
-  - zsh-autosuggestions (plugin) Compat[parameter_expansion]: Parameter expansion modifiers may not be compatible with Fish
-  - zsh-syntax-highlighting (plugin) Compat[parameter_expansion]: Parameter expansion modifiers may not be compatible with Fish
-  - ohmyzsh-git (plugin) Compat[parameter_expansion]: Parameter expansion modifiers may not be compatible with Fish
-  - ohmyzsh-z (plugin) Compat[parameter_expansion]: Parameter expansion modifiers may not be compatible with Fish
-  - ohmyzsh-fzf (plugin) Compat[parameter_expansion]: Parameter expansion modifiers may not be compatible with Fish
-- `parse_recovery/parse_diagnostic`: 68
-  - zsh-autosuggestions (plugin) Parse diagnostic at <input>:1:1: Syntax error
+- `parse_recovery/parse_diagnostic`: 39
   - zsh-autosuggestions (plugin) Parse diagnostic at <input>:853:1: Syntax error
   - zsh-autosuggestions (plugin) Parse diagnostic at <input>:856:11: Syntax error
   - zsh-autosuggestions (plugin) Parse diagnostic at <input>:863:11: Syntax error
-  - zsh-syntax-highlighting (plugin) Parse diagnostic at <input>:1:1: Syntax error
+  - zsh-autosuggestions (plugin) Parse diagnostic at <input>:0:0: 1 additional diagnostics suppressed
+  - zsh-syntax-highlighting (plugin) Parse diagnostic at <input>:478:21: Syntax error
 - `process_substitution/process_substitution`: 1
   - zsh-autosuggestions (plugin) Compat[process_substitution]: Process substitution is not supported in Fish
 
@@ -208,12 +166,12 @@ Cross-dialect runs executed: 126
   - zsh-syntax-highlighting (plugin) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
   - ohmyzsh-z (plugin) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
   - zsh-spaceship (theme) Compat[zsh_hooks]: Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly
-- `parse_recovery/parse_diagnostic`: 76
-  - zsh-autosuggestions (plugin) Parse diagnostic at <input>:1:1: Syntax error
+- `parse_recovery/parse_diagnostic`: 39
   - zsh-autosuggestions (plugin) Parse diagnostic at <input>:853:1: Syntax error
   - zsh-autosuggestions (plugin) Parse diagnostic at <input>:856:11: Syntax error
   - zsh-autosuggestions (plugin) Parse diagnostic at <input>:863:11: Syntax error
-  - zsh-syntax-highlighting (plugin) Parse diagnostic at <input>:1:1: Syntax error
+  - zsh-autosuggestions (plugin) Parse diagnostic at <input>:0:0: 1 additional diagnostics suppressed
+  - zsh-syntax-highlighting (plugin) Parse diagnostic at <input>:478:21: Syntax error
 
 ## Semantic Parity Matrix
 
