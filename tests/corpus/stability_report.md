@@ -15,7 +15,7 @@ Cross-dialect runs executed: 126
 | fish->posix | 11 | 11/11 | 11/11 | 7/11 | 0 | 10/10 | 1/1 | 1 | 18 | 0.940 | 6.793 | 11 |
 | fish->zsh | 11 | 11/11 | 11/11 | 10/11 | 0 | 10/10 | 1/1 | 1 | 19 | 1.151 | 4.793 | 11 |
 | zsh->bash | 15 | 15/15 | 15/15 | 8/15 | 0 | 10/10 | 5/5 | 76 | 4 | 0.990 | 1.656 | 4 |
-| zsh->fish | 15 | 15/15 | 15/15 | 4/15 | 0 | 10/10 | 5/5 | 76 | 58 | 2.008 | 9.571 | 15 |
+| zsh->fish | 15 | 15/15 | 15/15 | 4/15 | 0 | 10/10 | 5/5 | 76 | 58 | 2.008 | 9.582 | 15 |
 | zsh->posix | 15 | 15/15 | 15/15 | 7/15 | 0 | 10/10 | 5/5 | 76 | 22 | 1.367 | 5.315 | 14 |
 
 ## Failures
@@ -42,27 +42,22 @@ warning: Error while reading file tests/corpus/.parser_check_zsh-syntax-highligh
 - [FAIL] zsh-syntax-highlighting (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=9(parse=6 compat=3) shims=3 src_fn=9 out_fn=16 msg= parser_msg=tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 164: syntax error near unexpected token `}'
 tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 164: `}'
  path=tests/corpus/repos/zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-- [FAIL] ohmyzsh-git (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=7(parse=4 compat=3) shims=3 src_fn=16 out_fn=26 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-git_8.fish (line 155): Expected end of the statement, but found an incomplete token
-	      echo ${ref#"$remote/"; return 0
-	            ^
+- [FAIL] ohmyzsh-git (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=7(parse=4 compat=3) shims=3 src_fn=16 out_fn=27 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-git_8.fish (line 145): Expected end of the statement, but found an incomplete token
+	  for ref in refs/{heads,remotes/{origin,upstream}}/{main,trunk,mainline,default,stable,master
+	                                                    ^
 warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-git_8.fish
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/git/git.plugin.zsh
 - [FAIL] ohmyzsh-z (plugin) zsh->bash translate=true parse=true parser=false/true exit=2 err=None warnings=15(parse=14 compat=1) shims=1 src_fn=14 out_fn=16 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-z_10.bash: line 435: syntax error near unexpected token `done'
 tests/corpus/.parser_check_ohmyzsh-z_10.bash: line 435: `        done'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
-- [FAIL] ohmyzsh-z (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=20(parse=14 compat=6) shims=6 src_fn=14 out_fn=24 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-z_11.fish (line 892): Expected end of the statement, but found an incomplete token
-  for opt in ${(k)opts
-              ^
+- [FAIL] ohmyzsh-z (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=20(parse=14 compat=6) shims=6 src_fn=14 out_fn=25 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-z_11.fish (line 178): Missing end to balance this function definition
+function zshz
+^~~~~~~^
 warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-z_11.fish
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
 - [FAIL] ohmyzsh-z (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=17(parse=14 compat=3) shims=3 src_fn=14 out_fn=22 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-z_12.sh: line 306: syntax error near unexpected token `done'
 tests/corpus/.parser_check_ohmyzsh-z_12.sh: line 306: `	        done'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
-- [FAIL] ohmyzsh-fzf (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=17(parse=14 compat=3) shims=3 src_fn=9 out_fn=27 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-fzf_14.fish (line 163): Expected end of the statement, but found an incomplete token
-	    for dir in ${fzfdirs
-	                ^
-warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-fzf_14.fish
- path=tests/corpus/repos/zsh/ohmyzsh/plugins/fzf/fzf.plugin.zsh
 - [FAIL] ohmyzsh-fzf (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=15(parse=14 compat=1) shims=1 src_fn=9 out_fn=18 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-fzf_15.sh: line 297: warning: here-document at line 273 delimited by end-of-file (wanted `EOF')
 tests/corpus/.parser_check_ohmyzsh-fzf_15.sh: line 298: syntax error: unexpected end of file from `{' command on line 272
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/fzf/fzf.plugin.zsh
@@ -89,13 +84,18 @@ tests/corpus/.parser_check_ohmyzsh-extract_21.sh: line 116: `      *.tar.gz|    
 tests/corpus/.parser_check_ohmyzsh-colored-man-pages_22.bash: line 37: `  for k v in "${(@kv)less_termcap}"; do'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/colored-man-pages/colored-man-pages.plugin.zsh
 - [FAIL] ohmyzsh-colored-man-pages (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=8(parse=4 compat=4) shims=4 src_fn=1 out_fn=19 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-colored-man-pages_23.fish (line 133): Expected keyword 'in', but found a string
-	  for k v in """"
+	  for k v in "$less_termcap"
 	        ^
 warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-colored-man-pages_23.fish
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/colored-man-pages/colored-man-pages.plugin.zsh
 - [FAIL] ohmyzsh-colored-man-pages (plugin) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=5(parse=4 compat=1) shims=1 src_fn=1 out_fn=11 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-colored-man-pages_24.sh: line 80: syntax error near unexpected token `v'
 tests/corpus/.parser_check_ohmyzsh-colored-man-pages_24.sh: line 80: `	  for k v in "${(@kv)less_termcap}"; do'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/colored-man-pages/colored-man-pages.plugin.zsh
+- [FAIL] ohmyzsh-web-search (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=5(parse=0 compat=5) shims=5 src_fn=1 out_fn=18 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-web-search_26.fish (line 183): $@ is not supported. In fish, please use $argv.
+    set url "$urls(omz_urlencode $param $@)"
+                                         ^
+warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-web-search_26.fish
+ path=tests/corpus/repos/zsh/ohmyzsh/plugins/web-search/web-search.plugin.zsh
 - [FAIL] ohmyzsh-copyfile (plugin) zsh->fish translate=true parse=true parser=false/true exit=127 err=None warnings=4(parse=1 compat=3) shims=3 src_fn=0 out_fn=18 msg= parser_msg=tests/corpus/.parser_check_ohmyzsh-copyfile_29.fish (line 129): Expected end of the statement, but found an incomplete token
 function copyfile {
                   ^
@@ -196,27 +196,22 @@ warning: Error while reading file tests/corpus/.parser_check_zsh-syntax-highligh
 - [PARSER-FAIL] zsh-syntax-highlighting (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh` exit=2 message=tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 164: syntax error near unexpected token `}'
 tests/corpus/.parser_check_zsh-syntax-highlighting_6.sh: line 164: `}'
  path=tests/corpus/repos/zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-- [PARSER-FAIL] ohmyzsh-git (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-git_8.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-git_8.fish (line 155): Expected end of the statement, but found an incomplete token
-	      echo ${ref#"$remote/"; return 0
-	            ^
+- [PARSER-FAIL] ohmyzsh-git (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-git_8.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-git_8.fish (line 145): Expected end of the statement, but found an incomplete token
+	  for ref in refs/{heads,remotes/{origin,upstream}}/{main,trunk,mainline,default,stable,master
+	                                                    ^
 warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-git_8.fish
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/git/git.plugin.zsh
 - [PARSER-FAIL] ohmyzsh-z (plugin) zsh->bash command=`bash -n tests/corpus/.parser_check_ohmyzsh-z_10.bash` exit=2 message=tests/corpus/.parser_check_ohmyzsh-z_10.bash: line 435: syntax error near unexpected token `done'
 tests/corpus/.parser_check_ohmyzsh-z_10.bash: line 435: `        done'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
-- [PARSER-FAIL] ohmyzsh-z (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-z_11.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-z_11.fish (line 892): Expected end of the statement, but found an incomplete token
-  for opt in ${(k)opts
-              ^
+- [PARSER-FAIL] ohmyzsh-z (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-z_11.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-z_11.fish (line 178): Missing end to balance this function definition
+function zshz
+^~~~~~~^
 warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-z_11.fish
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
 - [PARSER-FAIL] ohmyzsh-z (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-z_12.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-z_12.sh: line 306: syntax error near unexpected token `done'
 tests/corpus/.parser_check_ohmyzsh-z_12.sh: line 306: `	        done'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
-- [PARSER-FAIL] ohmyzsh-fzf (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-fzf_14.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-fzf_14.fish (line 163): Expected end of the statement, but found an incomplete token
-	    for dir in ${fzfdirs
-	                ^
-warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-fzf_14.fish
- path=tests/corpus/repos/zsh/ohmyzsh/plugins/fzf/fzf.plugin.zsh
 - [PARSER-FAIL] ohmyzsh-fzf (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-fzf_15.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-fzf_15.sh: line 297: warning: here-document at line 273 delimited by end-of-file (wanted `EOF')
 tests/corpus/.parser_check_ohmyzsh-fzf_15.sh: line 298: syntax error: unexpected end of file from `{' command on line 272
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/fzf/fzf.plugin.zsh
@@ -243,13 +238,18 @@ tests/corpus/.parser_check_ohmyzsh-extract_21.sh: line 116: `      *.tar.gz|    
 tests/corpus/.parser_check_ohmyzsh-colored-man-pages_22.bash: line 37: `  for k v in "${(@kv)less_termcap}"; do'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/colored-man-pages/colored-man-pages.plugin.zsh
 - [PARSER-FAIL] ohmyzsh-colored-man-pages (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-colored-man-pages_23.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-colored-man-pages_23.fish (line 133): Expected keyword 'in', but found a string
-	  for k v in """"
+	  for k v in "$less_termcap"
 	        ^
 warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-colored-man-pages_23.fish
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/colored-man-pages/colored-man-pages.plugin.zsh
 - [PARSER-FAIL] ohmyzsh-colored-man-pages (plugin) zsh->posix command=`bash -n tests/corpus/.parser_check_ohmyzsh-colored-man-pages_24.sh` exit=2 message=tests/corpus/.parser_check_ohmyzsh-colored-man-pages_24.sh: line 80: syntax error near unexpected token `v'
 tests/corpus/.parser_check_ohmyzsh-colored-man-pages_24.sh: line 80: `	  for k v in "${(@kv)less_termcap}"; do'
  path=tests/corpus/repos/zsh/ohmyzsh/plugins/colored-man-pages/colored-man-pages.plugin.zsh
+- [PARSER-FAIL] ohmyzsh-web-search (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-web-search_26.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-web-search_26.fish (line 183): $@ is not supported. In fish, please use $argv.
+    set url "$urls(omz_urlencode $param $@)"
+                                         ^
+warning: Error while reading file tests/corpus/.parser_check_ohmyzsh-web-search_26.fish
+ path=tests/corpus/repos/zsh/ohmyzsh/plugins/web-search/web-search.plugin.zsh
 - [PARSER-FAIL] ohmyzsh-copyfile (plugin) zsh->fish command=`fish --no-execute tests/corpus/.parser_check_ohmyzsh-copyfile_29.fish` exit=127 message=tests/corpus/.parser_check_ohmyzsh-copyfile_29.fish (line 129): Expected end of the statement, but found an incomplete token
 function copyfile {
                   ^
@@ -329,7 +329,7 @@ tests/corpus/.parser_check_fish-starship-init_126.sh: line 220: syntax error: `(
 
 ## High Warning Runs
 
-- [WARN] ohmyzsh-z zsh->fish warnings=20(parse=14 compat=6) shims=6 src_fn=14 out_fn=24 path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
+- [WARN] ohmyzsh-z zsh->fish warnings=20(parse=14 compat=6) shims=6 src_fn=14 out_fn=25 path=tests/corpus/repos/zsh/ohmyzsh/plugins/z/z.plugin.zsh
 
 ## Validator Rule Failures
 
