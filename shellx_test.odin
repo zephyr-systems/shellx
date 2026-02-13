@@ -967,6 +967,43 @@ test_normalize_fish_preparse_parser_safety_open_paren_literal :: proc(t: ^testin
 }
 
 @(test)
+test_normalize_bash_preparse_array_literals_skips_complex_expansion :: proc(t: ^testing.T) {
+	if !should_run_test("test_normalize_bash_preparse_array_literals_skips_complex_expansion") { return }
+
+	input := `completions=("${completions[@]##complete -* * -}") # strip all but last option plus trigger(s)`
+	output, changed := normalize_bash_preparse_array_literals(input)
+	defer delete(output)
+
+	testing.expect(t, !changed, "Complex/commented Bash array expansions should be left untouched by preparse normalization")
+	testing.expect(t, output == input, "Normalization should preserve complex Bash completion expansion line verbatim")
+}
+
+@(test)
+test_translate_bash_complex_array_expansion_no_parse_diag :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_bash_complex_array_expansion_no_parse_diag") { return }
+
+	input := "completions=(\"${completions[@]##complete -* * -}\") # strip all but last option plus trigger(s)\n"
+
+	opts := DEFAULT_TRANSLATION_OPTIONS
+	opts.source_name = "bash_complex_array_expansion"
+	opts.insert_shims = true
+
+	tr_fish := translate(input, .Bash, .Fish, opts)
+	defer destroy_translation_result(&tr_fish)
+	testing.expect(t, tr_fish.success, "Bash->Fish translation should succeed for complex completion expansion line")
+	for w in tr_fish.warnings {
+		testing.expect(t, !strings.contains(w, "Parse diagnostic"), "Bash->Fish should not emit parse diagnostics for complex completion expansion line")
+	}
+
+	tr_posix := translate(input, .Bash, .POSIX, opts)
+	defer destroy_translation_result(&tr_posix)
+	testing.expect(t, tr_posix.success, "Bash->POSIX translation should succeed for complex completion expansion line")
+	for w in tr_posix.warnings {
+		testing.expect(t, !strings.contains(w, "Parse diagnostic"), "Bash->POSIX should not emit parse diagnostics for complex completion expansion line")
+	}
+}
+
+@(test)
 test_repair_fish_split_echo_param_default :: proc(t: ^testing.T) {
 	if !should_run_test("test_repair_fish_split_echo_param_default") { return }
 

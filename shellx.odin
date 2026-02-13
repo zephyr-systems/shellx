@@ -1502,6 +1502,13 @@ rewrite_posix_array_bridge_callsites :: proc(text: string, allocator := context.
 	}
 
 	parse_array_assignment_payload :: proc(payload: string) -> (name, items: string, append, block_open, ok: bool) {
+		if strings.contains(payload, "#") {
+			return "", "", false, false, false
+		}
+		if strings.contains(payload, "${") &&
+			(strings.contains(payload, "##") || strings.contains(payload, "#?") || strings.contains(payload, "%%") || strings.contains(payload, "%?")) {
+			return "", "", false, false, false
+		}
 		append_mode := false
 		marker_idx := find_substring(payload, "+=(")
 		open_idx := -1
@@ -1534,6 +1541,9 @@ rewrite_posix_array_bridge_callsites :: proc(text: string, allocator := context.
 	}
 
 	parse_array_decl_payload :: proc(payload: string) -> (name, items: string, append, block_open, ok, has_items: bool) {
+		if strings.contains(payload, "#") {
+			return "", "", false, false, false, false
+		}
 		i := 0
 		has_array_flag := false
 		for i < len(payload) {
@@ -2674,7 +2684,12 @@ normalize_bash_preparse_array_literals :: proc(text: string, allocator := contex
 			rhs := strings.trim_space(trimmed[eq_idx+1:])
 			if is_basic_name(name) && strings.has_prefix(rhs, "(") && strings.has_suffix(rhs, ")") {
 				items := strings.trim_space(rhs[1 : len(rhs)-1])
-				if items != "" && !strings.contains(items, "$(") && !strings.contains(items, "`") {
+				if items != "" &&
+					!strings.contains(items, "$") &&
+					!strings.contains(items, "`") &&
+					!strings.contains(items, "#") &&
+					!strings.contains(items, "\"") &&
+					!strings.contains(items, "'") {
 					indent_len := len(line) - len(strings.trim_left_space(line))
 					indent := ""
 					if indent_len > 0 {
