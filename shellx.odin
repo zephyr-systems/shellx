@@ -215,7 +215,7 @@ translate :: proc(
 	}
 
 	if options.insert_shims && len(result.required_shims) > 0 {
-		apply_ir_shim_rewrites(program, result.required_shims[:], from, to)
+		apply_ir_shim_rewrites(program, result.required_shims[:], from, to, &arena)
 	}
 
 	emitted, emit_ok := emit_program(program, to)
@@ -497,18 +497,6 @@ rewrite_condition_command_text_for_shim :: proc(expr: ^ir.TestCondition, arena: 
 		expr.text = "__shellx_match"
 	} else {
 		expr.text = strings.concatenate([]string{"__shellx_match ", rest}, mem.arena_allocator(&arena.arena))
-	}
-	expr.syntax = .Command
-}
-	trimmed := strings.trim_space(expr.text)
-	if !strings.has_prefix(trimmed, "string match") {
-		return
-	}
-	rest := strings.trim_space(trimmed[len("string match"):])
-	if rest == "" {
-		expr.text = "__shellx_match"
-	} else {
-		expr.text = strings.concatenate([]string{"__shellx_match ", rest}, context.temp_allocator)
 	}
 	expr.syntax = .Command
 }

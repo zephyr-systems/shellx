@@ -476,7 +476,6 @@ convert_fish_if_to_statement :: proc(
 
 new_fish_condition_expr :: proc(arena: ^ir.Arena_IR, node: ts.Node, source: string) -> ir.Expression {
 	text := extract_fish_condition(arena, node, source)
-	defer delete(text)
 	trimmed := strings.trim_space(text)
 	syntax := ir.ConditionSyntax.Unknown
 	if strings.has_prefix(trimmed, "test ") {
@@ -500,8 +499,7 @@ extract_fish_condition :: proc(arena: ^ir.Arena_IR, node: ts.Node, source: strin
 			}
 		}
 
-	out := strings.clone(strings.to_string(result), context.temp_allocator)
-	return ir.intern_string(arena, out)
+	return ir.intern_string(arena, strings.to_string(result))
 }
 
 convert_fish_for_to_statement :: proc(
