@@ -861,6 +861,7 @@ main :: proc() {
 
 	if semantic_mode {
 		semantic_cases := []SemanticCase{
+			// Fish -> Bash/POSIX/Zsh patterns
 			{
 				name = "fish_gitnow_branch_compare",
 				from = .Fish,
@@ -875,6 +876,48 @@ if test "$v_branch" = (__gitnow_current_branch_name)
 end
 `),
 			},
+			{
+				name = "fish_list_index_bash",
+				from = .Fish,
+				to = .Bash,
+				source = strings.trim_space(`
+set arr one two three
+echo $arr[2]
+`),
+			},
+			{
+				name = "fish_list_index_posix",
+				from = .Fish,
+				to = .POSIX,
+				source = strings.trim_space(`
+set arr red blue green
+echo $arr[3]
+`),
+			},
+			{
+				name = "fish_string_match_zsh",
+				from = .Fish,
+				to = .Zsh,
+				source = strings.trim_space(`
+set x foobar
+if string match -q 'foo*' $x
+    echo ok
+end
+`),
+			},
+			{
+				name = "fish_string_match_bash",
+				from = .Fish,
+				to = .Bash,
+				source = strings.trim_space(`
+set x alpha
+if string match -q 'a*' $x
+    echo hit
+end
+`),
+			},
+
+			// Zsh -> Fish/Bash/POSIX patterns
 			{
 				name = "zsh_git_cmdsub_if_compare",
 				from = .Zsh,
@@ -914,6 +957,124 @@ git_toplevel() {
 git_toplevel
 `),
 			},
+			{
+				name = "zsh_param_default_bash",
+				from = .Zsh,
+				to = .Bash,
+				source = strings.trim_space(`
+name=""
+echo ${name:-fallback}
+`),
+			},
+			{
+				name = "zsh_assoc_array_bash",
+				from = .Zsh,
+				to = .Bash,
+				source = strings.trim_space(`
+typeset -A m
+m[foo]=bar
+echo ${m[foo]}
+`),
+			},
+			{
+				name = "zsh_case_posix",
+				from = .Zsh,
+				to = .POSIX,
+				source = strings.trim_space(`
+x=one
+case "$x" in
+  one) echo yes ;;
+  *) echo no ;;
+esac
+`),
+			},
+			{
+				name = "zsh_positional_fish",
+				from = .Zsh,
+				to = .Fish,
+				source = strings.trim_space(`
+f() {
+  echo "$1-$2"
+}
+f a b
+`),
+			},
+
+			// Bash -> Fish/Zsh/POSIX patterns
+			{
+				name = "bash_array_fish",
+				from = .Bash,
+				to = .Fish,
+				source = strings.trim_space(`
+arr=(one two three)
+echo "${arr[1]}"
+`),
+			},
+			{
+				name = "bash_cond_fish",
+				from = .Bash,
+				to = .Fish,
+				source = strings.trim_space(`
+x=hello
+if [[ "$x" == h* ]]; then
+  echo ok
+fi
+`),
+			},
+			{
+				name = "bash_param_default_fish",
+				from = .Bash,
+				to = .Fish,
+				source = strings.trim_space(`
+v=""
+echo "${v:-fallback}"
+`),
+			},
+			{
+				name = "bash_function_zsh",
+				from = .Bash,
+				to = .Zsh,
+				source = strings.trim_space(`
+f() {
+  echo done
+}
+f
+`),
+			},
+
+			// POSIX -> Bash/Fish/Zsh patterns
+			{
+				name = "posix_if_fish",
+				from = .POSIX,
+				to = .Fish,
+				source = strings.trim_space(`
+x=1
+if [ "$x" = "1" ]; then
+  echo one
+fi
+`),
+			},
+			{
+				name = "posix_default_zsh",
+				from = .POSIX,
+				to = .Zsh,
+				source = strings.trim_space(`
+name=""
+echo "${name:-alt}"
+`),
+			},
+			{
+				name = "posix_case_bash",
+				from = .POSIX,
+				to = .Bash,
+				source = strings.trim_space(`
+x=a
+case "$x" in
+  a) echo match ;;
+  *) echo miss ;;
+esac
+`),
+			},
 		}
 
 		outcomes := make([dynamic]SemanticOutcome, 0, len(semantic_cases))
@@ -932,6 +1093,42 @@ git_toplevel
 
 		strings.write_string(&report, "\n## Semantic Differential Checks\n\n")
 		strings.write_string(&report, fmt.tprintf("Cases: %d, Passed: %d, Skipped: %d\n\n", len(semantic_cases), pass_count, skip_count))
+
+		strings.write_string(&report, "### Semantic Pair Summary\n\n")
+		strings.write_string(&report, "| Pair | Cases | Passed | Failed | Skipped |\n")
+		strings.write_string(&report, "|---|---:|---:|---:|---:|\n")
+		seen_pairs := make([dynamic]string, 0, 16, context.temp_allocator)
+		defer delete(seen_pairs)
+		for c in semantic_cases {
+			pair_label := fmt.tprintf("%s->%s", dialect_name(c.from), dialect_name(c.to))
+			if contains_string(seen_pairs[:], pair_label) {
+				continue
+			}
+			append(&seen_pairs, pair_label)
+			total := 0
+			passed := 0
+			failed := 0
+			skipped := 0
+			for o in outcomes {
+				if o.from != c.from || o.to != c.to {
+					continue
+				}
+				total += 1
+				if o.skipped {
+					skipped += 1
+				} else if o.pass {
+					passed += 1
+				} else {
+					failed += 1
+				}
+			}
+			strings.write_string(
+				&report,
+				fmt.tprintf("| %s | %d | %d | %d | %d |\n", pair_label, total, passed, failed, skipped),
+			)
+		}
+		strings.write_string(&report, "\n")
+
 		for o in outcomes {
 			if o.skipped {
 				strings.write_string(

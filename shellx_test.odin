@@ -863,6 +863,79 @@ test_repair_fish_split_echo_param_default :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_repair_fish_quoted_param_default_echo :: proc(t: ^testing.T) {
+	if !should_run_test("test_repair_fish_quoted_param_default_echo") { return }
+
+	input := `echo "(__shellx_param_default v "fallback")"`
+	output, changed := repair_fish_quoted_param_default_echo(input)
+	defer delete(output)
+
+	testing.expect(t, changed, "quoted param-default echo should be repaired")
+	testing.expect(t, strings.contains(output, "echo (__shellx_param_default v \"fallback\")"), "repair should remove outer quotes around command substitution")
+}
+
+@(test)
+test_repair_shell_split_echo_param_expansion :: proc(t: ^testing.T) {
+	if !should_run_test("test_repair_shell_split_echo_param_expansion") { return }
+
+	input := "name=\necho\n${name:-fallback}"
+	output, changed := repair_shell_split_echo_param_expansion(input)
+	defer delete(output)
+
+	testing.expect(t, changed, "split shell echo + parameter expansion should be repaired")
+	testing.expect(t, strings.contains(output, "echo ${name:-fallback}"), "repair should merge echo and parameter expansion line")
+}
+
+@(test)
+test_repair_shell_case_arms :: proc(t: ^testing.T) {
+	if !should_run_test("test_repair_shell_case_arms") { return }
+
+	input := "case \"$x\" in\n  one) echo yes\n  *) echo no\nesac"
+	output, changed := repair_shell_case_arms(input)
+	defer delete(output)
+
+	testing.expect(t, changed, "inline case arms should be terminated")
+	testing.expect(t, strings.contains(output, "one) echo yes ;;"), "first arm should include ;;")
+	testing.expect(t, strings.contains(output, "*) echo no ;;"), "fallback arm should include ;;")
+}
+
+@(test)
+test_rewrite_fish_positional_params :: proc(t: ^testing.T) {
+	if !should_run_test("test_rewrite_fish_positional_params") { return }
+
+	input := `echo "$1-${2}"`
+	output, changed := rewrite_fish_positional_params(input)
+	defer delete(output)
+
+	testing.expect(t, changed, "positional params should be rewritten for fish output")
+	testing.expect(t, strings.contains(output, `$argv[1]-$argv[2]`), "positional params should map to fish argv indexing")
+}
+
+@(test)
+test_normalize_bash_preparse_array_literals :: proc(t: ^testing.T) {
+	if !should_run_test("test_normalize_bash_preparse_array_literals") { return }
+
+	input := "arr=(one two three)\necho ${arr[1]}"
+	output, changed := normalize_bash_preparse_array_literals(input)
+	defer delete(output)
+
+	testing.expect(t, changed, "simple bash array literal should be normalized for fish target parsing")
+	testing.expect(t, strings.contains(output, "set arr one two three"), "array assignment should be rewritten to fish-style set")
+}
+
+@(test)
+test_rewrite_parameter_expansion_callsites_bash_index_to_fish :: proc(t: ^testing.T) {
+	if !should_run_test("test_rewrite_parameter_expansion_callsites_bash_index_to_fish") { return }
+
+	input := `echo ${arr[1]}`
+	output, changed := rewrite_parameter_expansion_callsites(input, .Fish)
+	defer delete(output)
+
+	testing.expect(t, changed, "bash indexed parameter expansion should be rewritten for fish")
+	testing.expect(t, strings.contains(output, "$arr[2]"), "bash index 1 should map to fish index 2")
+}
+
+@(test)
 test_semantic_array_list_fish_to_bash_runtime :: proc(t: ^testing.T) {
 	if !should_run_test("test_semantic_array_list_fish_to_bash_runtime") { return }
 	source := `set arr one two three
@@ -925,6 +998,47 @@ echo ${XDG_CACHE_HOME:-/tmp/cache}`
 	out, ok := run_translated_script_runtime(t, source, .Zsh, .Fish, "param_default_zsh_to_fish_runtime")
 	if !ok { return }
 	testing.expect(t, out == "/tmp/cache", "Zsh :- default should use fallback when variable is empty")
+}
+
+@(test)
+test_posix_output_likely_degraded_detection :: proc(t: ^testing.T) {
+	if !should_run_test("test_posix_output_likely_degraded_detection") { return }
+
+	src_case := "x=a\ncase \"$x\" in\n  a) echo match ;;\n  *) echo miss ;;\nesac\n"
+	out_case_bad := "x=a\necho match\necho miss\n"
+	testing.expect(t, posix_output_likely_degraded(src_case, out_case_bad), "should detect degraded case translation")
+
+	src_param := "name=\"\"\necho \"${name:-alt}\"\n"
+	out_param_bad := "name=\n:\n"
+	testing.expect(t, posix_output_likely_degraded(src_param, out_param_bad), "should detect degraded param expansion translation")
+}
+
+@(test)
+test_translate_warns_on_fish_zsh_prompt_noop_fallback :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_warns_on_fish_zsh_prompt_noop_fallback") { return }
+
+	source := `function fish_prompt
+    set -g _tide_x 1
+    if test "$_tide_x" = "1"
+        echo ok
+    end
+end
+fish_prompt`
+	opts := DEFAULT_TRANSLATION_OPTIONS
+	opts.insert_shims = true
+	result := translate(source, .Fish, .Zsh, opts)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, result.success, "Translation should succeed")
+	testing.expect(t, strings.contains(result.output, "fish_prompt() { :; }"), "Output should contain prompt no-op fallback when applied")
+	has_warning := false
+	for w in result.warnings {
+		if strings.contains(w, "prompt no-op fallback") {
+			has_warning = true
+			break
+		}
+	}
+	testing.expect(t, has_warning, "Fallback should be surfaced via warnings")
 }
 
 @(test)

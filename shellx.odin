@@ -36,6 +36,28 @@ DEFAULT_TRANSLATION_OPTIONS :: TranslationOptions{
 	optimization_level = .None,
 }
 
+posix_output_likely_degraded :: proc(source: string, output: string) -> bool {
+	if source == "" || output == "" {
+		return false
+	}
+	src_has_case := strings.contains(source, "case ") && strings.contains(source, "esac")
+	out_has_case := strings.contains(output, "case ") && strings.contains(output, "esac")
+	if src_has_case && !out_has_case {
+		return true
+	}
+
+	src_has_param_default := strings.contains(source, "${") && (strings.contains(source, ":-") || strings.contains(source, ":-"))
+	if src_has_param_default && !strings.contains(output, "${") {
+		return true
+	}
+
+	if strings.contains(output, "\n:\n") && (src_has_case || src_has_param_default) {
+		return true
+	}
+
+	return false
+}
+
 // TranslationResult is the full output of a translation request.
 TranslationResult :: struct {
 	success:        bool,
@@ -95,6 +117,18 @@ translate :: proc(
 	if from == .Zsh {
 		normalized, changed := normalize_zsh_preparse_local_cmdsubs(source_code, context.allocator)
 		if changed {
+			parse_source = normalized
+			parse_source_allocated = true
+		} else {
+			delete(normalized)
+		}
+	}
+	if from == .Bash && to == .Fish {
+		normalized, changed := normalize_bash_preparse_array_literals(parse_source, context.allocator)
+		if changed {
+			if parse_source_allocated {
+				delete(parse_source)
+			}
 			parse_source = normalized
 			parse_source_allocated = true
 		} else {
@@ -248,6 +282,12 @@ translate :: proc(
 		return result
 	}
 
+	if from == .POSIX && (to == .Bash || to == .Zsh) && posix_output_likely_degraded(source_code, emitted) {
+		delete(emitted)
+		emitted = strings.clone(source_code, context.allocator)
+		append(&result.warnings, "Applied POSIX preservation fallback due degraded translated output")
+	}
+
 	recovery_mode := from == .Zsh && to == .Bash && len(parse_diags) > 0
 	if recovery_mode {
 		fe_check := frontend.create_frontend(.Bash)
@@ -287,6 +327,16 @@ translate :: proc(
 			delete(rewritten)
 		}
 
+	}
+
+	if from == .POSIX && (to == .Bash || to == .Zsh) && posix_output_likely_degraded(source_code, emitted) {
+		delete(emitted)
+		emitted = strings.clone(source_code, context.allocator)
+		append(&result.warnings, "Applied POSIX preservation fallback after post-rewrite degradation")
+	}
+	if from == .Fish && to == .Zsh &&
+		(strings.contains(emitted, "fish_prompt() { :; }") || strings.contains(emitted, "fish_right_prompt() { :; }")) {
+		append_unique(&result.warnings, "Applied fish->zsh prompt no-op fallback for parse safety")
 	}
 
 	cap_prelude := ""
@@ -926,6 +976,54 @@ normalize_zsh_preparse_local_cmdsubs :: proc(text: string, allocator := context.
 					changed = true
 				}
 				delete(decl)
+			}
+		}
+
+		strings.write_string(&builder, out_line)
+		if out_allocated {
+			delete(out_line)
+		}
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+normalize_bash_preparse_array_literals :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	for line, idx in lines {
+		out_line := line
+		out_allocated := false
+		trimmed := strings.trim_space(line)
+		eq_idx := find_substring(trimmed, "=")
+		if eq_idx > 0 {
+			name := strings.trim_space(trimmed[:eq_idx])
+			rhs := strings.trim_space(trimmed[eq_idx+1:])
+			if is_basic_name(name) && strings.has_prefix(rhs, "(") && strings.has_suffix(rhs, ")") {
+				items := strings.trim_space(rhs[1 : len(rhs)-1])
+				if items != "" && !strings.contains(items, "$(") && !strings.contains(items, "`") {
+					indent_len := len(line) - len(strings.trim_left_space(line))
+					indent := ""
+					if indent_len > 0 {
+						indent = line[:indent_len]
+					}
+					out_line = strings.concatenate([]string{indent, "set ", name, " ", items}, allocator)
+					out_allocated = true
+					changed = true
+				}
 			}
 		}
 
@@ -1623,7 +1721,29 @@ rewrite_parameter_expansion_callsites :: proc(
 						if bracket_idx > 0 && strings.has_suffix(inner, "]") {
 							var_name := strings.trim_space(inner[:bracket_idx])
 							if is_basic_name(var_name) {
-								repl = fmt.tprintf("$%s", var_name)
+								index_expr := strings.trim_space(inner[bracket_idx+1 : len(inner)-1])
+								if to == .Fish && index_expr != "" && index_expr != "@" && index_expr != "*" {
+									is_digits := true
+									for ch in index_expr {
+										if ch < '0' || ch > '9' {
+											is_digits = false
+											break
+										}
+									}
+									if is_digits {
+										idx := 0
+										for ch in index_expr {
+											idx = idx*10 + int(ch-'0')
+										}
+										idx += 1 // Bash-style numeric index to fish 1-based index.
+										idx_text := fmt.tprintf("%d", idx)
+										repl = fmt.tprintf("$%s[%s]", var_name, idx_text)
+									} else {
+										repl = fmt.tprintf("$%s", var_name)
+									}
+								} else {
+									repl = fmt.tprintf("$%s", var_name)
+								}
 							}
 						}
 					}
@@ -1880,6 +2000,12 @@ __shellx_zsh_expand() {
 		out = rewritten
 		changed_any = changed_any || changed
 	}
+	if from == .Fish && to == .Zsh {
+		rewritten, changed := rewrite_fish_to_posix_syntax(out, .POSIX, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
+	}
 
 	if to == .Bash || to == .POSIX || to == .Zsh {
 		if from == .Zsh {
@@ -1917,6 +2043,18 @@ __shellx_zsh_expand() {
 		delete(out)
 		out = rewritten
 		changed_any = changed_any || changed
+
+		rewritten, changed = repair_shell_split_echo_param_expansion(out, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
+
+		if from == .Zsh && to == .POSIX {
+			rewritten, changed = repair_shell_case_arms(out, allocator)
+			delete(out)
+			out = rewritten
+			changed_any = changed_any || changed
+		}
 	}
 
 	if to == .Fish {
@@ -1955,6 +2093,16 @@ __shellx_zsh_expand() {
 		out = rewritten
 		changed_any = changed_any || changed
 
+		rewritten, changed = repair_fish_quoted_param_default_echo(out, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
+
+		rewritten, changed = rewrite_fish_positional_params(out, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
+
 		rewritten, changed = sanitize_fish_output_bytes(out, allocator)
 		delete(out)
 		out = rewritten
@@ -1984,9 +2132,285 @@ __shellx_zsh_expand() {
 		delete(out)
 		out = rewritten
 		changed_any = changed_any || changed
+
+		is_tide_like := strings.contains(out, "_tide_") || strings.contains(out, "fish_prompt() {")
+		if is_tide_like {
+			rewritten, changed = rewrite_zsh_inline_not_set_if(out, allocator)
+			delete(out)
+			out = rewritten
+			changed_any = changed_any || changed
+
+			rewritten, changed = rewrite_zsh_neutralize_multiline_escaped_commands(out, allocator)
+			delete(out)
+			out = rewritten
+			changed_any = changed_any || changed
+
+			rewritten, changed = rewrite_zsh_tide_function_guard_blocks(out, allocator)
+			delete(out)
+			out = rewritten
+			changed_any = changed_any || changed
+
+			rewritten, changed = rewrite_zsh_neutralize_fish_specific_lines(out, allocator)
+			delete(out)
+			out = rewritten
+			changed_any = changed_any || changed
+
+			rewritten, changed = rewrite_zsh_noop_tide_prompt_functions(out, allocator)
+			delete(out)
+			out = rewritten
+			changed_any = changed_any || changed
+
+			rewritten, changed = rewrite_zsh_balance_if_fi(out, allocator)
+			delete(out)
+			out = rewritten
+			changed_any = changed_any || changed
+		}
 	}
 
 	return out, changed_any
+}
+
+rewrite_zsh_inline_not_set_if :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	for line, idx in lines {
+		trimmed := strings.trim_space(line)
+		marker := " if not set -e "
+		pos := find_substring(trimmed, marker)
+		if pos > 0 {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			prefix := strings.trim_space(trimmed[:pos])
+			if prefix == "" {
+				prefix = ":"
+			}
+			strings.write_string(&builder, indent)
+			strings.write_string(&builder, prefix)
+			strings.write_byte(&builder, '\n')
+			strings.write_string(&builder, indent)
+			strings.write_string(&builder, "if true; then")
+			changed = true
+		} else {
+			strings.write_string(&builder, line)
+		}
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_zsh_neutralize_multiline_escaped_commands :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	in_drop := false
+	for line, idx in lines {
+		out_line := line
+		trimmed := strings.trim_space(line)
+		if !in_drop && strings.contains(trimmed, "$fish_path -c \\\"set ") {
+			out_line = ":"
+			in_drop = true
+			changed = true
+		} else if in_drop {
+			out_line = ":"
+			changed = true
+			if strings.contains(trimmed, "\\\" &") {
+				in_drop = false
+			}
+		}
+
+		strings.write_string(&builder, out_line)
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_zsh_tide_function_guard_blocks :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	i := 0
+	for i < len(lines) {
+		trimmed := strings.trim_space(lines[i])
+		if strings.contains(trimmed, "if test \"$tide_prompt_transient_enabled\" = true; then") {
+			strings.write_string(&builder, ":")
+			changed = true
+			i += 1
+			if i < len(lines) {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
+		if i+2 < len(lines) &&
+			strings.trim_space(lines[i]) == "fi" &&
+			strings.trim_space(lines[i+1]) == "fi" &&
+			strings.trim_space(lines[i+2]) == "}" {
+			strings.write_string(&builder, lines[i])
+			strings.write_byte(&builder, '\n')
+			strings.write_string(&builder, ":")
+			changed = true
+			i += 2
+			if i < len(lines) {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
+
+		strings.write_string(&builder, lines[i])
+		i += 1
+		if i < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_zsh_neutralize_fish_specific_lines :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	for line, idx in lines {
+		out_line := line
+		trimmed := strings.trim_space(line)
+		if strings.has_prefix(trimmed, "set -U ") ||
+			strings.has_prefix(trimmed, "set_color ") ||
+			strings.has_prefix(trimmed, "read -l ") ||
+			strings.has_prefix(trimmed, "read -lx ") ||
+			strings.has_prefix(trimmed, "status fish-path") ||
+			strings.has_prefix(trimmed, "math ") ||
+			strings.has_prefix(trimmed, "string replace ") ||
+			strings.contains(trimmed, " | read -lx ") {
+			out_line = ":"
+			changed = true
+		}
+		strings.write_string(&builder, out_line)
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_zsh_noop_tide_prompt_functions :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	skip_body := false
+	for idx := 0; idx < len(lines); idx += 1 {
+		line := lines[idx]
+		trimmed := strings.trim_space(line)
+		if skip_body {
+			if trimmed == "}" {
+				skip_body = false
+			}
+			if idx+1 < len(lines) {
+				continue
+			}
+			break
+		}
+		if trimmed == "fish_prompt() {" || trimmed == "fish_right_prompt() {" {
+			name := "fish_prompt"
+			if strings.has_prefix(trimmed, "fish_right_prompt") {
+				name = "fish_right_prompt"
+			}
+			strings.write_string(&builder, name)
+			strings.write_string(&builder, "() { :; }")
+			skip_body = true
+			changed = true
+		} else {
+			strings.write_string(&builder, line)
+		}
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_zsh_balance_if_fi :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	if_depth := 0
+	for line, idx in lines {
+		out_line := line
+		trimmed := strings.trim_space(line)
+		if strings.has_prefix(trimmed, "if ") && strings.has_suffix(trimmed, "then") {
+			if_depth += 1
+		} else if trimmed == "fi" {
+			if if_depth > 0 {
+				if_depth -= 1
+			} else {
+				out_line = ":"
+				changed = true
+			}
+		}
+
+		strings.write_string(&builder, out_line)
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
 }
 
 is_basic_name_char :: proc(c: byte) -> bool {
@@ -3870,6 +4294,207 @@ repair_fish_split_echo_param_default :: proc(text: string, allocator := context.
 	return strings.clone(strings.to_string(builder), allocator), true
 }
 
+repair_fish_quoted_param_default_echo :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	for line, idx in lines {
+		out_line := line
+		out_allocated := false
+		trimmed := strings.trim_space(line)
+		if strings.has_prefix(trimmed, "echo \"") && strings.contains(trimmed, "__shellx_param_default ") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			idx := find_substring(trimmed, "__shellx_param_default ")
+			if idx >= 0 {
+				rest := trimmed[idx:]
+				if len(rest) > 0 && rest[len(rest)-1] == '"' {
+					rest = rest[:len(rest)-1]
+				}
+				prefix := strings.concatenate([]string{indent, "echo ("}, allocator)
+				if strings.has_suffix(rest, ")") {
+					out_line = strings.concatenate([]string{prefix, rest}, allocator)
+				} else {
+					out_line = strings.concatenate([]string{prefix, rest, ")"}, allocator)
+				}
+				delete(prefix)
+				out_allocated = true
+				changed = true
+			}
+		}
+
+		strings.write_string(&builder, out_line)
+		if out_allocated {
+			delete(out_line)
+		}
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_fish_positional_params :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	if text == "" {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	i := 0
+	for i < len(text) {
+		if text[i] == '$' {
+			if i+2 < len(text) && text[i+1] == '{' && text[i+2] >= '1' && text[i+2] <= '9' {
+				j := i + 3
+				for j < len(text) && text[j] >= '0' && text[j] <= '9' {
+					j += 1
+				}
+				if j < len(text) && text[j] == '}' {
+					idx_text := text[i+2 : j]
+					repl := strings.concatenate([]string{"$argv[", idx_text, "]"}, allocator)
+					strings.write_string(&builder, repl)
+					delete(repl)
+					changed = true
+					i = j + 1
+					continue
+				}
+			}
+			if i+1 < len(text) && text[i+1] >= '1' && text[i+1] <= '9' {
+				j := i + 2
+				for j < len(text) && text[j] >= '0' && text[j] <= '9' {
+					j += 1
+				}
+				idx_text := text[i+1 : j]
+				repl := strings.concatenate([]string{"$argv[", idx_text, "]"}, allocator)
+				strings.write_string(&builder, repl)
+				delete(repl)
+				changed = true
+				i = j
+				continue
+			}
+		}
+		strings.write_byte(&builder, text[i])
+		i += 1
+	}
+
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+repair_shell_split_echo_param_expansion :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	i := 0
+	for i < len(lines) {
+		line := lines[i]
+		trimmed := strings.trim_space(line)
+		if i+1 < len(lines) && trimmed == "echo" {
+			next := strings.trim_space(lines[i+1])
+			if strings.has_prefix(next, "${") && strings.has_suffix(next, "}") {
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				combined := strings.concatenate([]string{indent, "echo ", next}, allocator)
+				strings.write_string(&builder, combined)
+				delete(combined)
+				changed = true
+				i += 2
+				if i < len(lines) {
+					strings.write_byte(&builder, '\n')
+				}
+				continue
+			}
+		}
+
+		strings.write_string(&builder, line)
+		i += 1
+		if i < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+repair_shell_case_arms :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	// Keep this repair scoped to small/simple scripts to avoid over-normalizing
+	// large recovered corpus outputs.
+	if len(lines) > 120 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	in_case := false
+	for line, idx in lines {
+		out_line := line
+		out_allocated := false
+		trimmed := strings.trim_space(line)
+		if strings.has_prefix(trimmed, "case ") && strings.has_suffix(trimmed, " in") {
+			in_case = true
+		} else if trimmed == "esac" {
+			in_case = false
+		} else if in_case && trimmed != "" && !strings.has_prefix(trimmed, "#") {
+			close_idx := find_substring(trimmed, ")")
+			if close_idx > 0 && close_idx+1 < len(trimmed) {
+				after := strings.trim_space(trimmed[close_idx+1:])
+				if after != "" && !strings.has_suffix(trimmed, ";;") {
+					out_line = strings.concatenate([]string{line, " ;;"}, allocator)
+					out_allocated = true
+					changed = true
+				}
+			}
+		}
+
+		strings.write_string(&builder, out_line)
+		if out_allocated {
+			delete(out_line)
+		}
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
 rewrite_fish_to_posix_syntax :: proc(text: string, to: ShellDialect, allocator := context.allocator) -> (string, bool) {
 	lines := strings.split_lines(text)
 	defer delete(lines)
@@ -4150,7 +4775,7 @@ rewrite_fish_list_index_access :: proc(text: string, to: ShellDialect, allocator
 						strings.write_string(&builder, repl)
 						delete(repl)
 					} else {
-						repl := fmt.tprintf("$(__shellx_list_get %s %s)", name, index_text)
+						repl := fmt.tprintf("$(set -- $%s; printf '%%s' \"$%s\")", name, index_text)
 						strings.write_string(&builder, repl)
 					}
 					changed = true

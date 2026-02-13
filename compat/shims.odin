@@ -215,7 +215,43 @@ function __shellx_match
     string match $argv
 end
 `)
-	case .Bash, .Zsh, .POSIX:
+	case .Zsh:
+		return strings.trim_space(`
+__shellx_test() {
+  test "$@"
+}
+
+__shellx_match() {
+  _quiet=0 _regex=0 _invert=0 _pattern=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -q|--quiet) _quiet=1; shift ;;
+      -r|--regex) _regex=1; shift ;;
+      -v|--invert) _invert=1; shift ;;
+      --entire|--all|--ignore-case|-i|--) shift ;;
+      -*) shift ;;
+      *) _pattern="$1"; shift; break ;;
+    esac
+  done
+  [ -n "$_pattern" ] || return 1
+  [ "$#" -gt 0 ] || set -- ""
+  for _arg in "$@"; do
+    _matched=1
+    if [ "$_regex" -eq 1 ]; then
+      [[ "$_arg" =~ "$_pattern" ]] && _matched=0
+    else
+      [[ "$_arg" == ${~_pattern} ]] && _matched=0
+    fi
+    if [ "$_invert" -eq 1 ]; then
+      [ "$_matched" -ne 0 ] && return 0
+    else
+      [ "$_matched" -eq 0 ] && return 0
+    fi
+  done
+  return 1
+}
+`)
+	case .Bash, .POSIX:
 		return strings.trim_space(`
 __shellx_test() {
   test "$@"
