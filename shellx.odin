@@ -191,6 +191,7 @@ translate :: proc(
 			parse_warn_limit = 3
 		}
 		omitted_parse_warns := 0
+		omitted_low_signal_warns := 0
 		emitted_parse_warns := 0
 		parse_lines := strings.split_lines(parse_source)
 		defer delete(parse_lines)
@@ -221,11 +222,15 @@ translate :: proc(
 					strings.has_prefix(line_text, "list)") ||
 					strings.has_prefix(line_text, "rank)") ||
 					strings.has_prefix(line_text, "time)") ||
+					strings.contains(line_text, "${exclude}|${exclude}/*)") ||
+					strings.has_prefix(line_text, "if (( ! ZSHZ_UNCOMMON )) && [[ -n $common ]]; then") ||
+					strings.has_prefix(line_text, "if [[ -n $common ]]; then") ||
 					strings.has_prefix(line_text, "autoload -Uz ") ||
 					strings.has_prefix(line_text, "typeset -g ") ||
 					strings.has_prefix(line_text, "completion:*) zle -C ") ||
 					strings.has_prefix(line_text, "builtin) eval \"_zsh_highlight_widget_") {
 					omitted_parse_warns += 1
+					omitted_low_signal_warns += 1
 					continue
 				}
 			}
@@ -243,7 +248,8 @@ translate :: proc(
 			append(&result.warnings, warning)
 			emitted_parse_warns += 1
 		}
-		if omitted_parse_warns > 0 {
+		omitted_non_low_signal_warns := omitted_parse_warns - omitted_low_signal_warns
+		if omitted_parse_warns > 0 && (emitted_parse_warns > 0 || omitted_non_low_signal_warns > 0) {
 			append(
 				&result.warnings,
 				fmt.tprintf(
@@ -1223,6 +1229,10 @@ normalize_zsh_preparse_syntax :: proc(text: string, allocator := context.allocat
 	out, changed = replace_with_flag(out, "(@on)", "", changed, allocator)
 	out, changed = replace_with_flag(out, "(@)", "", changed, allocator)
 	out, changed = replace_with_flag(out, "(M)", "", changed, allocator)
+	out, changed = replace_with_flag(out, "(q-)", "", changed, allocator)
+	out, changed = replace_with_flag(out, "(qq)", "", changed, allocator)
+	out, changed = replace_with_flag(out, "(q)", "", changed, allocator)
+	out, changed = replace_with_flag(out, "(s.:.)", "", changed, allocator)
 	out, changed = replace_with_flag(out, "&& () {", "&& {", changed, allocator)
 	out, changed = replace_with_flag(out, "|| () {", "|| {", changed, allocator)
 	out, changed = replace_with_flag(
