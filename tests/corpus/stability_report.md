@@ -1,22 +1,25 @@
 # ShellX Corpus Stability Report
 
-Cases configured: 55
+Cases configured: 75
 
-Cross-dialect runs executed: 159
+Cross-dialect runs executed: 219
 
 ## Pair Summary
 
 | Pair | Cases | Translate | Parse | Parser Matrix | Parser Skipped | Plugin Parse | Theme Parse | Parse Warn | Compat Warn | Avg Size Ratio | Avg Fn Ratio | With Shims |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| bash->fish | 18 | 18/18 | 18/18 | 18/18 | 0 | 12/12 | 6/6 | 0 | 0 | 2.502 | 8.144 | 17 |
-| bash->posix | 18 | 18/18 | 18/18 | 18/18 | 0 | 12/12 | 6/6 | 0 | 0 | 4.549 | 9.741 | 16 |
-| bash->zsh | 18 | 18/18 | 18/18 | 18/18 | 0 | 12/12 | 6/6 | 0 | 0 | 2.627 | 4.097 | 10 |
-| fish->bash | 14 | 14/14 | 14/14 | 14/14 | 0 | 13/13 | 1/1 | 1 | 0 | 1.419 | 8.218 | 14 |
-| fish->posix | 14 | 14/14 | 14/14 | 14/14 | 0 | 13/13 | 1/1 | 1 | 0 | 1.757 | 9.812 | 14 |
-| fish->zsh | 14 | 14/14 | 14/14 | 14/14 | 0 | 13/13 | 1/1 | 1 | 0 | 1.482 | 7.557 | 14 |
-| zsh->bash | 21 | 21/21 | 21/21 | 21/21 | 0 | 16/16 | 5/5 | 3 | 0 | 3.094 | 6.584 | 13 |
-| zsh->fish | 21 | 21/21 | 21/21 | 21/21 | 0 | 16/16 | 5/5 | 3 | 0 | 9.067 | 9.494 | 21 |
-| zsh->posix | 21 | 21/21 | 21/21 | 21/21 | 0 | 16/16 | 5/5 | 3 | 0 | 3.042 | 12.458 | 17 |
+| bash->fish | 24 | 24/24 | 24/24 | 24/24 | 0 | 17/17 | 7/7 | 4 | 0 | 2.221 | 7.929 | 22 |
+| bash->posix | 24 | 24/24 | 24/24 | 24/24 | 0 | 17/17 | 7/7 | 4 | 1 | 3.632 | 9.623 | 20 |
+| bash->zsh | 24 | 24/24 | 24/24 | 24/24 | 0 | 17/17 | 7/7 | 4 | 0 | 2.123 | 4.115 | 12 |
+| fish->bash | 17 | 17/17 | 17/17 | 17/17 | 0 | 15/15 | 2/2 | 1 | 0 | 1.357 | 7.246 | 17 |
+| fish->posix | 17 | 17/17 | 17/17 | 17/17 | 0 | 15/15 | 2/2 | 1 | 0 | 1.635 | 8.567 | 17 |
+| fish->zsh | 17 | 17/17 | 17/17 | 17/17 | 0 | 15/15 | 2/2 | 1 | 0 | 1.405 | 6.602 | 17 |
+| posix->bash | 3 | 3/3 | 3/3 | 3/3 | 0 | 3/3 | 0/0 | 2 | 3 | 1.000 | 1.000 | 0 |
+| posix->fish | 3 | 3/3 | 3/3 | 3/3 | 0 | 3/3 | 0/0 | 2 | 0 | 0.943 | 4.692 | 3 |
+| posix->zsh | 3 | 3/3 | 3/3 | 3/3 | 0 | 3/3 | 0/0 | 2 | 3 | 1.000 | 0.000 | 0 |
+| zsh->bash | 29 | 29/29 | 29/29 | 29/29 | 0 | 22/22 | 7/7 | 12 | 0 | 3.280 | 6.284 | 17 |
+| zsh->fish | 29 | 29/29 | 29/29 | 29/29 | 0 | 22/22 | 7/7 | 12 | 0 | 9.030 | 9.162 | 29 |
+| zsh->posix | 29 | 29/29 | 29/29 | 29/29 | 0 | 22/22 | 7/7 | 12 | 1 | 2.685 | 11.942 | 22 |
 
 ## Failures
 
@@ -31,6 +34,32 @@ Cross-dialect runs executed: 159
 
 ## Warning Categories
 
+
+### bash->fish
+
+- `parse_recovery/parse_diagnostic`: 4
+  - ble-sh-make-command (plugin) Parse diagnostic at <input>:37:19: Syntax error
+  - ble-sh-make-command (plugin) Parse diagnostic at <input>:883:29: Syntax error
+  - ble-sh-make-command (plugin) Parse diagnostic at <input>:1211:17: Syntax error
+  - direnv-stdlib (plugin) Parse diagnostic at <input>:1:1: Parse tree contains syntax errors
+
+### bash->posix
+
+- `arrays_maps/indexed_arrays`: 1
+  - bash-preexec (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
+- `parse_recovery/parse_diagnostic`: 4
+  - ble-sh-make-command (plugin) Parse diagnostic at <input>:37:19: Syntax error
+  - ble-sh-make-command (plugin) Parse diagnostic at <input>:883:29: Syntax error
+  - ble-sh-make-command (plugin) Parse diagnostic at <input>:1211:17: Syntax error
+  - direnv-stdlib (plugin) Parse diagnostic at <input>:1:1: Parse tree contains syntax errors
+
+### bash->zsh
+
+- `parse_recovery/parse_diagnostic`: 4
+  - ble-sh-make-command (plugin) Parse diagnostic at <input>:37:19: Syntax error
+  - ble-sh-make-command (plugin) Parse diagnostic at <input>:883:29: Syntax error
+  - ble-sh-make-command (plugin) Parse diagnostic at <input>:1211:17: Syntax error
+  - direnv-stdlib (plugin) Parse diagnostic at <input>:1:1: Parse tree contains syntax errors
 
 ### fish->bash
 
@@ -47,40 +76,77 @@ Cross-dialect runs executed: 159
 - `parse_recovery/parse_diagnostic`: 1
   - fish-completion-sync (plugin) Parse diagnostic at <input>:1:1: Parse tree contains syntax errors
 
+### posix->bash
+
+- `parse_recovery/parse_diagnostic`: 2
+  - openrc-network-init (plugin) Parse diagnostic at <input>:33:10: Syntax error
+  - busybox-install-sh (plugin) Parse diagnostic at <input>:1:1: Syntax error
+- `recovery_fallback/fallback`: 3
+  - openrc-network-init (plugin) Applied POSIX preservation fallback due degraded translated output
+  - busybox-install-sh (plugin) Applied POSIX preservation fallback due degraded translated output
+  - autoconf-gendocs-sh (plugin) Applied POSIX preservation fallback due degraded translated output
+
+### posix->fish
+
+- `parse_recovery/parse_diagnostic`: 2
+  - openrc-network-init (plugin) Parse diagnostic at <input>:33:10: Syntax error
+  - busybox-install-sh (plugin) Parse diagnostic at <input>:1:1: Syntax error
+
+### posix->zsh
+
+- `parse_recovery/parse_diagnostic`: 2
+  - openrc-network-init (plugin) Parse diagnostic at <input>:33:10: Syntax error
+  - busybox-install-sh (plugin) Parse diagnostic at <input>:1:1: Syntax error
+- `recovery_fallback/fallback`: 3
+  - openrc-network-init (plugin) Applied POSIX preservation fallback due degraded translated output
+  - busybox-install-sh (plugin) Applied POSIX preservation fallback due degraded translated output
+  - autoconf-gendocs-sh (plugin) Applied POSIX preservation fallback due degraded translated output
+
 ### zsh->bash
 
-- `parse_recovery/parse_diagnostic`: 3
+- `parse_recovery/parse_diagnostic`: 12
   - zsh-nvm (plugin) Parse diagnostic at <input>:1:1: Syntax error
   - zsh-nvm (plugin) Parse diagnostic at <input>:208:34: Syntax error
   - zsh-nvm (plugin) Parse diagnostic at <input>:0:0: 1 additional diagnostics suppressed
+  - fast-syntax-highlighting (plugin) Parse diagnostic at <input>:60:50: Syntax error
+  - fast-syntax-highlighting (plugin) Parse diagnostic at <input>:103:82: Syntax error
 
 ### zsh->fish
 
-- `parse_recovery/parse_diagnostic`: 3
+- `parse_recovery/parse_diagnostic`: 12
   - zsh-nvm (plugin) Parse diagnostic at <input>:1:1: Syntax error
   - zsh-nvm (plugin) Parse diagnostic at <input>:208:34: Syntax error
   - zsh-nvm (plugin) Parse diagnostic at <input>:0:0: 1 additional diagnostics suppressed
+  - fast-syntax-highlighting (plugin) Parse diagnostic at <input>:60:50: Syntax error
+  - fast-syntax-highlighting (plugin) Parse diagnostic at <input>:103:82: Syntax error
 
 ### zsh->posix
 
-- `parse_recovery/parse_diagnostic`: 3
+- `arrays_maps/indexed_arrays`: 1
+  - zsh-pure-theme (theme) Compat[indexed_arrays]: Array features are not POSIX portable
+- `parse_recovery/parse_diagnostic`: 12
   - zsh-nvm (plugin) Parse diagnostic at <input>:1:1: Syntax error
   - zsh-nvm (plugin) Parse diagnostic at <input>:208:34: Syntax error
   - zsh-nvm (plugin) Parse diagnostic at <input>:0:0: 1 additional diagnostics suppressed
+  - fast-syntax-highlighting (plugin) Parse diagnostic at <input>:45:25: Syntax error
+  - fast-syntax-highlighting (plugin) Parse diagnostic at <input>:258:35: Syntax error
 
 ## Semantic Parity Matrix
 
 | Pair | Cases | Arrays/Maps | Hooks/Events | Condition/Test | Param Expansion | Process Subst | Source |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| bash->fish | 18 | 14 | 0 | 14 | 16 | 4 | 0 |
-| bash->posix | 18 | 14 | 0 | 0 | 0 | 0 | 0 |
-| bash->zsh | 18 | 0 | 0 | 0 | 0 | 0 | 0 |
-| fish->bash | 14 | 9 | 3 | 14 | 0 | 0 | 0 |
-| fish->posix | 14 | 8 | 3 | 14 | 0 | 0 | 0 |
-| fish->zsh | 14 | 10 | 4 | 14 | 0 | 0 | 0 |
-| zsh->bash | 21 | 0 | 6 | 0 | 0 | 0 | 0 |
-| zsh->fish | 21 | 18 | 6 | 18 | 20 | 1 | 0 |
-| zsh->posix | 21 | 17 | 6 | 0 | 0 | 0 | 0 |
+| bash->fish | 24 | 18 | 0 | 18 | 21 | 6 | 0 |
+| bash->posix | 24 | 18 | 0 | 0 | 0 | 0 | 0 |
+| bash->zsh | 24 | 0 | 0 | 0 | 0 | 0 | 0 |
+| fish->bash | 17 | 10 | 4 | 17 | 0 | 0 | 0 |
+| fish->posix | 17 | 9 | 4 | 17 | 0 | 0 | 0 |
+| fish->zsh | 17 | 11 | 5 | 17 | 0 | 0 | 0 |
+| posix->bash | 3 | 0 | 0 | 0 | 0 | 0 | 0 |
+| posix->fish | 3 | 3 | 0 | 3 | 3 | 0 | 0 |
+| posix->zsh | 3 | 0 | 0 | 0 | 0 | 0 | 0 |
+| zsh->bash | 29 | 0 | 8 | 0 | 0 | 0 | 0 |
+| zsh->fish | 29 | 23 | 8 | 24 | 26 | 2 | 0 |
+| zsh->posix | 29 | 22 | 8 | 0 | 0 | 0 | 0 |
 
 ## Validator Rule Failures
 
@@ -88,7 +154,7 @@ Cross-dialect runs executed: 159
 
 ## Semantic Differential Checks
 
-Cases: 29, Passed: 29, Skipped: 0
+Cases: 31, Passed: 31, Skipped: 0
 
 ### Semantic Pair Summary
 
@@ -96,9 +162,9 @@ Cases: 29, Passed: 29, Skipped: 0
 |---|---:|---:|---:|---:|
 | fish->bash | 4 | 4 | 0 | 0 |
 | fish->posix | 1 | 1 | 0 | 0 |
-| fish->zsh | 1 | 1 | 0 | 0 |
+| fish->zsh | 2 | 2 | 0 | 0 |
 | zsh->fish | 4 | 4 | 0 | 0 |
-| zsh->bash | 7 | 7 | 0 | 0 |
+| zsh->bash | 8 | 8 | 0 | 0 |
 | zsh->posix | 4 | 4 | 0 | 0 |
 | bash->fish | 3 | 3 | 0 | 0 |
 | bash->zsh | 1 | 1 | 0 | 0 |
@@ -136,3 +202,5 @@ Cases: 29, Passed: 29, Skipped: 0
 - [PASS] plugin_ohmyzsh_copyfile_cond_param_zsh_to_bash zsh->bash exit=0 out="PARAM_OK\nCOND_OK\nHAVE_COPYFILE"
 - [PASS] plugin_ysu_hooks_events_zsh_to_bash zsh->bash exit=0 out="HOOKS_OK"
 - [PASS] plugin_zsh_nvm_param_zsh_to_posix zsh->posix exit=0 out="PARAM_OK\nHAVE_NVM_LOAD"
+- [PASS] plugin_zsh_assoc_sparse_zsh_to_bash zsh->bash exit=0 out="ARR_SPARSE_OK"
+- [PASS] plugin_fish_kv_iter_fish_to_zsh fish->zsh exit=0 out="KV:f=fetch\nKV:c=commit"

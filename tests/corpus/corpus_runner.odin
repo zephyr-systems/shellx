@@ -35,6 +35,12 @@ main :: proc() {
 		{"ohmyzsh-colored-man-pages", "plugin", "tests/corpus/repos/zsh/ohmyzsh/plugins/colored-man-pages/colored-man-pages.plugin.zsh", .Zsh},
 		{"ohmyzsh-web-search", "plugin", "tests/corpus/repos/zsh/ohmyzsh/plugins/web-search/web-search.plugin.zsh", .Zsh},
 		{"ohmyzsh-copyfile", "plugin", "tests/corpus/repos/zsh/ohmyzsh/plugins/copyfile/copyfile.plugin.zsh", .Zsh},
+		{"zsh-autocomplete", "plugin", "tests/corpus/repos/zsh/zsh-autocomplete/zsh-autocomplete.plugin.zsh", .Zsh},
+		{"zoxide-zsh", "plugin", "tests/corpus/repos/zsh/zoxide/zoxide.plugin.zsh", .Zsh},
+		{"atuin-zsh", "plugin", "tests/corpus/repos/zsh/atuin/atuin.plugin.zsh", .Zsh},
+		{"fast-syntax-highlighting", "plugin", "tests/corpus/repos/zsh/fast-syntax-highlighting/fast-syntax-highlighting.plugin.zsh", .Zsh},
+		{"zsh-async", "plugin", "tests/corpus/repos/zsh/zsh-async/async.plugin.zsh", .Zsh},
+		{"powerlevel10k-configure", "plugin", "tests/corpus/repos/zsh/powerlevel10k-extra/internal/configure.zsh", .Zsh},
 
 		// Bash-it plugins (mapped to concrete files)
 		{"bashit-git", "plugin", "tests/corpus/repos/bash/bash-it/plugins/available/git.plugin.bash", .Bash},
@@ -47,6 +53,10 @@ main :: proc() {
 		{"bashit-ssh", "plugin", "tests/corpus/repos/bash/bash-it/plugins/available/ssh.plugin.bash", .Bash},
 		{"bashit-docker", "plugin", "tests/corpus/repos/bash/bash-it/plugins/available/docker.plugin.bash", .Bash},
 		{"bashit-general", "plugin", "tests/corpus/repos/bash/bash-it/aliases/available/general.aliases.bash", .Bash},
+		{"bash-preexec", "plugin", "tests/corpus/repos/bash/bash-preexec/bash-preexec.sh", .Bash},
+		{"ble-sh-make-command", "plugin", "tests/corpus/repos/bash/ble.sh/make_command.sh", .Bash},
+		{"bash-completion-cargo", "plugin", "tests/corpus/repos/bash/bash-completion/completions-fallback/cargo.bash", .Bash},
+		{"direnv-stdlib", "plugin", "tests/corpus/repos/bash/direnv/stdlib.sh", .Bash},
 
 		// Fish plugins (list provided)
 		{"fish-z", "plugin", "tests/corpus/repos/fish/z/conf.d/z.fish", .Fish},
@@ -59,6 +69,14 @@ main :: proc() {
 		{"fish-colored-man-pages", "plugin", "tests/corpus/repos/fish/colored_man_pages.fish/functions/man.fish", .Fish},
 		{"fish-gitnow", "plugin", "tests/corpus/repos/fish/gitnow/conf.d/gitnow.fish", .Fish},
 		{"fish-fisher", "plugin", "tests/corpus/repos/fish/fisher/functions/fisher.fish", .Fish},
+		{"fish-nvm", "plugin", "tests/corpus/repos/fish/nvm.fish/conf.d/nvm.fish", .Fish},
+		{"fish-sponge", "plugin", "tests/corpus/repos/fish/sponge/conf.d/sponge.fish", .Fish},
+		{"thefuck-install", "plugin", "tests/corpus/repos/fish/thefuck/install.sh", .Bash},
+
+		// POSIX scripts
+		{"openrc-network-init", "plugin", "tests/corpus/repos/posix/openrc/init.d/network.in", .POSIX},
+		{"busybox-install-sh", "plugin", "tests/corpus/repos/posix/busybox/applets/install.sh", .POSIX},
+		{"autoconf-gendocs-sh", "plugin", "tests/corpus/repos/posix/autoconf/build-aux/gendocs.sh", .POSIX},
 
 		// Themes (from provided list, where pure shell files exist)
 		{"zsh-powerlevel10k", "theme", "tests/corpus/repos/zsh/powerlevel10k/powerlevel10k.zsh-theme", .Zsh},
@@ -75,6 +93,10 @@ main :: proc() {
 
 		{"fish-tide-theme", "theme", "tests/corpus/repos/fish/tide/functions/fish_prompt.fish", .Fish},
 		{"fish-starship-init", "theme", "tests/corpus/repos/fish/starship/install/install.sh", .Bash},
+		{"zsh-pure-theme", "theme", "tests/corpus/repos/zsh/pure/pure.zsh", .Zsh},
+		{"fish-bobthefish-theme", "theme", "tests/corpus/repos/fish/theme-bobthefish/functions/fish_prompt.fish", .Fish},
+		{"zsh-lambda-mod-theme", "theme", "tests/corpus/repos/zsh/lambda-mod-zsh-theme/lambda-mod.zsh-theme", .Zsh},
+		{"bash-powerline-theme", "theme", "tests/corpus/repos/bash/bash-powerline/bash-powerline.sh", .Bash},
 	}
 
 	results := make([dynamic]CaseResult, 0, len(cases))

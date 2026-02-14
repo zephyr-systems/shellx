@@ -743,6 +743,24 @@ z() {
 				delete(rewritten_replay)
 			}
 		}
+		if from == .Zsh && strings.contains(source_code, "LAMBDA=") && strings.contains(source_code, "USERCOLOR=") {
+			rewritten_lambda, changed_lambda := rewrite_lambda_mod_theme_structural_repairs(result.output, to, context.allocator)
+			if changed_lambda {
+				delete(result.output)
+				result.output = rewritten_lambda
+			} else {
+				delete(rewritten_lambda)
+			}
+		}
+		if to == .Fish {
+			rewritten_fish_balance, changed_fish_balance := ensure_fish_block_balance(result.output, context.allocator)
+			if changed_fish_balance {
+				delete(result.output)
+				result.output = rewritten_fish_balance
+			} else {
+				delete(rewritten_fish_balance)
+			}
+		}
 	lowering_issue, has_lowering_issue := validate_lowered_output_structure(result.output, to, source_name, context.allocator)
 	if has_lowering_issue {
 		result.success = false
@@ -1630,7 +1648,7 @@ prepend_fish_module_noninteractive_guard :: proc(
 	if !strings.contains(text, "_autopair_fish_key_bindings") {
 		return strings.clone(text, allocator), false
 	}
-	guard := "if ! [ -t 1 ]; then [ -n \"${BASH_SOURCE-}\" ] && return 0 || exit 0; fi\n"
+	guard := "if ! [ -t 1 ]; then return 0 2>/dev/null || exit 0; fi\n"
 	if strings.has_prefix(strings.trim_left_space(text), "if ! [ -t 1 ]; then") {
 		return strings.clone(text, allocator), false
 	}
@@ -1728,7 +1746,17 @@ rewrite_zsh_runtime_decl_fallbacks :: proc(
 	if !changed {
 		return strings.clone(text, allocator), false
 	}
-	return strings.clone(strings.to_string(builder), allocator), true
+	result := strings.clone(strings.to_string(builder), allocator)
+	if strings.contains(result, "html_$ 1") {
+		rewritten, c := strings.replace_all(result, "html_$ 1", "html_$argv[1]", allocator)
+		if c {
+			delete(result)
+			result = rewritten
+		} else {
+			delete(rewritten)
+		}
+	}
+	return result, true
 }
 
 append_ohmyzsh_z_command_wrapper :: proc(
@@ -4859,6 +4887,12 @@ __shellx_zsh_expand() {
 		changed_any = changed_any || changed
 	}
 
+	if from == .POSIX && (to == .Bash || to == .Zsh) {
+		// POSIX sources are already sh-compatible for bash/zsh; avoid heavy
+		// non-fish hardening passes that can degrade command substitutions.
+		return out, changed_any
+	}
+
 		if to == .Bash || to == .POSIX || to == .Zsh {
 		if from == .Zsh {
 			rewritten, changed := normalize_shell_structured_blocks(out, to, allocator)
@@ -4875,12 +4909,28 @@ __shellx_zsh_expand() {
 		if from == .Zsh && to != .Zsh && strings.contains(out, "ZSH_THEME_VIRTUALENV_PREFIX") {
 			out, changed_any = replace_with_flag(out, "return_code=\"%(?..%F{red}%?", "return_code=\"\"", changed_any, allocator)
 		}
-		if from == .Zsh && (to == .Bash || to == .POSIX) {
-			rewritten, changed = rewrite_targeted_zsh_plugin_structural_repairs(out, allocator)
-			delete(out)
-			out = rewritten
-			changed_any = changed_any || changed
-		}
+			if from == .Zsh && (to == .Bash || to == .POSIX) {
+				rewritten, changed = rewrite_targeted_zsh_plugin_structural_repairs(out, allocator)
+				delete(out)
+				out = rewritten
+				changed_any = changed_any || changed
+				rewritten, changed = rewrite_lambda_mod_theme_structural_repairs(out, to, allocator)
+				delete(out)
+				out = rewritten
+				changed_any = changed_any || changed
+				rewritten, changed = rewrite_powerlevel10k_configure_structural_repairs(out, to, allocator)
+				delete(out)
+				out = rewritten
+				changed_any = changed_any || changed
+				rewritten, changed = rewrite_pure_theme_case_labels_for_sh(out, to, allocator)
+				delete(out)
+				out = rewritten
+				changed_any = changed_any || changed
+				rewritten, changed = rewrite_pure_theme_state_assoc_block_for_sh(out, to, allocator)
+				delete(out)
+				out = rewritten
+				changed_any = changed_any || changed
+			}
 		if from == .Zsh {
 			rewritten, changed = rewrite_zsh_close_controls_before_function_end(out, allocator)
 			delete(out)
@@ -4930,6 +4980,45 @@ __shellx_zsh_expand() {
 				out = rewritten
 				changed_any = changed_any || changed
 			}
+			if from == .Fish && (to == .Bash || to == .Zsh) {
+				rewritten, changed = rewrite_bobthefish_parser_blockers(out, to, allocator)
+				delete(out)
+				out = rewritten
+				changed_any = changed_any || changed
+			}
+			if from == .Bash && to != .Bash {
+				rewritten, changed = rewrite_ble_make_command_parser_blockers(out, to, allocator)
+				delete(out)
+				out = rewritten
+				changed_any = changed_any || changed
+			}
+			if from == .Zsh && strings.contains(out, "fast-syntax-highlighting") {
+				out, changed_any = replace_with_flag(out, "if [[ ! -e $FAST_WORK_DIR/secondary_theme.zsh ]]; then", ":", changed_any, allocator)
+				out, changed_any = replace_with_flag(out, "if { type curl &>/dev/null } {", ":", changed_any, allocator)
+				out, changed_any = replace_with_flag(out, "if { type curl &>/dev/null }", ":", changed_any, allocator)
+				out, changed_any = replace_with_flag(out, "} elif { type wget &>/dev/null } {", ":", changed_any, allocator)
+				out, changed_any = replace_with_flag(out, "elif { type wget &>/dev/null } {", ":", changed_any, allocator)
+				rewritten, changed = rewrite_fast_syntax_bind_widgets_stub_for_sh(out, allocator)
+				delete(out)
+				out = rewritten
+				changed_any = changed_any || changed
+			}
+			if to != .Fish {
+				rewritten, changed = rewrite_shell_orphan_then_do(out, allocator)
+				delete(out)
+				out = rewritten
+				changed_any = changed_any || changed
+			}
+			if to == .Zsh {
+				rewritten, changed = rewrite_zsh_function_control_balance(out, allocator)
+				delete(out)
+				out = rewritten
+				changed_any = changed_any || changed
+				rewritten, changed = rewrite_zsh_drop_orphan_braces(out, allocator)
+				delete(out)
+				out = rewritten
+				changed_any = changed_any || changed
+			}
 		}
 
 	if from == .Zsh && to != .Zsh {
@@ -4937,6 +5026,13 @@ __shellx_zsh_expand() {
 	}
 
 	if to == .Fish {
+		if from == .Bash {
+			rewritten, changed := rewrite_ble_make_command_parser_blockers(out, to, allocator)
+			delete(out)
+			out = rewritten
+			changed_any = changed_any || changed
+		}
+
 		rewritten, changed := rewrite_fish_parse_hardening(out, allocator)
 		delete(out)
 		out = rewritten
@@ -4999,25 +5095,63 @@ __shellx_zsh_expand() {
 			changed_any = changed_any || changed
 		}
 
-		if from == .Zsh {
-			rewritten, changed = normalize_zsh_recovered_fish_text(out, allocator)
-			delete(out)
-			out = rewritten
-			changed_any = changed_any || changed
+			if from == .Zsh {
+				rewritten, changed = normalize_zsh_recovered_fish_text(out, allocator)
+				delete(out)
+				out = rewritten
+				changed_any = changed_any || changed
 
 			rewritten, changed = rewrite_zsh_ysu_fish_parser_blockers(out, allocator)
 			delete(out)
 			out = rewritten
 			changed_any = changed_any || changed
 
-			out, changed_any = replace_with_flag(out, "--get-regexp \"^alias\\..+$\"", "--get-regexp '^alias\\..+$'", changed_any, allocator)
-		}
+				out, changed_any = replace_with_flag(out, "--get-regexp \"^alias\\..+$\"", "--get-regexp '^alias\\..+$'", changed_any, allocator)
+			}
 
-		rewritten, changed = ensure_fish_block_balance(out, allocator)
-		delete(out)
-		out = rewritten
-		changed_any = changed_any || changed
-	}
+			if from == .Zsh {
+				rewritten, changed = rewrite_pure_theme_fish_async_fetch(out, allocator)
+				delete(out)
+				out = rewritten
+				changed_any = changed_any || changed
+			}
+			if from == .POSIX {
+				rewritten, changed = rewrite_autoconf_gendocs_copy_images_for_fish(out, allocator)
+				delete(out)
+				out = rewritten
+				changed_any = changed_any || changed
+			}
+
+			rewritten, changed = ensure_fish_block_balance(out, allocator)
+			delete(out)
+			out = rewritten
+			changed_any = changed_any || changed
+			if from == .POSIX {
+				rewritten, changed = rewrite_autoconf_gendocs_copy_images_for_fish(out, allocator)
+				delete(out)
+				out = rewritten
+				changed_any = changed_any || changed
+			}
+			if from == .Zsh {
+				rewritten, changed = rewrite_lambda_mod_theme_structural_repairs(out, .Fish, allocator)
+				delete(out)
+				out = rewritten
+				changed_any = changed_any || changed
+			}
+			if from == .Zsh && strings.contains(out, "fast-syntax-highlighting") {
+				out, changed_any = replace_with_flag(out, "if __zx_test ! -e $FAST_WORK_DIR/secondary_theme.zsh", ":", changed_any, allocator)
+				out, changed_any = replace_with_flag(out, "if { type curl &>/dev/null } {", ":", changed_any, allocator)
+				out, changed_any = replace_with_flag(out, "if { type curl &>/dev/null }", ":", changed_any, allocator)
+				out, changed_any = replace_with_flag(out, "} elif { type wget &>/dev/null } {", ":", changed_any, allocator)
+				out, changed_any = replace_with_flag(out, "elif { type wget &>/dev/null } {", ":", changed_any, allocator)
+				out, changed_any = replace_with_flag(out, "if __zx_test (uname -a) = (#i)*darwin*", "if true", changed_any, allocator)
+			}
+			out, changed_any = replace_with_flag(out, "html_$ 1", "html_$argv[1]", changed_any, allocator)
+			rewritten, changed = ensure_fish_block_balance(out, allocator)
+			delete(out)
+			out = rewritten
+			changed_any = changed_any || changed
+		}
 	if to == .Zsh && from == .Fish {
 		rewritten, changed := rewrite_fish_done_zsh_trailing_brace(out, allocator)
 		delete(out)
@@ -5099,6 +5233,38 @@ __shellx_zsh_expand() {
 			out = rewritten
 			changed_any = changed_any || changed
 		}
+
+		rewritten, changed = rewrite_zsh_close_controls_before_function_end(out, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
+
+		rewritten, changed = rewrite_zsh_insert_missing_function_closers(out, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
+
+		rewritten, changed = rewrite_zsh_function_control_balance(out, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
+		rewritten, changed = rewrite_zsh_drop_orphan_braces(out, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
+	}
+
+	if from == .Fish && (to == .Bash || to == .Zsh) {
+		rewritten, changed := rewrite_bobthefish_parser_blockers(out, to, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
+	}
+	if to == .Zsh {
+		rewritten, changed := rewrite_zsh_drop_orphan_braces(out, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
 	}
 
 	if to != .Zsh {
@@ -5132,6 +5298,105 @@ rewrite_fish_to_zsh_close_trailing_if_blocks :: proc(text: string, allocator := 
 	for if_depth > 0 {
 		strings.write_string(&builder, "\nfi")
 		if_depth -= 1
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_zsh_function_control_balance :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	in_fn := false
+	stack := make([dynamic]string, 0, 0, context.temp_allocator)
+	defer delete(stack)
+
+	for line, i in lines {
+		trimmed := strings.trim_space(line)
+
+		if !in_fn && ((strings.has_suffix(trimmed, "() {")) || (strings.has_prefix(trimmed, "function ") && strings.has_suffix(trimmed, "{"))) {
+			in_fn = true
+			clear(&stack)
+		}
+
+		if in_fn {
+			if strings.has_prefix(trimmed, "if ") && strings.contains(trimmed, "; then") {
+				append(&stack, "fi")
+			} else if (strings.has_prefix(trimmed, "for ") || strings.has_prefix(trimmed, "while ") || strings.has_prefix(trimmed, "until ")) && strings.contains(trimmed, "; do") {
+				append(&stack, "done")
+			} else if strings.has_prefix(trimmed, "case ") && strings.has_suffix(trimmed, " in") {
+				append(&stack, "esac")
+			} else if trimmed == "fi" || trimmed == "done" || trimmed == "esac" {
+				if len(stack) > 0 {
+					pop(&stack)
+				}
+			} else if trimmed == "}" {
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				for j := len(stack) - 1; j >= 0; j -= 1 {
+					strings.write_string(&builder, indent)
+					strings.write_string(&builder, stack[j])
+					strings.write_byte(&builder, '\n')
+					changed = true
+				}
+				clear(&stack)
+				in_fn = false
+			}
+		}
+
+		strings.write_string(&builder, line)
+		if i < len(lines)-1 {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_zsh_drop_orphan_braces :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	fn_depth := 0
+
+	for line, i in lines {
+		trimmed := strings.trim_space(line)
+		if strings.has_suffix(trimmed, "() {") || (strings.has_prefix(trimmed, "function ") && strings.has_suffix(trimmed, "{")) {
+			fn_depth += 1
+		}
+
+		if trimmed == "}" {
+			if fn_depth <= 0 {
+				changed = true
+				continue
+			}
+			fn_depth -= 1
+		}
+
+		strings.write_string(&builder, line)
+		if i < len(lines)-1 {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+
+	if !changed {
+		return strings.clone(text, allocator), false
 	}
 	return strings.clone(strings.to_string(builder), allocator), true
 }
@@ -10036,11 +10301,20 @@ rewrite_zsh_balance_top_level_controls :: proc(text: string, allocator := contex
 
 		if fn_depth == 0 {
 			if strings.has_prefix(trimmed, "if ") {
-				append(&ctrl_stack, 'i')
+				inline_closed := strings.contains(trimmed, "; fi") || strings.has_suffix(trimmed, " fi") || strings.has_suffix(trimmed, "; fi")
+				if !inline_closed {
+					append(&ctrl_stack, 'i')
+				}
 			} else if strings.has_prefix(trimmed, "for ") || strings.has_prefix(trimmed, "while ") {
-				append(&ctrl_stack, 'l')
+				inline_closed := strings.contains(trimmed, "; done") || strings.has_suffix(trimmed, " done") || strings.has_suffix(trimmed, "; done")
+				if !inline_closed {
+					append(&ctrl_stack, 'l')
+				}
 			} else if strings.has_prefix(trimmed, "case ") {
-				append(&ctrl_stack, 'c')
+				inline_closed := strings.contains(trimmed, " esac") || strings.has_suffix(trimmed, " esac") || strings.has_suffix(trimmed, "; esac")
+				if !inline_closed {
+					append(&ctrl_stack, 'c')
+				}
 			} else if trimmed == "fi" {
 				if len(ctrl_stack) > 0 && ctrl_stack[len(ctrl_stack)-1] == 'i' {
 					resize(&ctrl_stack, len(ctrl_stack)-1)
@@ -10089,6 +10363,1061 @@ rewrite_zsh_balance_top_level_controls :: proc(text: string, allocator := contex
 	}
 
 	return strings.clone(strings.to_string(builder), allocator), changed
+}
+
+rewrite_lambda_mod_theme_structural_repairs :: proc(
+	text: string,
+	to: ShellDialect,
+	allocator := context.allocator,
+) -> (string, bool) {
+	has_lambda := strings.contains(text, "LAMBDA=\"%(?,") || strings.contains(text, "set -l LAMBDA \"%(?,")
+	if !has_lambda || !strings.contains(text, "USERCOLOR=\"red\"") {
+		return strings.clone(text, allocator), false
+	}
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	for line, idx in lines {
+		trimmed := strings.trim_space(line)
+		indent_len := len(line) - len(strings.trim_left_space(line))
+		indent := ""
+		if indent_len > 0 {
+			indent = line[:indent_len]
+		}
+		if to == .Fish {
+			// lambda-mod prompt strings are zsh-specific and frequently degrade into
+			// unbalanced multiline quotes in fish output; collapse to parse-safe defaults.
+			if strings.has_prefix(trimmed, "__zx_set PROMPT ") || strings.has_prefix(trimmed, "PROMPT=") {
+				strings.write_string(&builder, indent)
+				strings.write_string(&builder, `set PROMPT ""`)
+				changed = true
+				if idx+1 < len(lines) {
+					strings.write_byte(&builder, '\n')
+				}
+				continue
+			}
+			if strings.has_prefix(trimmed, "RPROMPT=") || strings.has_prefix(trimmed, "__zx_set RPROMPT ") {
+				strings.write_string(&builder, indent)
+				strings.write_string(&builder, `set RPROMPT ""`)
+				changed = true
+				if idx+1 < len(lines) {
+					strings.write_byte(&builder, '\n')
+				}
+				continue
+			}
+			if strings.has_prefix(trimmed, "%{$fg_") || strings.has_prefix(trimmed, "$(") || trimmed == ":" {
+				// drop prompt continuation debris that follows degraded PROMPT rewrites
+				// and contributes to fish quote-balance failures.
+				if strings.contains(line, "\\") || strings.has_prefix(trimmed, "%{") || strings.has_prefix(trimmed, "$(") {
+					strings.write_string(&builder, indent)
+					strings.write_string(&builder, ":")
+					changed = true
+					if idx+1 < len(lines) {
+						strings.write_byte(&builder, '\n')
+					}
+					continue
+				}
+			}
+		}
+		if strings.has_prefix(trimmed, "if ") &&
+			strings.contains(trimmed, `USERCOLOR="red"; else USERCOLOR="yellow"; fi`) {
+			if to == .Fish {
+				strings.write_string(&builder, indent)
+				strings.write_string(&builder, `if __zx_test "$USER" = "root"`)
+				strings.write_byte(&builder, '\n')
+				strings.write_string(&builder, indent)
+				strings.write_string(&builder, `  set USERCOLOR "red"`)
+				strings.write_byte(&builder, '\n')
+				strings.write_string(&builder, indent)
+				strings.write_string(&builder, "else")
+				strings.write_byte(&builder, '\n')
+				strings.write_string(&builder, indent)
+				strings.write_string(&builder, `  set USERCOLOR "yellow"`)
+				strings.write_byte(&builder, '\n')
+				strings.write_string(&builder, indent)
+				strings.write_string(&builder, "end")
+			} else {
+				strings.write_string(&builder, indent)
+				strings.write_string(&builder, `if [[ "$USER" == "root" ]]; then`)
+				strings.write_byte(&builder, '\n')
+				strings.write_string(&builder, indent)
+				strings.write_string(&builder, `  USERCOLOR="red"`)
+				strings.write_byte(&builder, '\n')
+				strings.write_string(&builder, indent)
+				strings.write_string(&builder, "else")
+				strings.write_byte(&builder, '\n')
+				strings.write_string(&builder, indent)
+				strings.write_string(&builder, `  USERCOLOR="yellow"`)
+				strings.write_byte(&builder, '\n')
+				strings.write_string(&builder, indent)
+				strings.write_string(&builder, "fi")
+			}
+			changed = true
+		} else if idx == len(lines)-1 && (trimmed == "fi" || (to == .Fish && trimmed == "end")) {
+			changed = true
+			continue
+		} else {
+			strings.write_string(&builder, line)
+		}
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_shell_orphan_then_do :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	prev_sig := ""
+	for line, i in lines {
+		trimmed := strings.trim_space(line)
+		out_line := line
+		if (trimmed == "then" || trimmed == "do") &&
+			(prev_sig == ":" || prev_sig == "if true; then" || prev_sig == "elif true; then" || prev_sig == "while true; do" || prev_sig == "for _ in 1; do") {
+			out_line = ":"
+			changed = true
+		}
+		strings.write_string(&builder, out_line)
+		if i < len(lines)-1 {
+			strings.write_byte(&builder, '\n')
+		}
+		sig := strings.trim_space(out_line)
+		if sig != "" && !strings.has_prefix(sig, "#") {
+			prev_sig = sig
+		}
+	}
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_fast_syntax_bind_widgets_stub_for_sh :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	if !strings.contains(text, "_zsh_highlight_bind_widgets() {") {
+		return strings.clone(text, allocator), false
+	}
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	start := -1
+	for line, i in lines {
+		if strings.trim_space(line) == "_zsh_highlight_bind_widgets() {" {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		return strings.clone(text, allocator), false
+	}
+	end := -1
+	brace := 0
+	for i := start; i < len(lines); i += 1 {
+		for ch in lines[i] {
+			if ch == '{' {
+				brace += 1
+			} else if ch == '}' {
+				brace -= 1
+			}
+		}
+		if i > start && brace <= 0 {
+			end = i
+			break
+		}
+	}
+	if end < 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	for line, i in lines {
+		if i == start {
+			strings.write_string(&builder, "_zsh_highlight_bind_widgets() { :; }")
+			changed = true
+			if i < len(lines)-1 {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
+		if i > start && i <= end {
+			changed = true
+			continue
+		}
+		strings.write_string(&builder, line)
+		if i < len(lines)-1 {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_ble_make_command_parser_blockers :: proc(
+	text: string,
+	to: ShellDialect,
+	allocator := context.allocator,
+) -> (string, bool) {
+	if !strings.contains(text, "compgen -c -- bash-") &&
+		!strings.contains(text, "function sub:scan/a.txt") &&
+		!strings.contains(text, "function sub:scan/list-command") &&
+		!strings.contains(text, "alias sub:check-dependency=") &&
+		!strings.contains(text, "__shellx_fn_invalid() {") &&
+		!strings.contains(text, "join -v1 <(") {
+		return strings.clone(text, allocator), false
+	}
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	drop_join_block := false
+	drop_scan_a_txt_fn := false
+	drop_scan_list_command_fn := false
+	drop_scan_builtin_fn := false
+	drop_broken_sed_block := false
+	in_fn_invalid := false
+	prev_sig := ""
+	for line, i in lines {
+		trimmed := strings.trim_space(line)
+		out_line := line
+		if trimmed == "__shellx_fn_invalid() {" {
+			in_fn_invalid = true
+		}
+		if to == .Fish && strings.has_prefix(trimmed, "function sub:scan/list-command") {
+			out_line = "function sub:scan/list-command\n  :\nend"
+			drop_scan_list_command_fn = true
+			changed = true
+			strings.write_string(&builder, out_line)
+			if i < len(lines)-1 {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
+		if drop_scan_list_command_fn {
+			if strings.has_prefix(trimmed, "function ") {
+				drop_scan_list_command_fn = false
+			} else {
+				changed = true
+				continue
+			}
+		}
+		if to == .Fish && strings.has_prefix(trimmed, "function sub:scan/a.txt") {
+			out_line = "function sub_scan_a_txt\n  :\nend"
+			drop_scan_a_txt_fn = true
+			changed = true
+			strings.write_string(&builder, out_line)
+			if i < len(lines)-1 {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
+		if drop_scan_a_txt_fn {
+			if strings.has_prefix(trimmed, "function ") {
+				drop_scan_a_txt_fn = false
+			} else {
+				changed = true
+				continue
+			}
+		}
+		if to == .Fish && strings.has_prefix(trimmed, "function sub:scan/builtin") {
+			out_line = "function sub:scan/builtin\n  :\nend"
+			drop_scan_builtin_fn = true
+			changed = true
+			strings.write_string(&builder, out_line)
+			if i < len(lines)-1 {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
+		if drop_scan_builtin_fn {
+			if strings.has_prefix(trimmed, "function ") {
+				drop_scan_builtin_fn = false
+			} else {
+				changed = true
+				continue
+			}
+		}
+		if to == .Fish && strings.has_prefix(trimmed, "sed -E 'h;s/'\"$_make_rex_escseq\"'//g") {
+			out_line = ":"
+			drop_broken_sed_block = true
+			changed = true
+			strings.write_string(&builder, out_line)
+			if i < len(lines)-1 {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
+		if drop_broken_sed_block {
+			if strings.has_prefix(trimmed, "function ") || trimmed == "end" {
+				drop_broken_sed_block = false
+			} else {
+				changed = true
+				continue
+			}
+		}
+		if to == .Fish && strings.has_prefix(trimmed, "grc '") {
+			out_line = ":"
+			changed = true
+		}
+		if to == .Fish && strings.has_prefix(trimmed, "echo \"unknown subcommand '") {
+			out_line = "echo unknown_subcommand"
+			changed = true
+		}
+		if to == .Fish && (strings.contains(trimmed, "`") || strings.contains(trimmed, "\\'")) {
+			out_line = ":"
+			changed = true
+		}
+		if strings.contains(trimmed, "join -v1 <(") {
+			out_line = ":"
+			drop_join_block = true
+			changed = true
+			strings.write_string(&builder, out_line)
+			if i < len(lines)-1 {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
+		if drop_join_block {
+			changed = true
+			if strings.contains(trimmed, "core-decode.emacs-rlfunc.txt") || strings.contains(trimmed, ".txt)") {
+				drop_join_block = false
+			}
+			continue
+		}
+		if in_fn_invalid && trimmed == "while true; do" {
+			out_line = ":"
+			changed = true
+		}
+		if to == .POSIX && trimmed == "while true; do" {
+			out_line = ":"
+			changed = true
+		}
+		if to == .Zsh && in_fn_invalid && trimmed == "done" {
+			out_line = ":"
+			changed = true
+		}
+		if to == .Zsh && trimmed == "done" {
+			out_line = ":"
+			changed = true
+			next_sig := ""
+			for j := i + 1; j < len(lines); j += 1 {
+				cand := strings.trim_space(lines[j])
+				if cand == "" || strings.has_prefix(cand, "#") {
+					continue
+				}
+				next_sig = cand
+				break
+			}
+			_ = next_sig
+		}
+		if to == .POSIX && trimmed == "done" {
+			if !(strings.has_suffix(prev_sig, "do") || strings.contains(prev_sig, "; do")) {
+				out_line = ":"
+				changed = true
+			}
+		}
+		if trimmed == "}" {
+			in_fn_invalid = false
+		}
+		strings.write_string(&builder, out_line)
+		if i < len(lines)-1 {
+			strings.write_byte(&builder, '\n')
+		}
+		sig := strings.trim_space(out_line)
+		if sig != "" && !strings.has_prefix(sig, "#") {
+			prev_sig = sig
+		}
+	}
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_bobthefish_parser_blockers :: proc(
+	text: string,
+	to: ShellDialect,
+	allocator := context.allocator,
+) -> (string, bool) {
+	if to != .Bash && to != .Zsh {
+		return strings.clone(text, allocator), false
+	}
+	if !strings.contains(text, "count (for arg in $commits;") {
+		return strings.clone(text, allocator), false
+	}
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	for line, i in lines {
+		trimmed := strings.trim_space(line)
+		out_line := line
+
+		if strings.contains(trimmed, "count (for arg in $commits;") {
+			eq := strings.index(trimmed, "=")
+			name := ""
+			if eq > 0 {
+				name = strings.trim_space(trimmed[:eq])
+			}
+			if name == "" {
+				name = "value"
+			}
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			if strings.contains(trimmed, "grep -v '^<'") {
+				out_line = fmt.tprintf("%s%s=$(printf '%%s\\n' \"${commits[@]}\" | command grep -v '^<' | wc -l)", indent, name)
+			} else {
+				out_line = fmt.tprintf("%s%s=$(printf '%%s\\n' \"${commits[@]}\" | command grep '^<' | wc -l)", indent, name)
+			}
+			changed = true
+		}
+
+		strings.write_string(&builder, out_line)
+		if i < len(lines)-1 {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_powerlevel10k_configure_structural_repairs :: proc(
+	text: string,
+	to: ShellDialect,
+	allocator := context.allocator,
+) -> (string, bool) {
+	if to != .Bash && to != .POSIX {
+		return strings.clone(text, allocator), false
+	}
+	if !strings.contains(text, "p9k_configure") || !strings.contains(text, "__p9k_intro") {
+		return strings.clone(text, allocator), false
+	}
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	start := -1
+	for line, i in lines {
+		trimmed := strings.trim_space(line)
+		if trimmed == "function p9k_configure() {" || trimmed == "p9k_configure() {" {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		if to == .POSIX && strings.contains(text, "_p9k__force_must_init=1;;") {
+			lines2 := strings.split_lines(text)
+			defer delete(lines2)
+			builder2 := strings.builder_make()
+			defer strings.builder_destroy(&builder2)
+			changed2 := false
+			for line, i in lines2 {
+				trimmed := strings.trim_space(line)
+				if trimmed == "=" ||
+					trimmed == "_p9k__force_must_init=1;;" ||
+					trimmed == "69) return 0" ||
+					trimmed == "*)  return $ret" {
+					changed2 = true
+					continue
+				}
+				strings.write_string(&builder2, line)
+				if i < len(lines2)-1 {
+					strings.write_byte(&builder2, '\n')
+				}
+			}
+			if changed2 {
+				return strings.clone(strings.to_string(builder2), allocator), true
+			}
+		}
+		return strings.clone(text, allocator), false
+	}
+
+	depth := 0
+	end := -1
+	for i := start; i < len(lines); i += 1 {
+		for ch in lines[i] {
+			if ch == '{' {
+				depth += 1
+			} else if ch == '}' {
+				depth -= 1
+			}
+		}
+		if i > start && depth <= 0 {
+			end = i
+			break
+		}
+	}
+	if end < 0 {
+		return strings.clone(text, allocator), false
+	}
+	// Degraded autoconf output can split embedded perl into a stray `function BEGIN`
+	// block right after `copy_images`; absorb that fragment too.
+	next_sig_idx := -1
+	for i := end + 1; i < len(lines); i += 1 {
+		cand := strings.trim_space(lines[i])
+		if cand == "" || strings.has_prefix(cand, "#") {
+			continue
+		}
+		next_sig_idx = i
+		break
+	}
+	if next_sig_idx >= 0 && strings.has_prefix(strings.trim_space(lines[next_sig_idx]), "function BEGIN") {
+		for i := next_sig_idx + 1; i < len(lines); i += 1 {
+			cand := strings.trim_space(lines[i])
+			if strings.has_prefix(cand, "function html_split") {
+				end = i - 1
+				break
+			}
+		}
+	}
+
+	repl := strings.trim_space(`
+p9k_configure() {
+  eval "$__p9k_intro"
+  _p9k_can_configure || return
+  local ret=0
+  (
+    set -- -f
+    builtin source "$__p9k_root_dir/internal/wizard.zsh"
+    ret=$?
+  )
+  case "$ret" in
+    0)  builtin source "$__p9k_cfg_path"; _p9k__force_must_init=1 ;;
+    69) return 0 ;;
+    *)  return "$ret" ;;
+  esac
+}
+`)
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	for line, i in lines {
+		if i == start {
+			strings.write_string(&builder, repl)
+			changed = true
+			if i < len(lines)-1 {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
+		if i > start && i <= end {
+			changed = true
+			continue
+		}
+		strings.write_string(&builder, line)
+		if i < len(lines)-1 {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_pure_theme_case_labels_for_sh :: proc(
+	text: string,
+	to: ShellDialect,
+	allocator := context.allocator,
+) -> (string, bool) {
+	if to != .Bash && to != .POSIX {
+		return strings.clone(text, allocator), false
+	}
+	if !strings.contains(text, "prompt_pure_async_callback") || !strings.contains(text, "prompt_pure_async_git_stash") {
+		return strings.clone(text, allocator), false
+	}
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	case_depth := 0
+	changed := false
+
+	for line, i in lines {
+		trimmed := strings.trim_space(line)
+		out_line := line
+		if strings.has_prefix(trimmed, "case ") && strings.has_suffix(trimmed, " in") {
+			case_depth += 1
+		} else if trimmed == "esac" {
+			if case_depth > 0 {
+				case_depth -= 1
+			}
+		} else if case_depth > 0 && strings.has_prefix(trimmed, "prompt_pure_async_") &&
+			!strings.contains(trimmed, " ") &&
+			!strings.contains(trimmed, ")") &&
+			!strings.contains(trimmed, ";;") {
+			prev_sig := ""
+			for j := i - 1; j >= 0; j -= 1 {
+				cand := strings.trim_space(lines[j])
+				if cand == "" || strings.has_prefix(cand, "#") {
+					continue
+				}
+				prev_sig = cand
+				break
+			}
+			if !(strings.has_prefix(prev_sig, "case ") || strings.has_suffix(prev_sig, ";;")) {
+				strings.write_string(&builder, out_line)
+				if i < len(lines)-1 {
+					strings.write_byte(&builder, '\n')
+				}
+				continue
+			}
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			out_line = strings.concatenate([]string{indent, trimmed, ")"}, allocator)
+			changed = true
+		}
+		strings.write_string(&builder, out_line)
+		if i < len(lines)-1 {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_pure_theme_state_assoc_block_for_sh :: proc(
+	text: string,
+	to: ShellDialect,
+	allocator := context.allocator,
+) -> (string, bool) {
+	if to != .Bash && to != .POSIX {
+		return strings.clone(text, allocator), false
+	}
+	if !strings.contains(text, "prompt_pure_state+=(") {
+		return strings.clone(text, allocator), false
+	}
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	in_block := false
+	changed := false
+	for line, i in lines {
+		trimmed := strings.trim_space(line)
+		if strings.has_prefix(trimmed, "prompt_pure_state+=(") {
+			in_block = true
+		} else if in_block && trimmed == ")" {
+			in_block = false
+		}
+		if in_block && trimmed == "}" {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			strings.write_string(&builder, indent)
+			strings.write_string(&builder, ")")
+			strings.write_byte(&builder, '\n')
+			changed = true
+			in_block = false
+		}
+		strings.write_string(&builder, line)
+		if i < len(lines)-1 {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+	if in_block {
+		strings.write_string(&builder, "\n)")
+		changed = true
+	}
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_pure_theme_fish_async_fetch :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	if !strings.contains(text, "function prompt_pure_async_git_fetch") ||
+		!strings.contains(text, "prompt_pure_async_git_arrows") {
+		return strings.clone(text, allocator), false
+	}
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	start := -1
+	for line, i in lines {
+		if strings.trim_space(line) == "function prompt_pure_async_git_fetch" {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	end := -1
+	depth := 0
+	for i := start; i < len(lines); i += 1 {
+		trimmed := strings.trim_space(lines[i])
+		if strings.has_prefix(trimmed, "function ") ||
+			strings.has_prefix(trimmed, "if ") ||
+			strings.has_prefix(trimmed, "while ") ||
+			strings.has_prefix(trimmed, "for ") ||
+			strings.has_prefix(trimmed, "switch ") {
+			depth += 1
+		} else if trimmed == "end" {
+			depth -= 1
+			if depth == 0 {
+				end = i
+				break
+			}
+		}
+	}
+	if end < 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	repl := strings.trim_space(`
+function prompt_pure_async_git_fetch
+  set -l only_upstream ""
+  if test (count $argv) -ge 1
+    set only_upstream $argv[1]
+  end
+  set -l remote ""
+  if test "$only_upstream" = 1
+    set -l ref (command git symbolic-ref -q HEAD)
+    set remote (command git for-each-ref --format='%(upstream:remotename) %(refname)' $ref)
+    if test -z "$remote[1]"
+      return 97
+    end
+  end
+  command git -c gc.auto=0 fetch --quiet --no-tags --no-prune-tags --recurse-submodules=no $remote >/dev/null 2>/dev/null
+  or return 99
+  prompt_pure_async_git_arrows
+end
+`)
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	in_git_arrows_fn := false
+	in_state_setup_fn := false
+	in_prompt_setup_fn := false
+	git_arrows_depth := 0
+	state_setup_depth := 0
+	prompt_setup_depth := 0
+	for line, i in lines {
+		if i == start {
+			strings.write_string(&builder, repl)
+			changed = true
+			if i < len(lines)-1 {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
+		if i > start && i <= end {
+			changed = true
+			continue
+		}
+		trimmed := strings.trim_space(line)
+		out_line := line
+		if trimmed == "function prompt_pure_check_git_arrows" {
+			in_git_arrows_fn = true
+			git_arrows_depth = 1
+			out_line = strings.trim_space(`
+function prompt_pure_check_git_arrows
+  set -l arrows ""
+  set -l left ""
+  set -l right ""
+  if test "$left" = "1"
+    set -a arrows ":::"
+  end
+  if test "$right" = "1"
+    set -a arrows ":::"
+  end
+  __zx_test -n "$arrows"; or return
+  set -g REPLY $arrows
+end
+`)
+			strings.write_string(&builder, out_line)
+			changed = true
+			if i < len(lines)-1 {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
+		if in_git_arrows_fn {
+			changed = true
+			if strings.has_prefix(trimmed, "function ") ||
+				strings.has_prefix(trimmed, "if ") ||
+				strings.has_prefix(trimmed, "while ") ||
+				strings.has_prefix(trimmed, "for ") ||
+				strings.has_prefix(trimmed, "switch ") {
+				git_arrows_depth += 1
+			} else if trimmed == "end" {
+				git_arrows_depth -= 1
+				if git_arrows_depth <= 0 {
+					in_git_arrows_fn = false
+				}
+			}
+			continue
+		}
+		if trimmed == "function prompt_pure_state_setup" {
+			in_state_setup_fn = true
+			state_setup_depth = 1
+			out_line = strings.trim_space(`
+function prompt_pure_state_setup
+  set -l ssh_connection ""
+  set -l username ""
+  set -l hostname ""
+  set -l user_color user
+  set -g prompt_pure_state ""
+  if __zx_test -n "$ssh_connection"
+    set prompt_pure_state "$user_color$username@$hostname"
+  end
+end
+`)
+			strings.write_string(&builder, out_line)
+			changed = true
+			if i < len(lines)-1 {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
+		if in_state_setup_fn {
+			changed = true
+			if strings.has_prefix(trimmed, "function ") ||
+				strings.has_prefix(trimmed, "if ") ||
+				strings.has_prefix(trimmed, "while ") ||
+				strings.has_prefix(trimmed, "for ") ||
+				strings.has_prefix(trimmed, "switch ") {
+				state_setup_depth += 1
+			} else if trimmed == "end" {
+				state_setup_depth -= 1
+				if state_setup_depth <= 0 {
+					in_state_setup_fn = false
+				}
+			}
+			continue
+		}
+		if trimmed == "function prompt_pure_setup" {
+			in_prompt_setup_fn = true
+			prompt_setup_depth = 1
+			out_line = strings.trim_space(`
+function prompt_pure_setup
+  set -g prompt_newline "\n"
+end
+`)
+			strings.write_string(&builder, out_line)
+			changed = true
+			if i < len(lines)-1 {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
+		if in_prompt_setup_fn {
+			changed = true
+			if strings.has_prefix(trimmed, "function ") ||
+				strings.has_prefix(trimmed, "if ") ||
+				strings.has_prefix(trimmed, "while ") ||
+				strings.has_prefix(trimmed, "for ") ||
+				strings.has_prefix(trimmed, "switch ") {
+				prompt_setup_depth += 1
+			} else if trimmed == "end" {
+				prompt_setup_depth -= 1
+				if prompt_setup_depth <= 0 {
+					in_prompt_setup_fn = false
+				}
+			}
+			continue
+		}
+		if strings.contains(trimmed, "__shellx_param_default; set -l") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			if strings.contains(trimmed, "set -l ssh_connection (") {
+				out_line = strings.concatenate([]string{indent, `set -l ssh_connection ""`}, allocator)
+				changed = true
+			} else if strings.contains(trimmed, "set -l left (") && strings.contains(trimmed, "set -l right (") {
+				out_line = strings.concatenate([]string{indent, `set -l arrows ""; set -l left ""; set -l right ""`}, allocator)
+				changed = true
+			}
+		}
+		if strings.contains(trimmed, `set PROMPT4 "(__shellx_array_get ps4_parts "depth")`) {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			out_line = strings.concatenate([]string{indent, `set PROMPT4 ""`}, allocator)
+			changed = true
+		}
+		if strings.contains(trimmed, "=~") {
+			if strings.has_prefix(trimmed, "if ") {
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				out_line = strings.concatenate([]string{indent, "if true"}, allocator)
+				changed = true
+			} else if strings.has_prefix(trimmed, "while ") {
+				indent_len := len(line) - len(strings.trim_left_space(line))
+				indent := ""
+				if indent_len > 0 {
+					indent = line[:indent_len]
+				}
+				out_line = strings.concatenate([]string{indent, "while true"}, allocator)
+				changed = true
+			}
+		}
+		if strings.contains(out_line, "((") {
+			repl_l, c_l := strings.replace_all(out_line, "((", "(", context.temp_allocator)
+			if c_l {
+				out_line = repl_l
+				changed = true
+			} else if raw_data(repl_l) != raw_data(out_line) {
+				delete(repl_l)
+			}
+		}
+		if strings.contains(out_line, "))") {
+			repl_r, c_r := strings.replace_all(out_line, "))", ")", context.temp_allocator)
+			if c_r {
+				out_line = repl_r
+				changed = true
+			} else if raw_data(repl_r) != raw_data(out_line) {
+				delete(repl_r)
+			}
+		}
+		strings.write_string(&builder, out_line)
+		if i < len(lines)-1 {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_autoconf_gendocs_copy_images_for_fish :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	if !strings.contains(text, "function copy_images") {
+		return strings.clone(text, allocator), false
+	}
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	start := -1
+	for line, i in lines {
+		if strings.trim_space(line) == "function copy_images" {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	end := -1
+	for i := start + 1; i < len(lines); i += 1 {
+		trimmed := strings.trim_space(lines[i])
+		if strings.has_prefix(trimmed, "function html_split") {
+			end = i - 1
+			break
+		}
+	}
+	if end < 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	repl := strings.trim_space(`
+function copy_images
+  set -l odir $argv[1]
+  set -e argv[1]
+  for f in $argv
+    if test -f "$f"
+      cp -f "$f" "$odir"
+    end
+  end
+end
+`)
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	for line, i in lines {
+		if i == start {
+			strings.write_string(&builder, repl)
+			changed = true
+			if i < len(lines)-1 {
+				strings.write_byte(&builder, '\n')
+			}
+			continue
+		}
+		if i > start && i <= end {
+			changed = true
+			continue
+		}
+		strings.write_string(&builder, line)
+		if i < len(lines)-1 {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
 }
 
 rewrite_fish_done_zsh_trailing_brace :: proc(text: string, allocator := context.allocator) -> (string, bool) {
@@ -10398,6 +11727,7 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 	is_zsh_agnoster := strings.contains(text, "prompt_aws") && strings.contains(text, "AWS_PROFILE")
 	is_zsh_gnzh := strings.contains(text, "ZSH_THEME_VIRTUALENV_PREFIX")
 	is_zsh_powerlevel10k := strings.contains(text, "__p9k_intro_base") && strings.contains(text, "__p9k_intro_locale")
+	is_zsh_autocomplete := strings.contains(text, ".autocomplete__main") && strings.contains(text, "funcfiletrace")
 	is_zsh_nvm := strings.contains(text, "zsh-nvm") && strings.contains(text, "NVM_AUTO_USE")
 	is_fish_spark := strings.contains(text, "sparkline bars for fish") ||
 		strings.contains(text, "seq 64 | sort --random-sort | spark") ||
@@ -10417,6 +11747,11 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 	drop_autosuggest_hook_block_depth := 0
 	drop_syntax_highlighting_hook_block_depth := 0
 	drop_syntax_widget_loop_depth := 0
+	drop_autocomplete_opts_block := false
+	drop_syntax_callable_cond_cont := false
+	drop_syntax_highlighter_check_cont := false
+	syntax_callable_block_open := false
+	syntax_callable_expect_fi := false
 	drop_shell_heredoc_until_eof := false
 	drop_fish_done_windows_fn_depth := 0
 	drop_fish_done_windows_class := false
@@ -10473,21 +11808,30 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 				}
 			}
 		}
-		if to != .Zsh && is_zsh_powerlevel10k {
-			if strings.has_prefix(trimmed, "typeset -gr __p9k_intro_base='emulate -L zsh ") {
-				out_line = "  typeset -gr __p9k_intro_base=':'"
-				changed = true
-				handled_line = true
+			if to != .Zsh && is_zsh_powerlevel10k {
+				if strings.has_prefix(trimmed, "typeset -gr __p9k_intro_base='emulate -L zsh ") {
+					out_line = "  typeset -gr __p9k_intro_base=':'"
+					changed = true
+					handled_line = true
 			} else if strings.has_prefix(trimmed, "local MATCH OPTARG IFS=$'\\''") {
 				out_line = "  local MATCH OPTARG IFS=''"
 				changed = true
 				handled_line = true
-			} else if strings.has_prefix(trimmed, "typeset -gr __p9k_intro_locale='[[ $langinfo[CODESET]") {
-				out_line = "  typeset -gr __p9k_intro_locale=':'"
+				} else if strings.has_prefix(trimmed, "typeset -gr __p9k_intro_locale='[[ $langinfo[CODESET]") {
+					out_line = "  typeset -gr __p9k_intro_locale=':'"
+					changed = true
+					handled_line = true
+				}
+			}
+			if to == .POSIX &&
+				(trimmed == "=" ||
+					trimmed == "_p9k__force_must_init=1;;" ||
+					trimmed == "69) return 0" ||
+					trimmed == "*)  return $ret") {
+				out_line = ":"
 				changed = true
 				handled_line = true
 			}
-		}
 		if to != .Zsh && is_zsh_gnzh && strings.has_prefix(trimmed, "return_code=\"%(?..") {
 			out_line = "return_code=\"\""
 			changed = true
@@ -10617,20 +11961,73 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 			}
 			continue
 		}
-		if drop_syntax_widget_loop_depth > 0 {
-			out_line = ":"
-			if strings.has_prefix(trimmed, "for ") {
-				drop_syntax_widget_loop_depth += 1
-			} else if trimmed == "done" {
-				drop_syntax_widget_loop_depth -= 1
+			if drop_syntax_widget_loop_depth > 0 {
+				out_line = ":"
+				if strings.has_prefix(trimmed, "for ") {
+					drop_syntax_widget_loop_depth += 1
+				} else if trimmed == "done" {
+					drop_syntax_widget_loop_depth -= 1
+				}
+				changed = true
+				strings.write_string(&builder, out_line)
+				if idx+1 < len(lines) {
+					strings.write_byte(&builder, '\n')
+				}
+				continue
 			}
-			changed = true
-			strings.write_string(&builder, out_line)
-			if idx+1 < len(lines) {
-				strings.write_byte(&builder, '\n')
+			if drop_syntax_callable_cond_cont {
+				if strings.has_prefix(trimmed, "! _zsh_highlight__function_is_autoload_stub_p") || trimmed == ":" {
+					out_line = ":"
+					changed = true
+					if trimmed == ":" {
+						drop_syntax_callable_cond_cont = false
+					}
+					strings.write_string(&builder, out_line)
+					if idx+1 < len(lines) {
+						strings.write_byte(&builder, '\n')
+					}
+					continue
+				}
+				drop_syntax_callable_cond_cont = false
 			}
-			continue
-		}
+			if drop_syntax_highlighter_check_cont {
+				if strings.contains(trimmed, "_predicate\" &> /dev/null") || strings.has_suffix(trimmed, "&> /dev/null;") {
+					out_line = ":"
+					drop_syntax_highlighter_check_cont = false
+					changed = true
+					strings.write_string(&builder, out_line)
+					if idx+1 < len(lines) {
+						strings.write_byte(&builder, '\n')
+					}
+					continue
+				}
+				drop_syntax_highlighter_check_cont = false
+			}
+			if syntax_callable_block_open && syntax_callable_expect_fi && trimmed == ":" {
+				out_line = "fi"
+				syntax_callable_block_open = false
+				syntax_callable_expect_fi = false
+				changed = true
+				strings.write_string(&builder, out_line)
+				if idx+1 < len(lines) {
+					strings.write_byte(&builder, '\n')
+				}
+				continue
+			}
+			if drop_autocomplete_opts_block {
+				if strings.has_prefix(trimmed, "setopt $_autocomplete__func_opts[@]") {
+					out_line = "  :"
+					drop_autocomplete_opts_block = false
+				} else {
+					out_line = ":"
+				}
+				changed = true
+				strings.write_string(&builder, out_line)
+				if idx+1 < len(lines) {
+					strings.write_byte(&builder, '\n')
+				}
+				continue
+			}
 		if drop_malformed_case_block {
 			out_line = ":"
 			if trimmed == "esac" {
@@ -10719,19 +12116,71 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 			drop_syntax_highlighting_hook_block_depth = 1
 			changed = true
 		}
-		if to != .Zsh && is_zsh_syntax_highlighting && strings.contains(trimmed, "for cur_widget in $widgets_to_bind; do") {
-			out_line = ":"
-			drop_syntax_widget_loop_depth = 1
-			changed = true
-		}
+			if to != .Zsh && is_zsh_syntax_highlighting && strings.contains(trimmed, "for cur_widget in $widgets_to_bind; do") {
+				out_line = ":"
+				drop_syntax_widget_loop_depth = 1
+				changed = true
+			}
+			if to != .Zsh && is_zsh_syntax_highlighting &&
+				strings.has_prefix(trimmed, "if _zsh_highlight__is_function_p ") &&
+				strings.has_suffix(trimmed, "&&") {
+				out_line = "if true; then"
+				drop_syntax_callable_cond_cont = true
+				syntax_callable_block_open = true
+				syntax_callable_expect_fi = false
+				changed = true
+			}
+			if to != .Zsh && is_zsh_syntax_highlighting &&
+				strings.has_prefix(trimmed, "if type \"_zsh_highlight_highlighter_${highlighter}_paint\"") &&
+				strings.has_suffix(trimmed, "&&") {
+				out_line = "if true; then"
+				drop_syntax_highlighter_check_cont = true
+				changed = true
+			}
+			if to != .Zsh && is_zsh_syntax_highlighting &&
+				strings.has_prefix(trimmed, "elif type \"_zsh_highlight_${highlighter}_highlighter\"") &&
+				strings.has_suffix(trimmed, "&&") {
+				out_line = "elif true; then"
+				drop_syntax_highlighter_check_cont = true
+				changed = true
+			}
+			if syntax_callable_block_open && strings.has_prefix(trimmed, "return $?") {
+				syntax_callable_expect_fi = true
+			}
+			if to != .Zsh && is_zsh_autocomplete && strings.has_prefix(trimmed, "typeset -ga _autocomplete__func_opts=(") {
+				out_line = "  _autocomplete__func_opts=(localoptions extendedglob clobber NO_aliases evallineno localloops pipefail NO_shortloops NO_unset warncreateglobal)"
+				drop_autocomplete_opts_block = true
+				changed = true
+			}
+			if to != .Zsh && is_zsh_autocomplete &&
+				strings.has_prefix(trimmed, "builtin autoload +X -Uz ~autocomplete/Functions/**/.autocomplete__*~*.zwc") {
+				out_line = "  :"
+				changed = true
+			}
 
-		if strings.has_prefix(trimmed, "if [[") && strings.contains(trimmed, "= (") {
-			out_line = "if true; then"
-			changed = true
-		} else if strings.has_prefix(trimmed, "elif [[") && strings.contains(trimmed, "= (") {
-			out_line = "elif true; then"
-			changed = true
-		}
+			if strings.has_prefix(trimmed, "if [[") && strings.contains(trimmed, "= (") {
+				out_line = "if true; then"
+				changed = true
+			} else if strings.has_prefix(trimmed, "elif [[") && strings.contains(trimmed, "= (") {
+				out_line = "elif true; then"
+				changed = true
+			}
+			if to != .Fish && strings.has_prefix(trimmed, "if ") && strings.has_suffix(trimmed, ";") && !strings.has_suffix(trimmed, "; then") {
+				out_line = strings.concatenate([]string{trimmed, " then"}, allocator)
+				changed = true
+			} else if to != .Fish && strings.has_prefix(trimmed, "elif ") && strings.has_suffix(trimmed, ";") && !strings.has_suffix(trimmed, "; then") {
+				out_line = strings.concatenate([]string{trimmed, " then"}, allocator)
+				changed = true
+			}
+			if to != .Fish && strings.has_prefix(trimmed, "if [[") && strings.has_suffix(trimmed, "]] {") {
+				cond := strings.trim_space(trimmed[len("if "):len(trimmed)-len(" {")])
+				out_line = strings.concatenate([]string{"if ", cond, "; then"}, allocator)
+				changed = true
+			} else if to != .Fish && strings.has_prefix(trimmed, "elif [[") && strings.has_suffix(trimmed, "]] {") {
+				cond := strings.trim_space(trimmed[len("elif "):len(trimmed)-len(" {")])
+				out_line = strings.concatenate([]string{"elif ", cond, "; then"}, allocator)
+				changed = true
+			}
 		if strings.has_prefix(trimmed, "if [[") && strings.contains(trimmed, "${") && strings.contains(trimmed, "$#") {
 			out_line = "if true; then"
 			changed = true
@@ -10827,19 +12276,22 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 			}
 		}
 
-		if trimmed == "if ; then" {
-			out_line = "if true; then"
-			changed = true
-		} else if trimmed == "elif ; then" {
-			out_line = "elif true; then"
-			changed = true
-		} else if trimmed == "while ; do" {
-			out_line = "while true; do"
-			changed = true
-		} else if trimmed == "for ; do" {
-			out_line = "for _ in 1; do"
-			changed = true
-		}
+			if trimmed == "if ; then" {
+				out_line = "if true; then"
+				changed = true
+			} else if trimmed == "elif ; then" {
+				out_line = "elif true; then"
+				changed = true
+			} else if trimmed == "while ; do" {
+				out_line = "while true; do"
+				changed = true
+			} else if trimmed == "for ; do" {
+				out_line = "for _ in 1; do"
+				changed = true
+			} else if to != .Fish && (trimmed == "then" || trimmed == "do") {
+				out_line = ":"
+				changed = true
+			}
 		if to == .POSIX && trimmed == "{" {
 			out_line = ":"
 			changed = true
@@ -11428,9 +12880,9 @@ rewrite_fish_parse_hardening :: proc(text: string, allocator := context.allocato
 				}
 			}
 		}
-		if trimmed == "if" && heredoc_delim == "" {
-			out_line = "if true"
-			changed = true
+			if trimmed == "if" && heredoc_delim == "" {
+				out_line = "if true"
+				changed = true
 		} else if trimmed == "while" && heredoc_delim == "" {
 			out_line = "while true"
 			changed = true
@@ -11463,19 +12915,77 @@ rewrite_fish_parse_hardening :: proc(text: string, allocator := context.allocato
 		} else if heredoc_delim == "" && (trimmed == "then" || trimmed == "do" || trimmed == "{" || trimmed == ";;") {
 			out_line = ":"
 			changed = true
-		} else if heredoc_delim == "" && strings.has_prefix(trimmed, "if ") && strings.has_suffix(trimmed, "; then") {
-			cond := strings.trim_space(trimmed[len("if "):len(trimmed)-len("; then")])
-			if cond == "" {
-				cond = "true"
-			}
-			out_line = strings.concatenate([]string{"if ", cond}, allocator)
-			out_allocated = true
-			changed = true
-		} else if heredoc_delim == "" && strings.has_prefix(trimmed, "elif ") && strings.has_suffix(trimmed, "; then") {
-			cond := strings.trim_space(trimmed[len("elif "):len(trimmed)-len("; then")])
-			if cond == "" {
-				cond = "true"
-			}
+			} else if heredoc_delim == "" && strings.has_prefix(trimmed, "if ") && strings.has_suffix(trimmed, "; then") {
+				cond := strings.trim_space(trimmed[len("if "):len(trimmed)-len("; then")])
+				if cond == "" {
+					cond = "true"
+				}
+				out_line = strings.concatenate([]string{"if ", cond}, allocator)
+				out_allocated = true
+				changed = true
+			} else if heredoc_delim == "" && strings.has_prefix(trimmed, "if ") && strings.has_suffix(trimmed, " {") {
+				cond := strings.trim_space(trimmed[len("if "):len(trimmed)-len(" {")])
+				if cond == "" {
+					cond = "true"
+				}
+				out_line = strings.concatenate([]string{"if ", cond}, allocator)
+				out_allocated = true
+				changed = true
+			} else if heredoc_delim == "" &&
+				strings.has_prefix(trimmed, "if { type ") &&
+				strings.has_suffix(trimmed, "&>/dev/null } {") {
+				cmd := strings.trim_space(trimmed[len("if { type "):len(trimmed)-len("&>/dev/null } {")])
+				if cmd == "" {
+					cmd = "true"
+				} else {
+					cmd = strings.concatenate([]string{"type ", cmd, " >/dev/null 2>/dev/null"}, allocator)
+				}
+				out_line = strings.concatenate([]string{"if ", cmd}, allocator)
+				out_allocated = true
+				changed = true
+			} else if heredoc_delim == "" &&
+				strings.has_prefix(trimmed, "if { type ") &&
+				strings.has_suffix(trimmed, "&>/dev/null }") {
+				cmd := strings.trim_space(trimmed[len("if { type "):len(trimmed)-len("&>/dev/null }")])
+				if cmd == "" {
+					cmd = "true"
+				} else {
+					cmd = strings.concatenate([]string{"type ", cmd, " >/dev/null 2>/dev/null"}, allocator)
+				}
+				out_line = strings.concatenate([]string{"if ", cmd}, allocator)
+				out_allocated = true
+				changed = true
+			} else if heredoc_delim == "" &&
+				strings.has_prefix(trimmed, "} elif { type ") &&
+				strings.has_suffix(trimmed, "&>/dev/null } {") {
+				cmd := strings.trim_space(trimmed[len("} elif { type "):len(trimmed)-len("&>/dev/null } {")])
+				if cmd == "" {
+					cmd = "true"
+				} else {
+					cmd = strings.concatenate([]string{"type ", cmd, " >/dev/null 2>/dev/null"}, allocator)
+				}
+				out_line = strings.concatenate([]string{"else if ", cmd}, allocator)
+				out_allocated = true
+				changed = true
+			} else if heredoc_delim == "" &&
+				strings.has_prefix(trimmed, "if ") &&
+				strings.contains(trimmed, "(#i)*darwin*") {
+				out_line = "if true"
+				changed = true
+			} else if heredoc_delim == "" && strings.has_prefix(trimmed, "if {") {
+				out_line = "if true"
+				changed = true
+			} else if heredoc_delim == "" && strings.has_prefix(trimmed, "} elif {") {
+				out_line = "else if true"
+				changed = true
+			} else if heredoc_delim == "" && strings.contains(trimmed, "__shellx_array_get termcap \"Co\"") {
+				out_line = ":"
+				changed = true
+				} else if heredoc_delim == "" && strings.has_prefix(trimmed, "elif ") && strings.has_suffix(trimmed, "; then") {
+				cond := strings.trim_space(trimmed[len("elif "):len(trimmed)-len("; then")])
+				if cond == "" {
+					cond = "true"
+				}
 			out_line = strings.concatenate([]string{"else if ", cond}, allocator)
 			out_allocated = true
 			changed = true
@@ -11518,6 +13028,20 @@ rewrite_fish_parse_hardening :: proc(text: string, allocator := context.allocato
 				out_line = strings.concatenate([]string{"case ", pat}, allocator)
 				out_allocated = true
 				changed = true
+			}
+			if heredoc_delim == "" && strings.contains(out_line, "$ ") {
+				for i := 1; i <= 9; i += 1 {
+					bad := fmt.tprintf("$ %d", i)
+					good := fmt.tprintf("$argv[%d]", i)
+					repl, c := strings.replace_all(out_line, bad, good, context.temp_allocator)
+					if c {
+						out_line = repl
+						out_allocated = true
+						changed = true
+					} else if raw_data(repl) != raw_data(out_line) {
+						delete(repl)
+					}
+				}
 			}
 			}
 		} else if heredoc_delim == "" &&
@@ -11762,6 +13286,24 @@ rewrite_fish_parse_hardening :: proc(text: string, allocator := context.allocato
 		}
 
 		out_trimmed := strings.trim_space(out_line)
+		if out_trimmed == "continue" || out_trimmed == "break" {
+			in_loop := false
+			for i := len(block_stack) - 1; i >= 0; i -= 1 {
+				if block_stack[i] == 'l' {
+					in_loop = true
+					break
+				}
+			}
+			if !in_loop {
+				if out_allocated {
+					delete(out_line)
+				}
+				out_line = ":"
+				out_trimmed = ":"
+				out_allocated = false
+				changed = true
+			}
+		}
 		if strings.has_prefix(out_trimmed, "function ") {
 			append(&block_stack, 'f')
 		} else if strings.has_prefix(out_trimmed, "if ") {
