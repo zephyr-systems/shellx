@@ -2688,6 +2688,35 @@ rewrite_posix_array_bridge_callsites :: proc(text: string, allocator := context.
 		return name, index, true
 	}
 
+	parse_array_index_set_payload :: proc(payload: string) -> (name, index, value: string, ok: bool) {
+		eq_idx := find_substring(payload, "=")
+		if eq_idx <= 0 {
+			return "", "", "", false
+		}
+		lhs := strings.trim_space(payload[:eq_idx])
+		rhs := strings.trim_space(payload[eq_idx+1:])
+		open_idx := find_substring(lhs, "[")
+		close_idx := find_substring(lhs, "]")
+		if open_idx <= 0 || close_idx <= open_idx+1 || close_idx != len(lhs)-1 {
+			return "", "", "", false
+		}
+		name = strings.trim_space(lhs[:open_idx])
+		index = strings.trim_space(lhs[open_idx+1 : close_idx])
+		value = rhs
+		if len(value) >= 2 {
+			if (value[0] == '\'' && value[len(value)-1] == '\'') || (value[0] == '"' && value[len(value)-1] == '"') {
+				value = strings.trim_space(value[1 : len(value)-1])
+			}
+		}
+		if !is_basic_name(name) || index == "" || value == "" {
+			return "", "", "", false
+		}
+		if value == "()" {
+			return "", "", "", false
+		}
+		return name, index, value, true
+	}
+
 	build_list_call_line :: proc(indent: string, name: string, items: string, append_mode: bool, allocator := context.allocator) -> string {
 		if items == "" {
 			if append_mode {
@@ -2907,6 +2936,19 @@ rewrite_posix_array_bridge_callsites :: proc(text: string, allocator := context.
 					)
 					out_allocated = true
 					changed = true
+				} else {
+					set_name, set_index, set_value, set_ok := parse_array_index_set_payload(trimmed)
+					if set_ok {
+						if out_allocated {
+							delete(out_line)
+						}
+						out_line = strings.concatenate(
+							[]string{indent, "__shellx_list_set_index ", set_name, " ", set_index, " ", set_value},
+							allocator,
+						)
+						out_allocated = true
+						changed = true
+					}
 				}
 			}
 		}
@@ -4875,6 +4917,17 @@ __shellx_zsh_expand() {
 		out = rewritten
 		changed_any = changed_any || changed
 
+		rewritten, changed = rewrite_nonfish_string_join_callsites(out, to, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
+		if to == .Bash {
+			rewritten, changed = rewrite_nonfish_list_set_var_expansions(out, to, allocator)
+			delete(out)
+			out = rewritten
+			changed_any = changed_any || changed
+		}
+
 		rewritten, changed = rewrite_fish_list_index_access(out, to, allocator)
 		delete(out)
 		out = rewritten
@@ -4882,6 +4935,15 @@ __shellx_zsh_expand() {
 	}
 	if from == .Fish && to == .Zsh {
 		rewritten, changed := rewrite_fish_to_posix_syntax(out, .Zsh, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
+
+		rewritten, changed = rewrite_nonfish_string_join_callsites(out, to, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
+		rewritten, changed = rewrite_nonfish_list_set_var_expansions(out, to, allocator)
 		delete(out)
 		out = rewritten
 		changed_any = changed_any || changed
@@ -8724,6 +8786,140 @@ repair_shell_case_arms :: proc(text: string, allocator := context.allocator) -> 
 		if out_allocated {
 			delete(out_line)
 		}
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_nonfish_string_join_callsites :: proc(text: string, to: ShellDialect, allocator := context.allocator) -> (string, bool) {
+	if to == .Fish || !strings.contains(text, "string join") {
+		return strings.clone(text, allocator), false
+	}
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	for line, idx in lines {
+		out := strings.clone(line, allocator)
+
+		find := "$(string join ',' $"
+		pos := find_substring(out, find)
+		if pos >= 0 {
+			var_start := pos + len(find)
+			var_end := var_start
+			for var_end < len(out) && is_basic_name_char(out[var_end]) {
+				var_end += 1
+			}
+			if var_end > var_start && var_end < len(out) && out[var_end] == ')' {
+				var_name := out[var_start:var_end]
+				join_expr := ""
+				switch to {
+				case .POSIX:
+					join_expr = fmt.tprintf("$(printf '%%s\\n' $%s | paste -sd ',' -)", var_name)
+				case .Bash, .Zsh:
+					join_expr = strings.concatenate([]string{"$(printf '%s\\n' \"${", var_name, "[@]}\" | paste -sd ',' -)"}, allocator)
+				case .Fish:
+					join_expr = fmt.tprintf("$(string join ',' $%s)", var_name)
+				}
+				new_line := strings.concatenate([]string{out[:pos], join_expr, out[var_end+1:]}, allocator)
+				delete(out)
+				out = new_line
+				changed = true
+			}
+		}
+
+		find2 := "(string join ',' $"
+		pos2 := find_substring(out, find2)
+		if pos2 >= 0 {
+			var_start := pos2 + len(find2)
+			var_end := var_start
+			for var_end < len(out) && is_basic_name_char(out[var_end]) {
+				var_end += 1
+			}
+			if var_end > var_start && var_end < len(out) && out[var_end] == ')' {
+				var_name := out[var_start:var_end]
+				join_expr := ""
+				switch to {
+				case .POSIX:
+					join_expr = fmt.tprintf("$(printf '%%s\\n' $%s | paste -sd ',' -)", var_name)
+				case .Bash, .Zsh:
+					join_expr = strings.concatenate([]string{"$(printf '%s\\n' \"${", var_name, "[@]}\" | paste -sd ',' -)"}, allocator)
+				case .Fish:
+					join_expr = fmt.tprintf("(string join ',' $%s)", var_name)
+				}
+				new_line := strings.concatenate([]string{out[:pos2], join_expr, out[var_end+1:]}, allocator)
+				delete(out)
+				out = new_line
+				changed = true
+			}
+		}
+
+		strings.write_string(&builder, out)
+		delete(out)
+		if idx+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_nonfish_list_set_var_expansions :: proc(text: string, to: ShellDialect, allocator := context.allocator) -> (string, bool) {
+	if (to != .Bash && to != .Zsh) || !strings.contains(text, "__shellx_list_set ") {
+		return strings.clone(text, allocator), false
+	}
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	for line, idx in lines {
+		out := strings.clone(line, allocator)
+		trimmed := strings.trim_space(out)
+		if strings.has_prefix(trimmed, "__shellx_list_set ") {
+			fields := strings.fields(trimmed)
+			defer delete(fields)
+			if len(fields) >= 3 {
+				b := strings.builder_make()
+				defer strings.builder_destroy(&b)
+				strings.write_string(&b, fields[0])
+				strings.write_byte(&b, ' ')
+				strings.write_string(&b, fields[1])
+				for i := 2; i < len(fields); i += 1 {
+					strings.write_byte(&b, ' ')
+					f := fields[i]
+					if len(f) > 1 && f[0] == '$' && is_basic_name(f[1:]) {
+						exp := strings.concatenate([]string{"\"${", f[1:], "[@]}\""}, allocator)
+						strings.write_string(&b, exp)
+						delete(exp)
+						changed = true
+					} else {
+						strings.write_string(&b, f)
+					}
+				}
+				delete(out)
+				out = strings.clone(strings.to_string(b), allocator)
+			}
+		}
+
+		strings.write_string(&builder, out)
+		delete(out)
 		if idx+1 < len(lines) {
 			strings.write_byte(&builder, '\n')
 		}

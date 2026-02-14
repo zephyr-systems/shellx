@@ -402,6 +402,18 @@ __shellx_list_set() {
   eval "$_zx_name=\"\$_zx_acc\""
 }
 
+__shellx_key_norm() {
+  printf "%s" "$1" | tr -c 'A-Za-z0-9_' '_'
+}
+
+__shellx_list_set_index() {
+  _zx_name="$1"
+  _zx_idx="$2"
+  _zx_val="$3"
+  _zx_key="$(__shellx_key_norm "$_zx_idx")"
+  eval "${_zx_name}__k_${_zx_key}=\"\$_zx_val\""
+}
+
 __shellx_list_append() {
   _zx_name="$1"
   shift
@@ -429,6 +441,26 @@ __shellx_list_join() {
 __shellx_list_get() {
   _zx_name="$1"
   _zx_idx="$2"
+  _zx_key="$(__shellx_key_norm "$_zx_idx")"
+  eval "_zx_hit=\${${_zx_name}__k_${_zx_key}-__shellx_miss__}"
+  if [ "$_zx_hit" != "__shellx_miss__" ]; then
+    printf "%s" "$_zx_hit"
+    return 0
+  fi
+  case "$_zx_idx" in
+    ''|*[!0-9]*) ;;
+    *)
+      if [ "$_zx_idx" -gt 0 ]; then
+        _zx_alt="$((_zx_idx - 1))"
+        _zx_alt_key="$(__shellx_key_norm "$_zx_alt")"
+        eval "_zx_hit=\${${_zx_name}__k_${_zx_alt_key}-__shellx_miss__}"
+        if [ "$_zx_hit" != "__shellx_miss__" ]; then
+          printf "%s" "$_zx_hit"
+          return 0
+        fi
+      fi
+      ;;
+  esac
   eval "_zx_vals=\${$_zx_name}"
   set -- $_zx_vals
   if [ -z "$_zx_idx" ]; then
@@ -447,6 +479,12 @@ __shellx_list_len() {
 __shellx_list_has() {
   _zx_name="$1"
   _zx_key="$2"
+  _zx_norm="$(__shellx_key_norm "$_zx_key")"
+  eval "_zx_hit=\${${_zx_name}__k_${_zx_norm}-__shellx_miss__}"
+  if [ "$_zx_hit" != "__shellx_miss__" ]; then
+    printf "1"
+    return 0
+  fi
   eval "_zx_vals=\${$_zx_name}"
   set -- $_zx_vals
   for _zx_item in "$@"; do
@@ -817,8 +855,8 @@ if [ -n "${BASH_VERSION-}" ]; then
       return $?
     fi
     case "$_zx_opt" in
-      -*A*) builtin declare -gA "$@" ;;
-      -*a*|-*U*) builtin declare -ga "$@" ;;
+      -*A*) builtin declare -A "$@" ;;
+      -*a*|-*U*) builtin declare -a "$@" ;;
       -*) builtin declare "$@" ;;
     esac
   }

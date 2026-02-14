@@ -1715,10 +1715,10 @@ idx=200
 `),
 				required_probe_markers = []string{"ARR_SPARSE_OK"},
 			},
-			{
-				name = "plugin_fish_kv_iter_fish_to_zsh",
-				from = .Fish,
-				to = .Zsh,
+				{
+					name = "plugin_fish_kv_iter_fish_to_zsh",
+					from = .Fish,
+					to = .Zsh,
 				source_path = "tests/corpus/repos/fish/autopair.fish/conf.d/autopair.fish",
 				module_mode = true,
 				probe_source = strings.trim_space(`
@@ -1732,10 +1732,66 @@ kv_list=(f=fetch c=commit)
 for kv in "${kv_list[@]}"; do
   command printf '%s\n' "KV:$kv"
 done
+					`),
+					required_probe_markers = []string{"KV:f=fetch", "KV:c=commit"},
+				},
+				{
+					name = "probe_zsh_nested_index_zsh_to_posix",
+					from = .Zsh,
+					to = .POSIX,
+					source = strings.trim_space(`
+typeset -A ext_map
+ext_map[tar.gz]=tar
+ext_map[zip]=unzip
+idx='tar.gz'
+val="${ext_map[${idx}]}"
+[ "$val" = "tar" ] && echo NESTED_OK
 `),
-				required_probe_markers = []string{"KV:f=fetch", "KV:c=commit"},
-			},
-		}
+					required_probe_markers = []string{"NESTED_OK"},
+				},
+				{
+					name = "probe_zsh_assoc_keycheck_zsh_to_fish",
+					from = .Zsh,
+					to = .Fish,
+					source = strings.trim_space(`
+typeset -A cache
+cache[v18]=1
+if [[ -v cache[v18] && ! -v cache[missing] ]]; then
+  echo KEYCHECK_OK
+fi
+`),
+					required_probe_markers = []string{"KEYCHECK_OK"},
+				},
+				{
+					name = "probe_bash_sparse_preserve_bash_to_posix",
+					from = .Bash,
+					to = .POSIX,
+					source = strings.trim_space(`
+declare -a cmds
+cmds[100]='git'
+cmds[200]='docker'
+printf 'SPARSE_IDX_100:%s\n' "${cmds[100]}"
+[ "${cmds[100]}" = "git" ] && echo SPARSE_OK
+`),
+					required_probe_markers = []string{"SPARSE_IDX_100:git", "SPARSE_OK"},
+				},
+				{
+					name = "probe_fish_map_merge_fish_to_bash",
+					from = .Fish,
+					to = .Bash,
+					source = strings.trim_space(`
+set left a b
+set right b c
+set merged $left $right
+set out (string join ',' $merged)
+echo $out
+if test "$out" = "a,b,b,c"
+  echo MERGE_OK
+end
+`),
+					required_probe_markers = []string{"a,b,b,c", "MERGE_OK"},
+				},
+			}
 
 		outcomes := make([dynamic]SemanticOutcome, 0, len(semantic_cases))
 		defer delete(outcomes)
