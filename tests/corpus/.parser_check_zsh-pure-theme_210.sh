@@ -741,7 +741,7 @@ function prompt_pure_preprompt_render() {
 		# render each part. See prompt_pure_setup for the PROMPT template.
 		#
 		# psvar[12]: Suspended jobs symbol.
-		psvar[12]=
+		__shellx_list_set_index psvar 12 ""
 :
 		# psvar[13]: Username flag (set once in prompt_pure_state_setup).
 		# psvar[14]: Git branch name.
@@ -753,7 +753,7 @@ function prompt_pure_preprompt_render() {
 		# psvar[17]: Git arrows (push/pull).
 		__shellx_list_set_index psvar 17 ${prompt_pure_git_arrows}
 		# psvar[18]: Git stash flag.
-		psvar[18]=
+		__shellx_list_set_index psvar 18 ""
 		[[ -n $prompt_pure_git_stash ]] && psvar[18]=1
 		# psvar[19]: Command execution time.
 		__shellx_list_set_index psvar 19 ${prompt_pure_cmd_exec_time}
@@ -781,16 +781,16 @@ function prompt_pure_precmd() {
 		# Perform async Git dirty check and fetch.
 		prompt_pure_async_tasks
 		# Check if we should display the virtual env (psvar[20]).
-		psvar[20]=
+		__shellx_list_set_index psvar 20 ""
 		# Check if a Conda environment is active and display its name.
 		if [[ -n $CONDA_DEFAULT_ENV ]]; then
-			__shellx_list_set_index psvar 20 ${CONDA_DEFAULT_ENV//[$'\t\r\n']}
+			__shellx_list_set_index psvar 20 "${CONDA_DEFAULT_ENV//[$'\t\r\n']}"
 		fi
 		# When VIRTUAL_ENV_DISABLE_PROMPT is empty, it was unset by the user and
 		# Pure should take back control.
 		if [[ -n $VIRTUAL_ENV ]] && [[ -z $VIRTUAL_ENV_DISABLE_PROMPT || $VIRTUAL_ENV_DISABLE_PROMPT = 20 ]]; then
 			if [[ -n $VIRTUAL_ENV_PROMPT ]]; then
-				__shellx_list_set_index psvar 20 ${VIRTUAL_ENV_PROMPT}
+				__shellx_list_set_index psvar 20 "${VIRTUAL_ENV_PROMPT}"
 			else
 :
 			fi
@@ -801,7 +801,7 @@ function prompt_pure_precmd() {
 		# flake-utils-plus ❯
 		if zstyle -T ":prompt:pure:environment:nix-shell" show; then
 			if [[ -n $IN_NIX_SHELL ]]; then
-				__shellx_list_set_index psvar 20 ${name:-nix-shell}
+				__shellx_list_set_index psvar 20 "${name:-nix-shell}"
 			fi
 		fi
 		# Make sure VIM prompt is reset.
@@ -965,8 +965,8 @@ function prompt_pure_async_tasks() {
 			unset prompt_pure_git_arrows
 			unset prompt_pure_git_stash
 			unset prompt_pure_git_fetch_pattern
-			prompt_pure_vcs_info[branch]=
-			prompt_pure_vcs_info[top]=
+			__shellx_list_set_index prompt_pure_vcs_info branch ""
+			__shellx_list_set_index prompt_pure_vcs_info top ""
 		fi
 		unset MATCH MBEGIN MEND
 		async_job "prompt_pure" prompt_pure_async_vcs_info
@@ -1205,7 +1205,7 @@ function prompt_pure_state_setup() {
 		# Set psvar[13] flag for username display in PROMPT.
 		[[ -n $user_color ]] && psvar[13]=1
 		typeset -gA prompt_pure_state
-		__shellx_list_set_index prompt_pure_state version 1.27.1
+		__shellx_list_set_index prompt_pure_state version "1.27.1"
 		__shellx_list_append prompt_pure_state user_color "$user_color" prompt	   "${PURE_PROMPT_SYMBOL:-❯}"
 }
 function prompt_pure_is_inside_container() {

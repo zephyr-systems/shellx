@@ -705,6 +705,112 @@ test_translate_insert_shims_process_substitution_to_fish_api :: proc(t: ^testing
 
 	testing.expect(t, result.success, "Process substitution translation to fish should succeed")
 	testing.expect(t, strings.contains(result.output, "__shellx_psub_in"), "Process substitution shim should be injected/used")
+	testing.expect(t, strings.contains(result.output, "mkfifo"), "Process substitution shim should use fifo bridge for runtime parity")
+	testing.expect(t, !strings.contains(result.output, "<("), "Process substitution syntax should be lowered out of fish output")
+}
+
+@(test)
+test_translate_insert_shims_process_substitution_to_posix_api :: proc(t: ^testing.T) {
+	if !should_run_test("test_translate_insert_shims_process_substitution_to_posix_api") { return }
+
+	options := DEFAULT_TRANSLATION_OPTIONS
+	options.insert_shims = true
+
+	result := translate("diff <(echo a) <(echo b)", .Bash, .POSIX, options)
+	defer destroy_translation_result(&result)
+
+	testing.expect(t, result.success, "Process substitution translation to POSIX should succeed")
+	testing.expect(t, strings.contains(result.output, "__shellx_psub_in"), "Process substitution shim should be injected/used")
+	testing.expect(t, strings.contains(result.output, "mkfifo"), "POSIX process substitution shim should use fifo bridge")
+	testing.expect(t, !strings.contains(result.output, "<("), "Process substitution syntax should be lowered out of POSIX output")
+}
+
+@(test)
+test_rewrite_process_substitution_callsites_ignores_literals_and_comments :: proc(t: ^testing.T) {
+	if !should_run_test("test_rewrite_process_substitution_callsites_ignores_literals_and_comments") { return }
+
+	src := "echo \"<(echo literal)\"\n# <(echo comment)\ndiff <(echo a) <(echo b)\n"
+	out, changed := rewrite_process_substitution_callsites(src, .POSIX, context.allocator)
+	defer delete(out)
+
+	testing.expect(t, changed, "Real process substitution callsites should be rewritten")
+	testing.expect(t, strings.contains(out, "echo \"<(echo literal)\""), "Quoted literals must not be rewritten")
+	testing.expect(t, strings.contains(out, "# <(echo comment)"), "Comment text must not be rewritten")
+	testing.expect(t, strings.contains(out, "diff $(__shellx_psub_in"), "Live process substitution should be lowered")
+}
+
+@(test)
+test_rewrite_process_substitution_callsites_handles_nested_parens :: proc(t: ^testing.T) {
+	if !should_run_test("test_rewrite_process_substitution_callsites_handles_nested_parens") { return }
+
+	src := "diff <(printf '%s\\n' \"$(echo a)\") <(echo b)\n"
+	out, changed := rewrite_process_substitution_callsites(src, .POSIX, context.allocator)
+	defer delete(out)
+
+	testing.expect(t, changed, "Nested paren command substitutions should still be rewritten")
+	testing.expect(t, strings.contains(out, "__shellx_psub_in"), "Nested process substitution should lower to shim call")
+	testing.expect(t, !strings.contains(out, "<("), "Raw process substitution syntax should be removed")
+}
+
+@(test)
+test_rewrite_shell_to_fish_syntax_preserves_multiline_single_quoted_awk :: proc(t: ^testing.T) {
+	if !should_run_test("test_rewrite_shell_to_fish_syntax_preserves_multiline_single_quoted_awk") { return }
+
+	src := "top-history() {\nawk '{\n  a[$2]++\n}END{\n  for(i in a)\n  printf(\"%s\\t%s\\n\", a[i], i)\n}'\n}\n"
+	out, changed := rewrite_shell_to_fish_syntax(src, context.allocator)
+	defer delete(out)
+
+	testing.expect(t, !strings.contains(out, "$argv[2]"), "Multiline single-quoted awk body should not rewrite $2 to fish argv")
+	testing.expect(t, strings.contains(out, "for(i in a)"), "Awk loop body should remain intact")
+	testing.expect(t, changed, "Shell->fish rewrite should still report changes for surrounding shell syntax")
+}
+
+@(test)
+test_rewrite_fish_parse_hardening_preserves_multiline_single_quoted_awk :: proc(t: ^testing.T) {
+	if !should_run_test("test_rewrite_fish_parse_hardening_preserves_multiline_single_quoted_awk") { return }
+
+	src := "function top-history\nawk '{\n  a[$2]++\n}END{\n  for(i in a)\n  printf(\"%s\\t%s\\n\", a[i], i)\n}'\nend\n"
+	out, _ := rewrite_fish_parse_hardening(src, context.allocator)
+	defer delete(out)
+
+	testing.expect(t, strings.contains(out, "for(i in a)"), "Fish hardening should not rewrite awk body lines inside multiline single quotes")
+	testing.expect(t, strings.contains(out, "}'"), "Fish hardening should preserve multiline single-quote close line")
+}
+
+@(test)
+test_rewrite_fish_positional_params_skips_multiline_single_quoted_blocks :: proc(t: ^testing.T) {
+	if !should_run_test("test_rewrite_fish_positional_params_skips_multiline_single_quoted_blocks") { return }
+
+	src := "awk '{\n  print $1, $2\n}'\necho $1\n"
+	out, changed := rewrite_fish_positional_params(src, context.allocator)
+	defer delete(out)
+
+	testing.expect(t, changed, "Positional rewrite should still run for non-quoted shell positional usage")
+	testing.expect(t, strings.contains(out, "print $1, $2"), "Single-quoted awk payload should keep awk positional fields")
+	testing.expect(t, strings.contains(out, "echo $argv[1]"), "Shell positional parameter should be rewritten outside single-quoted payload")
+}
+
+@(test)
+test_normalize_awk_positional_fields_from_argv_indices :: proc(t: ^testing.T) {
+	if !should_run_test("test_normalize_awk_positional_fields_from_argv_indices") { return }
+
+	src := "  a[$argv[2]] += $argv[1]"
+	out, changed := normalize_awk_positional_fields(src, context.allocator)
+	defer delete(out)
+
+	testing.expect(t, changed, "Awk positional normalization should detect fish argv-index syntax")
+	testing.expect(t, strings.contains(out, "a[$2] += $1"), "Awk positional normalization should produce awk field references")
+}
+
+@(test)
+test_semantic_process_substitution_diff_bash_to_posix_runtime :: proc(t: ^testing.T) {
+	if !should_run_test("test_semantic_process_substitution_diff_bash_to_posix_runtime") { return }
+
+	source := `diff <(echo a) <(echo b)
+echo rc:$?`
+	out, ok := run_translated_script_runtime(t, source, .Bash, .POSIX, "process_substitution_diff_bash_to_posix_runtime")
+	if !ok { return }
+	testing.expect(t, strings.contains(out, "rc:1"), "Process substitution lowering should preserve diff non-zero exit semantics")
 }
 
 @(test)

@@ -547,6 +547,38 @@ matches_gate_filters :: proc(
 	return true
 }
 
+matches_semantic_gate_filters :: proc(
+	c: SemanticCase,
+	gate_pairs: []PairKey,
+	gate_case_filters: []string,
+) -> bool {
+	if len(gate_pairs) > 0 {
+		matched_pair := false
+		for p in gate_pairs {
+			if c.from == p.from && c.to == p.to {
+				matched_pair = true
+				break
+			}
+		}
+		if !matched_pair {
+			return false
+		}
+	}
+	if len(gate_case_filters) > 0 {
+		matched_case := false
+		for f in gate_case_filters {
+			if strings.contains(c.name, f) {
+				matched_case = true
+				break
+			}
+		}
+		if !matched_case {
+			return false
+		}
+	}
+	return true
+}
+
 make_analysis_arena :: proc(source_len: int) -> ir.Arena_IR {
 	size := source_len * 8
 	if size < 8*1024*1024 {
@@ -780,6 +812,7 @@ main :: proc() {
 		{"bash-powerline-theme", "theme", "tests/corpus/repos/bash/bash-powerline/bash-powerline.sh", .Bash},
 	}
 	targets := []shellx.ShellDialect{.Bash, .Zsh, .Fish, .POSIX}
+	gate_enabled := len(gate_pairs) > 0 || len(gate_case_filters) > 0 || gate_kind != ""
 
 	outcomes := make([dynamic]CaseOutcome, 0, 256)
 	defer delete(outcomes)
@@ -814,6 +847,12 @@ main :: proc() {
 		for to in targets {
 			if to == c.from {
 				continue
+			}
+			if gate_enabled {
+				probe_out := CaseOutcome{case_ = c, to = to}
+				if !matches_gate_filters(probe_out, gate_pairs[:], gate_case_filters[:], gate_kind) {
+					continue
+				}
 			}
 
 			total_runs += 1
@@ -1815,11 +1854,20 @@ end
 				},
 			}
 
-		outcomes := make([dynamic]SemanticOutcome, 0, len(semantic_cases))
+		semantic_selected := make([dynamic]SemanticCase, 0, len(semantic_cases))
+		defer delete(semantic_selected)
+		for c in semantic_cases {
+			if !matches_semantic_gate_filters(c, gate_pairs[:], gate_case_filters[:]) {
+				continue
+			}
+			append(&semantic_selected, c)
+		}
+
+		outcomes := make([dynamic]SemanticOutcome, 0, len(semantic_selected))
 		defer delete(outcomes)
 		pass_count := 0
 		skip_count := 0
-		for c in semantic_cases {
+		for c in semantic_selected {
 			o := run_semantic_case(c)
 			append(&outcomes, o)
 			if o.skipped {
@@ -1830,14 +1878,14 @@ end
 		}
 
 		strings.write_string(&report, "\n## Semantic Differential Checks\n\n")
-		strings.write_string(&report, fmt.tprintf("Cases: %d, Passed: %d, Skipped: %d\n\n", len(semantic_cases), pass_count, skip_count))
+		strings.write_string(&report, fmt.tprintf("Cases: %d, Passed: %d, Skipped: %d\n\n", len(semantic_selected), pass_count, skip_count))
 
 		strings.write_string(&report, "### Semantic Pair Summary\n\n")
 		strings.write_string(&report, "| Pair | Cases | Passed | Failed | Skipped |\n")
 		strings.write_string(&report, "|---|---:|---:|---:|---:|\n")
 		seen_pairs := make([dynamic]string, 0, 16, context.temp_allocator)
 		defer delete(seen_pairs)
-		for c in semantic_cases {
+		for c in semantic_selected {
 			pair_label := fmt.tprintf("%s->%s", dialect_name(c.from), dialect_name(c.to))
 			if contains_string(seen_pairs[:], pair_label) {
 				continue
@@ -1924,13 +1972,10 @@ end
 		)
 	}
 
-	if len(gate_pairs) > 0 || len(gate_case_filters) > 0 || gate_kind != "" {
+	if gate_enabled {
 		gate_total := 0
 		gate_fail := 0
 		for out in outcomes {
-			if !matches_gate_filters(out, gate_pairs[:], gate_case_filters[:], gate_kind) {
-				continue
-			}
 			gate_total += 1
 			if !out.translate_success || !out.parser_ran || !out.parser_success {
 				gate_fail += 1

@@ -1048,6 +1048,7 @@ end
 
 function __shellx_psub_out --argument cmd
     set -l tmp (__shellx_psub_tmp)
+    rm -f "$tmp"
     mkfifo $tmp
     sh -c "$cmd < \"$tmp\"; rm -f \"$tmp\"" &
     echo $tmp
@@ -1067,6 +1068,7 @@ __shellx_psub_in() {
 
 __shellx_psub_out() {
   _tmp="$(__shellx_psub_tmp)"
+  rm -f "$_tmp"
   mkfifo "$_tmp"
   sh -c "$1 < \"$_tmp\"; rm -f \"$_tmp\"" &
   printf "%s\n" "$_tmp"

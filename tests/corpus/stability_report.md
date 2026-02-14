@@ -2,86 +2,31 @@
 
 Cases configured: 75
 
-Cross-dialect runs executed: 219
+Cross-dialect runs executed: 6
 
 ## Pair Summary
 
 | Pair | Cases | Translate | Parse | Parser Matrix | Parser Skipped | Plugin Parse | Theme Parse | Parse Warn | Compat Warn | Avg Size Ratio | Avg Fn Ratio | With Shims |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| bash->fish | 24 | 24/24 | 24/24 | 22/24 | 0 | 17/17 | 7/7 | 4 | 0 | 2.228 | 7.727 | 22 |
-| bash->posix | 24 | 24/24 | 24/24 | 23/24 | 0 | 17/17 | 7/7 | 4 | 2 | 5.200 | 11.007 | 20 |
-| bash->zsh | 24 | 24/24 | 24/24 | 23/24 | 0 | 17/17 | 7/7 | 4 | 0 | 3.281 | 4.888 | 12 |
-| fish->bash | 17 | 17/17 | 17/17 | 17/17 | 0 | 15/15 | 2/2 | 1 | 0 | 1.494 | 7.374 | 17 |
-| fish->posix | 17 | 17/17 | 17/17 | 17/17 | 0 | 15/15 | 2/2 | 1 | 0 | 1.922 | 9.148 | 17 |
-| fish->zsh | 17 | 17/17 | 17/17 | 17/17 | 0 | 15/15 | 2/2 | 1 | 0 | 1.543 | 6.731 | 17 |
-| posix->bash | 3 | 3/3 | 3/3 | 3/3 | 0 | 3/3 | 0/0 | 2 | 3 | 1.000 | 1.000 | 0 |
-| posix->fish | 3 | 3/3 | 3/3 | 1/3 | 0 | 3/3 | 0/0 | 2 | 0 | 1.104 | 4.692 | 3 |
-| posix->zsh | 3 | 3/3 | 3/3 | 3/3 | 0 | 3/3 | 0/0 | 2 | 3 | 1.000 | 0.000 | 0 |
-| zsh->bash | 29 | 29/29 | 29/29 | 29/29 | 0 | 22/22 | 7/7 | 12 | 0 | 2.840 | 5.895 | 17 |
-| zsh->fish | 29 | 29/29 | 29/29 | 29/29 | 0 | 22/22 | 7/7 | 12 | 0 | 9.030 | 9.162 | 29 |
-| zsh->posix | 29 | 29/29 | 29/29 | 28/29 | 0 | 22/22 | 7/7 | 12 | 1 | 3.495 | 13.544 | 22 |
+| posix->bash | 2 | 2/2 | 2/2 | 2/2 | 0 | 2/2 | 0/0 | 1 | 2 | 1.000 | 1.000 | 0 |
+| posix->fish | 2 | 2/2 | 2/2 | 1/2 | 0 | 2/2 | 0/0 | 1 | 0 | 0.799 | 4.692 | 2 |
+| posix->zsh | 2 | 2/2 | 2/2 | 2/2 | 0 | 2/2 | 0/0 | 1 | 2 | 1.000 | 0.000 | 0 |
 
 ## Failures
 
-- [FAIL] bashit-history (plugin) bash->fish translate=true parse=true parser=false/true exit=127 err=None warnings=0(parse=0 compat=0) shims=2 src_fn=1 out_fn=14 msg= parser_msg=tests/corpus/.parser_check_bashit-history_86.fish (line 138): Missing end to balance this function definition
-function top-history
-^~~~~~~^
-warning: Error while reading file tests/corpus/.parser_check_bashit-history_86.fish
- parser_artifact=tests/corpus/.parser_check_bashit-history_86.fish path=tests/corpus/repos/bash/bash-it/plugins/available/history.plugin.bash
-- [FAIL] bashit-history (plugin) bash->posix translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=2 src_fn=1 out_fn=36 msg= parser_msg=tests/corpus/.parser_check_bashit-history_87.sh: line 591: syntax error near unexpected token `('
-tests/corpus/.parser_check_bashit-history_87.sh: line 591: `				for(i in a)'
- parser_artifact=tests/corpus/.parser_check_bashit-history_87.sh path=tests/corpus/repos/bash/bash-it/plugins/available/history.plugin.bash
-- [FAIL] ble-sh-make-command (plugin) bash->zsh translate=true parse=true parser=false/true exit=1 err=None warnings=3(parse=3 compat=0) shims=0 src_fn=63 out_fn=63 msg= parser_msg=tests/corpus/.parser_check_ble-sh-make-command_106.zsh:933: parse error near `\n'
- parser_artifact=tests/corpus/.parser_check_ble-sh-make-command_106.zsh path=tests/corpus/repos/bash/ble.sh/make_command.sh
-- [FAIL] ble-sh-make-command (plugin) bash->fish translate=true parse=true parser=false/true exit=127 err=None warnings=3(parse=3 compat=0) shims=6 src_fn=63 out_fn=63 msg= parser_msg=tests/corpus/.parser_check_ble-sh-make-command_107.fish (line 729): Unexpected end of string, quotes are not balanced
-	awk -F : -v funcname="$funcname" '
-	                                 ^
-warning: Error while reading file tests/corpus/.parser_check_ble-sh-make-command_107.fish
- parser_artifact=tests/corpus/.parser_check_ble-sh-make-command_107.fish path=tests/corpus/repos/bash/ble.sh/make_command.sh
-- [FAIL] openrc-network-init (plugin) posix->fish translate=true parse=true parser=false/true exit=127 err=None warnings=1(parse=1 compat=0) shims=3 src_fn=13 out_fn=31 msg= parser_msg=tests/corpus/.parser_check_openrc-network-init_165.fish (line 302): Unexpected end of string, quotes are not balanced
-__zx_set __nl " default 0
-              ^
-warning: Error while reading file tests/corpus/.parser_check_openrc-network-init_165.fish
- parser_artifact=tests/corpus/.parser_check_openrc-network-init_165.fish path=tests/corpus/repos/posix/openrc/init.d/network.in
-- [FAIL] autoconf-gendocs-sh (plugin) posix->fish translate=true parse=true parser=false/true exit=127 err=None warnings=0(parse=0 compat=0) shims=3 src_fn=3 out_fn=21 msg= parser_msg=tests/corpus/.parser_check_autoconf-gendocs-sh_171.fish (line 453): Unexpected end of string, quotes are not balanced
-sed -e 's/^[^0-9]*//' -e 1q
-                    ^
-warning: Error while reading file tests/corpus/.parser_check_autoconf-gendocs-sh_171.fish
- parser_artifact=tests/corpus/.parser_check_autoconf-gendocs-sh_171.fish path=tests/corpus/repos/posix/autoconf/build-aux/gendocs.sh
-- [FAIL] zsh-pure-theme (theme) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=3(parse=2 compat=1) shims=6 src_fn=27 out_fn=70 msg= parser_msg=tests/corpus/.parser_check_zsh-pure-theme_210.sh: line 1054: syntax error near unexpected token `then'
-tests/corpus/.parser_check_zsh-pure-theme_210.sh: line 1054: `				__shellx_list_set_index if [ $info[top $prompt_pure_vcs_info[top] ]]; then'
- parser_artifact=tests/corpus/.parser_check_zsh-pure-theme_210.sh path=tests/corpus/repos/zsh/pure/pure.zsh
+- [FAIL] autoconf-gendocs-sh (plugin) posix->fish translate=true parse=true parser=false/true exit=127 err=None warnings=0(parse=0 compat=0) shims=3 src_fn=3 out_fn=21 msg= parser_msg=tests/corpus/.parser_check_autoconf-gendocs-sh_6.fish (line 523): Unexpected end of string, quotes are not balanced
+echo "Done, see $outdir/ subdirectory for new files."
+                                                    ^
+warning: Error while reading file tests/corpus/.parser_check_autoconf-gendocs-sh_6.fish
+ parser_artifact=tests/corpus/.parser_check_autoconf-gendocs-sh_6.fish path=tests/corpus/repos/posix/autoconf/build-aux/gendocs.sh
 
 ## Parser Validation Failures
 
-- [PARSER-FAIL] bashit-history (plugin) bash->fish command=`fish --no-execute tests/corpus/.parser_check_bashit-history_86.fish` exit=127 message=tests/corpus/.parser_check_bashit-history_86.fish (line 138): Missing end to balance this function definition
-function top-history
-^~~~~~~^
-warning: Error while reading file tests/corpus/.parser_check_bashit-history_86.fish
- parser_artifact=tests/corpus/.parser_check_bashit-history_86.fish path=tests/corpus/repos/bash/bash-it/plugins/available/history.plugin.bash
-- [PARSER-FAIL] bashit-history (plugin) bash->posix command=`bash -n tests/corpus/.parser_check_bashit-history_87.sh` exit=2 message=tests/corpus/.parser_check_bashit-history_87.sh: line 591: syntax error near unexpected token `('
-tests/corpus/.parser_check_bashit-history_87.sh: line 591: `				for(i in a)'
- parser_artifact=tests/corpus/.parser_check_bashit-history_87.sh path=tests/corpus/repos/bash/bash-it/plugins/available/history.plugin.bash
-- [PARSER-FAIL] ble-sh-make-command (plugin) bash->zsh command=`zsh -n tests/corpus/.parser_check_ble-sh-make-command_106.zsh` exit=1 message=tests/corpus/.parser_check_ble-sh-make-command_106.zsh:933: parse error near `\n'
- parser_artifact=tests/corpus/.parser_check_ble-sh-make-command_106.zsh path=tests/corpus/repos/bash/ble.sh/make_command.sh
-- [PARSER-FAIL] ble-sh-make-command (plugin) bash->fish command=`fish --no-execute tests/corpus/.parser_check_ble-sh-make-command_107.fish` exit=127 message=tests/corpus/.parser_check_ble-sh-make-command_107.fish (line 729): Unexpected end of string, quotes are not balanced
-	awk -F : -v funcname="$funcname" '
-	                                 ^
-warning: Error while reading file tests/corpus/.parser_check_ble-sh-make-command_107.fish
- parser_artifact=tests/corpus/.parser_check_ble-sh-make-command_107.fish path=tests/corpus/repos/bash/ble.sh/make_command.sh
-- [PARSER-FAIL] openrc-network-init (plugin) posix->fish command=`fish --no-execute tests/corpus/.parser_check_openrc-network-init_165.fish` exit=127 message=tests/corpus/.parser_check_openrc-network-init_165.fish (line 302): Unexpected end of string, quotes are not balanced
-__zx_set __nl " default 0
-              ^
-warning: Error while reading file tests/corpus/.parser_check_openrc-network-init_165.fish
- parser_artifact=tests/corpus/.parser_check_openrc-network-init_165.fish path=tests/corpus/repos/posix/openrc/init.d/network.in
-- [PARSER-FAIL] autoconf-gendocs-sh (plugin) posix->fish command=`fish --no-execute tests/corpus/.parser_check_autoconf-gendocs-sh_171.fish` exit=127 message=tests/corpus/.parser_check_autoconf-gendocs-sh_171.fish (line 453): Unexpected end of string, quotes are not balanced
-sed -e 's/^[^0-9]*//' -e 1q
-                    ^
-warning: Error while reading file tests/corpus/.parser_check_autoconf-gendocs-sh_171.fish
- parser_artifact=tests/corpus/.parser_check_autoconf-gendocs-sh_171.fish path=tests/corpus/repos/posix/autoconf/build-aux/gendocs.sh
-- [PARSER-FAIL] zsh-pure-theme (theme) zsh->posix command=`bash -n tests/corpus/.parser_check_zsh-pure-theme_210.sh` exit=2 message=tests/corpus/.parser_check_zsh-pure-theme_210.sh: line 1054: syntax error near unexpected token `then'
-tests/corpus/.parser_check_zsh-pure-theme_210.sh: line 1054: `				__shellx_list_set_index if [ $info[top $prompt_pure_vcs_info[top] ]]; then'
- parser_artifact=tests/corpus/.parser_check_zsh-pure-theme_210.sh path=tests/corpus/repos/zsh/pure/pure.zsh
+- [PARSER-FAIL] autoconf-gendocs-sh (plugin) posix->fish command=`fish --no-execute tests/corpus/.parser_check_autoconf-gendocs-sh_6.fish` exit=127 message=tests/corpus/.parser_check_autoconf-gendocs-sh_6.fish (line 523): Unexpected end of string, quotes are not balanced
+echo "Done, see $outdir/ subdirectory for new files."
+                                                    ^
+warning: Error while reading file tests/corpus/.parser_check_autoconf-gendocs-sh_6.fish
+ parser_artifact=tests/corpus/.parser_check_autoconf-gendocs-sh_6.fish path=tests/corpus/repos/posix/autoconf/build-aux/gendocs.sh
 - No parser validation skips.
 
 ## High Warning Runs
@@ -90,178 +35,35 @@ tests/corpus/.parser_check_zsh-pure-theme_210.sh: line 1054: `				__shellx_list_
 ## Warning Categories
 
 
-### bash->fish
-
-- `parse_recovery/parse_diagnostic`: 4
-  - ble-sh-make-command (plugin) Parse diagnostic at <input>:37:19: Syntax error
-  - ble-sh-make-command (plugin) Parse diagnostic at <input>:883:29: Syntax error
-  - ble-sh-make-command (plugin) Parse diagnostic at <input>:1211:17: Syntax error
-  - direnv-stdlib (plugin) Parse diagnostic at <input>:1:1: Parse tree contains syntax errors
-
-### bash->posix
-
-- `arrays_maps/indexed_arrays`: 2
-  - bash-preexec (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
-  - ble-sh-make-command (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
-- `parse_recovery/parse_diagnostic`: 4
-  - ble-sh-make-command (plugin) Parse diagnostic at <input>:37:19: Syntax error
-  - ble-sh-make-command (plugin) Parse diagnostic at <input>:883:29: Syntax error
-  - ble-sh-make-command (plugin) Parse diagnostic at <input>:1211:17: Syntax error
-  - direnv-stdlib (plugin) Parse diagnostic at <input>:1:1: Parse tree contains syntax errors
-
-### bash->zsh
-
-- `parse_recovery/parse_diagnostic`: 4
-  - ble-sh-make-command (plugin) Parse diagnostic at <input>:37:19: Syntax error
-  - ble-sh-make-command (plugin) Parse diagnostic at <input>:883:29: Syntax error
-  - ble-sh-make-command (plugin) Parse diagnostic at <input>:1211:17: Syntax error
-  - direnv-stdlib (plugin) Parse diagnostic at <input>:1:1: Parse tree contains syntax errors
-
-### fish->bash
-
-- `parse_recovery/parse_diagnostic`: 1
-  - fish-completion-sync (plugin) Parse diagnostic at <input>:1:1: Parse tree contains syntax errors
-
-### fish->posix
-
-- `parse_recovery/parse_diagnostic`: 1
-  - fish-completion-sync (plugin) Parse diagnostic at <input>:1:1: Parse tree contains syntax errors
-
-### fish->zsh
-
-- `parse_recovery/parse_diagnostic`: 1
-  - fish-completion-sync (plugin) Parse diagnostic at <input>:1:1: Parse tree contains syntax errors
-
 ### posix->bash
 
-- `parse_recovery/parse_diagnostic`: 2
+- `parse_recovery/parse_diagnostic`: 1
   - openrc-network-init (plugin) Parse diagnostic at <input>:33:10: Syntax error
-  - busybox-install-sh (plugin) Parse diagnostic at <input>:1:1: Syntax error
-- `recovery_fallback/fallback`: 3
+- `recovery_fallback/fallback`: 2
   - openrc-network-init (plugin) Applied POSIX preservation fallback due degraded translated output
-  - busybox-install-sh (plugin) Applied POSIX preservation fallback due degraded translated output
   - autoconf-gendocs-sh (plugin) Applied POSIX preservation fallback due degraded translated output
 
 ### posix->fish
 
-- `parse_recovery/parse_diagnostic`: 2
+- `parse_recovery/parse_diagnostic`: 1
   - openrc-network-init (plugin) Parse diagnostic at <input>:33:10: Syntax error
-  - busybox-install-sh (plugin) Parse diagnostic at <input>:1:1: Syntax error
 
 ### posix->zsh
 
-- `parse_recovery/parse_diagnostic`: 2
+- `parse_recovery/parse_diagnostic`: 1
   - openrc-network-init (plugin) Parse diagnostic at <input>:33:10: Syntax error
-  - busybox-install-sh (plugin) Parse diagnostic at <input>:1:1: Syntax error
-- `recovery_fallback/fallback`: 3
+- `recovery_fallback/fallback`: 2
   - openrc-network-init (plugin) Applied POSIX preservation fallback due degraded translated output
-  - busybox-install-sh (plugin) Applied POSIX preservation fallback due degraded translated output
   - autoconf-gendocs-sh (plugin) Applied POSIX preservation fallback due degraded translated output
-
-### zsh->bash
-
-- `parse_recovery/parse_diagnostic`: 12
-  - zsh-nvm (plugin) Parse diagnostic at <input>:1:1: Syntax error
-  - zsh-nvm (plugin) Parse diagnostic at <input>:208:34: Syntax error
-  - zsh-nvm (plugin) Parse diagnostic at <input>:0:0: 1 additional diagnostics suppressed
-  - fast-syntax-highlighting (plugin) Parse diagnostic at <input>:60:50: Syntax error
-  - fast-syntax-highlighting (plugin) Parse diagnostic at <input>:103:82: Syntax error
-
-### zsh->fish
-
-- `parse_recovery/parse_diagnostic`: 12
-  - zsh-nvm (plugin) Parse diagnostic at <input>:1:1: Syntax error
-  - zsh-nvm (plugin) Parse diagnostic at <input>:208:34: Syntax error
-  - zsh-nvm (plugin) Parse diagnostic at <input>:0:0: 1 additional diagnostics suppressed
-  - fast-syntax-highlighting (plugin) Parse diagnostic at <input>:60:50: Syntax error
-  - fast-syntax-highlighting (plugin) Parse diagnostic at <input>:103:82: Syntax error
-
-### zsh->posix
-
-- `arrays_maps/indexed_arrays`: 1
-  - zsh-pure-theme (theme) Compat[indexed_arrays]: Array features are not POSIX portable
-- `parse_recovery/parse_diagnostic`: 12
-  - zsh-nvm (plugin) Parse diagnostic at <input>:1:1: Syntax error
-  - zsh-nvm (plugin) Parse diagnostic at <input>:208:34: Syntax error
-  - zsh-nvm (plugin) Parse diagnostic at <input>:0:0: 1 additional diagnostics suppressed
-  - fast-syntax-highlighting (plugin) Parse diagnostic at <input>:45:25: Syntax error
-  - fast-syntax-highlighting (plugin) Parse diagnostic at <input>:258:35: Syntax error
 
 ## Semantic Parity Matrix
 
 | Pair | Cases | Arrays/Maps | Hooks/Events | Condition/Test | Param Expansion | Process Subst | Source |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| bash->fish | 24 | 18 | 0 | 18 | 21 | 6 | 0 |
-| bash->posix | 24 | 18 | 0 | 0 | 0 | 0 | 0 |
-| bash->zsh | 24 | 0 | 0 | 0 | 0 | 0 | 0 |
-| fish->bash | 17 | 10 | 4 | 17 | 0 | 0 | 0 |
-| fish->posix | 17 | 9 | 4 | 17 | 0 | 0 | 0 |
-| fish->zsh | 17 | 11 | 5 | 17 | 0 | 0 | 0 |
-| posix->bash | 3 | 0 | 0 | 0 | 0 | 0 | 0 |
-| posix->fish | 3 | 3 | 0 | 3 | 3 | 0 | 0 |
-| posix->zsh | 3 | 0 | 0 | 0 | 0 | 0 | 0 |
-| zsh->bash | 29 | 0 | 8 | 0 | 0 | 0 | 0 |
-| zsh->fish | 29 | 23 | 8 | 24 | 26 | 2 | 0 |
-| zsh->posix | 29 | 22 | 8 | 0 | 0 | 0 | 0 |
+| posix->bash | 2 | 0 | 0 | 0 | 0 | 0 | 0 |
+| posix->fish | 2 | 2 | 0 | 2 | 2 | 0 | 0 |
+| posix->zsh | 2 | 0 | 0 | 0 | 0 | 0 | 0 |
 
 ## Validator Rule Failures
 
 - No validator rule failures.
-
-## Semantic Differential Checks
-
-Cases: 36, Passed: 36, Skipped: 0
-
-### Semantic Pair Summary
-
-| Pair | Cases | Passed | Failed | Skipped |
-|---|---:|---:|---:|---:|
-| fish->bash | 5 | 5 | 0 | 0 |
-| fish->posix | 1 | 1 | 0 | 0 |
-| fish->zsh | 2 | 2 | 0 | 0 |
-| zsh->fish | 5 | 5 | 0 | 0 |
-| zsh->bash | 9 | 9 | 0 | 0 |
-| zsh->posix | 5 | 5 | 0 | 0 |
-| bash->fish | 3 | 3 | 0 | 0 |
-| bash->zsh | 1 | 1 | 0 | 0 |
-| posix->fish | 1 | 1 | 0 | 0 |
-| posix->zsh | 1 | 1 | 0 | 0 |
-| posix->bash | 1 | 1 | 0 | 0 |
-| bash->posix | 2 | 2 | 0 | 0 |
-
-- [PASS] fish_gitnow_branch_compare fish->bash exit=0 out="SAME"
-- [PASS] fish_list_index_bash fish->bash exit=0 out="two"
-- [PASS] fish_list_index_posix fish->posix exit=0 out="green"
-- [PASS] fish_string_match_zsh fish->zsh exit=0 out="ok"
-- [PASS] fish_string_match_bash fish->bash exit=0 out="hit"
-- [PASS] zsh_git_cmdsub_if_compare zsh->fish exit=0 out="ok"
-- [PASS] zsh_param_default_callsite zsh->fish exit=0 out="/tmp/cache"
-- [PASS] zsh_repo_root_cmdsub zsh->fish exit=0 out="/tmp/repo"
-- [PASS] zsh_param_default_bash zsh->bash exit=0 out="fallback"
-- [PASS] zsh_assoc_array_bash zsh->bash exit=0 out="bar"
-- [PASS] zsh_case_posix zsh->posix exit=0 out="yes"
-- [PASS] zsh_positional_fish zsh->fish exit=0 out="a-b"
-- [PASS] bash_array_fish bash->fish exit=0 out="two"
-- [PASS] bash_cond_fish bash->fish exit=0 out="ok"
-- [PASS] bash_param_default_fish bash->fish exit=0 out="fallback"
-- [PASS] bash_function_zsh bash->zsh exit=0 out="done"
-- [PASS] posix_if_fish posix->fish exit=0 out="one"
-- [PASS] posix_default_zsh posix->zsh exit=0 out="alt"
-- [PASS] posix_case_bash posix->bash exit=0 out="match"
-- [PASS] plugin_ohmyzsh_z_zsh_to_bash zsh->bash exit=0 out="HAVE_z"
-- [PASS] plugin_bashit_aliases_bash_to_posix bash->posix exit=0 out="HAVE_ALIAS_COMPLETION_CB"
-- [PASS] plugin_fish_autopair_fish_to_bash fish->bash exit=0 out=""
-- [PASS] plugin_ohmyzsh_z_arrays_cond_param_zsh_to_bash zsh->bash exit=0 out="ARR_OK\nCOND_OK\nPARAM_OK"
-- [PASS] plugin_ohmyzsh_sudo_condition_zsh_to_posix zsh->posix exit=0 out="COND_OK\nHAVE_SUDO_FN"
-- [PASS] plugin_ohmyzsh_extract_condition_zsh_to_bash zsh->bash exit=0 out="COND_OK\nHAVE_EXTRACT"
-- [PASS] plugin_ohmyzsh_colored_man_param_zsh_to_posix zsh->posix exit=0 out="PARAM_OK\nCOLOR_OK"
-- [PASS] plugin_ohmyzsh_copyfile_cond_param_zsh_to_bash zsh->bash exit=0 out="PARAM_OK\nCOND_OK\nHAVE_COPYFILE"
-- [PASS] plugin_ysu_hooks_events_zsh_to_bash zsh->bash exit=0 out="HOOKS_OK"
-- [PASS] probe_zsh_hook_order_precmd_chain_zsh_to_bash zsh->bash exit=0 out="ONE\nTWO"
-- [PASS] plugin_zsh_nvm_param_zsh_to_posix zsh->posix exit=0 out="PARAM_OK\nHAVE_NVM_LOAD"
-- [PASS] plugin_zsh_assoc_sparse_zsh_to_bash zsh->bash exit=0 out="ARR_SPARSE_OK"
-- [PASS] plugin_fish_kv_iter_fish_to_zsh fish->zsh exit=0 out="KV:f=fetch\nKV:c=commit"
-- [PASS] probe_zsh_nested_index_zsh_to_posix zsh->posix exit=0 out="NESTED_OK"
-- [PASS] probe_zsh_assoc_keycheck_zsh_to_fish zsh->fish exit=0 out="KEYCHECK_OK"
-- [PASS] probe_bash_sparse_preserve_bash_to_posix bash->posix exit=0 out="SPARSE_IDX_100:git\nSPARSE_OK"
-- [PASS] probe_fish_map_merge_fish_to_bash fish->bash exit=0 out="a,b,b,c\nMERGE_OK"
