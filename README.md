@@ -190,6 +190,10 @@ defer delete(batch_json)
 fmt.println(batch_json)
 ```
 
+Full Zephyr-oriented example:
+
+- `examples/zephyr_security_scan.odin`
+
 ### Build scripts programmatically
 
 ```odin
