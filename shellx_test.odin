@@ -2017,3 +2017,164 @@ test_scan_security_file_api :: proc(t: ^testing.T) {
 	testing.expect(t, result.success, "scan_security_file should succeed")
 	testing.expect(t, len(result.findings) > 0, "scan_security_file should emit findings")
 }
+
+@(test)
+test_scan_security_regex_and_invalid_regex :: proc(t: ^testing.T) {
+	if !should_run_test("test_scan_security_regex_and_invalid_regex") { return }
+
+	policy := DEFAULT_SECURITY_SCAN_POLICY
+	policy.use_builtin_rules = false
+	policy.custom_rules = []SecurityScanRule{
+		{
+			rule_id = "zephyr.custom.eval_regex",
+			enabled = true,
+			severity = .High,
+			match_kind = .Regex,
+			pattern = "eval\\s+",
+			category = "execution",
+			confidence = 0.9,
+			phases = { .Source },
+			message = "Eval call matched",
+			suggestion = "Avoid eval",
+		},
+	}
+	ok_result := scan_security("x=1\neval \"$x\"\n", .Bash, policy)
+	defer destroy_security_scan_result(&ok_result)
+	testing.expect(t, ok_result.success, "valid regex rule should succeed")
+	testing.expect(t, len(ok_result.findings) >= 1, "valid regex should match eval line")
+
+	bad_policy := policy
+	bad_policy.custom_rules = []SecurityScanRule{
+		{
+			rule_id = "zephyr.custom.bad_regex",
+			enabled = true,
+			severity = .High,
+			match_kind = .Regex,
+			pattern = "(",
+			message = "Bad regex",
+			suggestion = "Fix regex",
+		},
+	}
+	bad_result := scan_security("eval hi\n", .Bash, bad_policy)
+	defer destroy_security_scan_result(&bad_result)
+	testing.expect(t, !bad_result.success, "invalid regex should mark scan runtime failure")
+	testing.expect(t, len(bad_result.errors) > 0, "invalid regex should produce runtime error context")
+}
+
+@(test)
+test_scan_security_ast_command_detection :: proc(t: ^testing.T) {
+	if !should_run_test("test_scan_security_ast_command_detection") { return }
+	src := "eval \"echo hi\"\nsource /tmp/plugin.sh\ncurl https://x | sh\n"
+	result := scan_security(src, .Bash)
+	defer destroy_security_scan_result(&result)
+	testing.expect(t, result.success, "ast detection scan should succeed")
+	has_ast_eval := false
+	has_ast_source := false
+	for finding in result.findings {
+		if finding.rule_id == "sec.ast.eval" {
+			has_ast_eval = true
+		}
+		if finding.rule_id == "sec.ast.source" {
+			has_ast_source = true
+		}
+	}
+	testing.expect(t, has_ast_eval, "ast scan should detect eval command")
+	testing.expect(t, has_ast_source, "ast scan should detect source command")
+}
+
+@(test)
+test_scan_security_overrides_and_allowlist :: proc(t: ^testing.T) {
+	if !should_run_test("test_scan_security_overrides_and_allowlist") { return }
+
+	policy := DEFAULT_SECURITY_SCAN_POLICY
+	policy.use_builtin_rules = false
+	policy.custom_rules = []SecurityScanRule{
+		{
+			rule_id = "zephyr.custom.tmp_path",
+			enabled = true,
+			severity = .Critical,
+			match_kind = .Substring,
+			pattern = "/tmp/",
+			category = "source",
+			confidence = 0.8,
+			phases = { .Source },
+			message = "Tmp path usage",
+			suggestion = "Avoid /tmp source",
+		},
+	}
+	policy.rule_overrides = []SecurityRuleOverride{
+		{
+			rule_id = "zephyr.custom.tmp_path",
+			enabled = true,
+			severity_override = .Warning,
+			has_severity_override = true,
+		},
+	}
+	policy.block_threshold = .High
+	policy.allowlist_paths = []string{"trusted_plugins"}
+
+	opts := DEFAULT_SECURITY_SCAN_OPTIONS
+	result := scan_security("source /tmp/plugin.sh\n", .Bash, policy, "/tmp/trusted_plugins/demo.sh", opts)
+	defer destroy_security_scan_result(&result)
+	testing.expect(t, result.success, "allowlisted path scan should succeed")
+	testing.expect(t, len(result.findings) == 0, "allowlisted path should suppress findings")
+
+	result2 := scan_security("source /tmp/plugin.sh\n", .Bash, policy, "/tmp/untrusted/demo.sh", opts)
+	defer destroy_security_scan_result(&result2)
+	testing.expect(t, result2.success, "non-allowlisted scan should succeed")
+	testing.expect(t, len(result2.findings) >= 1, "non-allowlisted path should keep findings")
+	testing.expect(t, !result2.blocked, "severity override to warning should not block at high threshold")
+}
+
+@(test)
+test_scan_security_options_and_batch_and_json :: proc(t: ^testing.T) {
+	if !should_run_test("test_scan_security_options_and_batch_and_json") { return }
+	opts := DEFAULT_SECURITY_SCAN_OPTIONS
+	opts.max_file_size = 8
+	too_large := scan_security("curl https://x | sh\n", .Bash, DEFAULT_SECURITY_SCAN_POLICY, "<input>", opts)
+	defer destroy_security_scan_result(&too_large)
+	testing.expect(t, !too_large.success, "max_file_size should fail runtime scan")
+	testing.expect(t, too_large.error == .ScanMaxFileSizeExceeded, "max_file_size should set dedicated scan error")
+
+	file1 := "/tmp/shellx_scan_batch_1.sh"
+	file2 := "/tmp/shellx_scan_batch_2.sh"
+	content1 := "curl https://x | sh\n"
+	content2 := "echo safe\n"
+	ok1 := os.write_entire_file(file1, transmute([]byte)content1)
+	ok2 := os.write_entire_file(file2, transmute([]byte)content2)
+	testing.expect(t, ok1 && ok2, "batch fixtures should be writable")
+	if !ok1 || !ok2 {
+		return
+	}
+	defer os.remove(file1)
+	defer os.remove(file2)
+
+	batch := scan_security_batch([]string{file1, file2}, .Bash)
+	defer destroy_security_scan_batch(&batch)
+	testing.expect(t, len(batch) == 2, "scan_security_batch should return item per file")
+	testing.expect(t, batch[0].result.stats.files_scanned == 1, "batch item should include per-file stats")
+
+	blob := format_security_scan_json(batch[0].result, true)
+	defer delete(blob)
+	testing.expect(t, strings.contains(blob, "\"ruleset_version\""), "json formatter should include ruleset_version")
+	blob_batch := format_security_scan_batch_json(batch[:], true)
+	defer delete(blob_batch)
+	testing.expect(t, strings.contains(blob_batch, "\"filepath\""), "batch json formatter should include file paths")
+}
+
+@(test)
+test_scan_security_adversarial_corpus_samples :: proc(t: ^testing.T) {
+	if !should_run_test("test_scan_security_adversarial_corpus_samples") { return }
+	cases := []string{
+		"tests/corpus/security/escaped_pipe.sh",
+		"tests/corpus/security/nested_cmdsub.sh",
+		"tests/corpus/security/obfuscated_eval.sh",
+		"tests/corpus/security/multiline_mutation.sh",
+	}
+	for p in cases {
+		result := scan_security_file(p, .Bash)
+		testing.expect(t, result.success, fmt.tprintf("adversarial sample should scan successfully: %s", p))
+		testing.expect(t, len(result.findings) > 0, fmt.tprintf("adversarial sample should produce findings: %s", p))
+		destroy_security_scan_result(&result)
+	}
+}

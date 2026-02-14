@@ -61,3 +61,28 @@ ShellX fails explicitly (never silently) for these constructs:
 | Fish `abbr` | POSIX | Abbreviation expansion is interactive-shell behavior with no POSIX equivalent |
 
 For corpus-covered paths outside these boundaries, ShellX targets behavioral parity and reports degraded/unsupported features in `TranslationResult` metadata.
+
+## Security Scanner Notes
+
+ShellX security scanner entrypoints:
+
+- `scan_security(...)`
+- `scan_security_file(...)`
+- `scan_security_batch(...)`
+
+Rule matching modes:
+
+- `Substring`
+- `Regex`
+- `AstCommand` (best-effort parse/IR command analysis)
+
+Result semantics:
+
+- `success=false` only for scanner runtime failures (I/O, timeout, invalid rule pattern, parse/IR scan failure).
+- Findings do not imply runtime failure; policy threshold controls `blocked`.
+- `ruleset_version` is returned in every `SecurityScanResult` for policy pinning.
+
+Zephyr integration model:
+
+- ShellX built-in rules + Zephyr custom policy rules (hybrid).
+- Use `rule_overrides`, `allowlist_paths`, `allowlist_commands` to tune false positives.

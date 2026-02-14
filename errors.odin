@@ -37,6 +37,16 @@ error_to_string :: proc(err: Error) -> string {
 		return "emission error"
 	case .IOError:
 		return "io error"
+	case .ScanError:
+		return "scan error"
+	case .ScanParseError:
+		return "scan parse error"
+	case .ScanInvalidRule:
+		return "scan invalid rule"
+	case .ScanTimeout:
+		return "scan timeout"
+	case .ScanMaxFileSizeExceeded:
+		return "scan max file size exceeded"
 	case .InternalError:
 		return "internal error"
 	}
@@ -157,6 +167,9 @@ destroy_translation_result :: proc(result: ^TranslationResult) {
 		delete(finding.message)
 		delete(finding.suggestion)
 		delete(finding.phase)
+		delete(finding.category)
+		delete(finding.matched_text)
+		delete(finding.fingerprint)
 	}
 	delete(result.findings)
 	for ctx in result.errors {
@@ -175,6 +188,9 @@ destroy_security_scan_result :: proc(result: ^SecurityScanResult) {
 		delete(finding.message)
 		delete(finding.suggestion)
 		delete(finding.phase)
+		delete(finding.category)
+		delete(finding.matched_text)
+		delete(finding.fingerprint)
 	}
 	delete(result.findings)
 	for ctx in result.errors {
@@ -184,4 +200,20 @@ destroy_security_scan_result :: proc(result: ^SecurityScanResult) {
 		delete(ctx.snippet)
 	}
 	delete(result.errors)
+	if result.ruleset_version != "" {
+		delete(result.ruleset_version)
+		result.ruleset_version = ""
+	}
+}
+
+// destroy_security_scan_batch releases all heap-owned fields in batch scan results.
+destroy_security_scan_batch :: proc(results: ^[dynamic]SecurityBatchItemResult) {
+	for &item in results^ {
+		if item.filepath != "" {
+			delete(item.filepath)
+			item.filepath = ""
+		}
+		destroy_security_scan_result(&item.result)
+	}
+	delete(results^)
 }

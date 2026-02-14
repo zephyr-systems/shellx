@@ -7,8 +7,10 @@ This document describes the public `shellx` package API.
 `TranslationResult` contains heap-owned fields (`output`, `warnings`, `required_shims`, `supported_features`, `degraded_features`, `unsupported_features`, `findings`, `errors`).
 Call `destroy_translation_result(&result)` when done.
 
-`SecurityScanResult` contains heap-owned fields (`findings`, `errors`).
+`SecurityScanResult` contains heap-owned fields (`findings`, `errors`, `ruleset_version`).
 Call `destroy_security_scan_result(&result)` when done.
+
+For `scan_security_batch`, call `destroy_security_scan_batch(&batch)` when done.
 
 For `translate_batch`, destroy each element, then `delete(batch)`.
 
@@ -43,6 +45,11 @@ Represents shell dialects:
 - `.ValidationInvalidControlFlow`
 - `.EmissionError`
 - `.IOError`
+- `.ScanError`
+- `.ScanParseError`
+- `.ScanInvalidRule`
+- `.ScanTimeout`
+- `.ScanMaxFileSizeExceeded`
 - `.InternalError`
 
 ## Types
@@ -83,20 +90,78 @@ Fields:
 - `location: SourceLocation`
 - `suggestion: string`
 - `phase: string` (`source` or `translated`)
+- `category: string`
+- `confidence: f32`
+- `matched_text: string`
+- `fingerprint: string`
+
+### `SecurityMatchKind`
+
+- `.Substring`
+- `.Regex`
+- `.AstCommand`
+
+### `SecurityScanPhase`
+
+- `.Source`
+- `.Translated`
+
+### `SecurityScanPhases`
+
+`bit_set[SecurityScanPhase; u8]`
 
 ### `SecurityScanRule`
 
 - `rule_id: string`
+- `enabled: bool`
 - `severity: FindingSeverity`
-- `pattern: string` (substring match)
+- `match_kind: SecurityMatchKind`
+- `pattern: string` (substring or regex pattern payload)
+- `category: string`
+- `confidence: f32`
+- `phases: SecurityScanPhases`
+- `command_name: string` (for `.AstCommand`)
+- `arg_pattern: string` (for `.AstCommand`)
 - `message: string`
 - `suggestion: string`
+
+### `SecurityRuleOverride`
+
+- `rule_id: string`
+- `enabled: bool`
+- `severity_override: FindingSeverity`
+- `has_severity_override: bool`
 
 ### `SecurityScanPolicy`
 
 - `use_builtin_rules: bool`
 - `block_threshold: FindingSeverity`
 - `custom_rules: []SecurityScanRule`
+- `allowlist_paths: []string`
+- `allowlist_commands: []string`
+- `rule_overrides: []SecurityRuleOverride`
+- `ruleset_version: string`
+
+### `SecurityScanOptions`
+
+- `max_file_size: int`
+- `timeout_ms: int`
+- `scan_translated_output: bool`
+- `include_phases: SecurityScanPhases`
+
+Default: `DEFAULT_SECURITY_SCAN_OPTIONS`.
+
+### `SecurityScanStats`
+
+- `files_scanned: int`
+- `lines_scanned: int`
+- `rules_evaluated: int`
+- `duration_ms: i64`
+
+### `SecurityBatchItemResult`
+
+- `filepath: string`
+- `result: SecurityScanResult`
 
 Default: `DEFAULT_SECURITY_SCAN_POLICY`.
 
@@ -107,6 +172,8 @@ Default: `DEFAULT_SECURITY_SCAN_POLICY`.
 - `findings: [dynamic]SecurityFinding`
 - `error: Error`
 - `errors: [dynamic]ErrorContext`
+- `ruleset_version: string`
+- `stats: SecurityScanStats`
 
 ## Functions
 
@@ -159,9 +226,12 @@ defer {
 }
 ```
 
-### `scan_security(source_code, dialect, policy := DEFAULT_SECURITY_SCAN_POLICY, source_name := "<input>") -> SecurityScanResult`
+### `scan_security(source_code, dialect, policy := DEFAULT_SECURITY_SCAN_POLICY, source_name := "<input>", options := DEFAULT_SECURITY_SCAN_OPTIONS, translated_output := "") -> SecurityScanResult`
 
-Scans source text for security findings without performing translation.
+Scans source text for policy findings and optional AST-aware checks.
+
+Runtime failures (I/O/timeout/invalid rule/parse infra) set `success=false`.
+Findings alone do not set `success=false`.
 
 Example:
 
@@ -170,19 +240,35 @@ policy := shellx.DEFAULT_SECURITY_SCAN_POLICY
 policy.custom_rules = []shellx.SecurityScanRule{
 	{
 		rule_id = "zephyr.custom.source_tmp",
+		enabled = true,
 		severity = .High,
+		match_kind = .Regex,
 		pattern = "/tmp/",
 		message = "Temporary source path detected",
 		suggestion = "Use trusted immutable module paths",
 	},
 }
-result := shellx.scan_security(code, .Bash, policy)
+opts := shellx.DEFAULT_SECURITY_SCAN_OPTIONS
+opts.timeout_ms = 5000
+result := shellx.scan_security(code, .Bash, policy, "<input>", opts)
 defer shellx.destroy_security_scan_result(&result)
 ```
 
-### `scan_security_file(filepath, dialect, policy := DEFAULT_SECURITY_SCAN_POLICY) -> SecurityScanResult`
+### `scan_security_file(filepath, dialect, policy := DEFAULT_SECURITY_SCAN_POLICY, options := DEFAULT_SECURITY_SCAN_OPTIONS) -> SecurityScanResult`
 
 Reads a file and scans it for security findings.
+
+### `scan_security_batch(files, dialect, policy := DEFAULT_SECURITY_SCAN_POLICY, options := DEFAULT_SECURITY_SCAN_OPTIONS, allocator := context.allocator) -> [dynamic]SecurityBatchItemResult`
+
+Scans many files and returns one result per file.
+
+### `format_security_scan_json(result, pretty := false, allocator := context.allocator) -> string`
+
+Returns a JSON representation of a scan result.
+
+### `format_security_scan_batch_json(results, pretty := false, allocator := context.allocator) -> string`
+
+Returns a JSON representation of batch scan results.
 
 ### `detect_shell(code) -> ShellDialect`
 
@@ -203,6 +289,10 @@ Frees all heap allocations owned by `TranslationResult`.
 ### `destroy_security_scan_result(result: ^SecurityScanResult)`
 
 Frees all heap allocations owned by `SecurityScanResult`.
+
+### `destroy_security_scan_batch(results: ^[dynamic]SecurityBatchItemResult)`
+
+Frees all heap allocations owned by `scan_security_batch` output.
 
 ### `report_error(ctx: ErrorContext, source_code := "") -> string`
 

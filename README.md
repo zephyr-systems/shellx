@@ -132,28 +132,62 @@ defer {
 
 ### Security scanning API
 
-Use ShellX as structured scanner (with optional custom policy rules from Zephyr):
+Use ShellX as structured scanner (hybrid built-in + caller policy rules):
 
 ```odin
 policy := shellx.DEFAULT_SECURITY_SCAN_POLICY
 policy.custom_rules = []shellx.SecurityScanRule{
 	{
 		rule_id = "zephyr.custom.source_tmp",
+		enabled = true,
 		severity = .High,
+		match_kind = .Regex,
+		category = "source",
+		confidence = 0.9,
+		phases = { .Source },
 		pattern = "/tmp/",
 		message = "Temporary source path detected",
 		suggestion = "Use trusted immutable module paths",
 	},
 }
+policy.allowlist_paths = []string{"trusted/vendor"}
+policy.ruleset_version = "zephyr-policy-2026-02"
 
-scan := shellx.scan_security_file("./plugin.zsh", .Zsh, policy)
+opts := shellx.DEFAULT_SECURITY_SCAN_OPTIONS
+opts.max_file_size = 4 * 1024 * 1024
+opts.timeout_ms = 5000
+
+scan := shellx.scan_security_file("./plugin.zsh", .Zsh, policy, opts)
 defer shellx.destroy_security_scan_result(&scan)
+
+// success=false only for scanner runtime failures (I/O, timeout, invalid rule)
+if !scan.success {
+	for err in scan.errors {
+		fmt.println(shellx.report_error(err))
+	}
+}
 
 if scan.blocked {
 	for finding in scan.findings {
-		fmt.println("blocked:", finding.rule_id, finding.message)
+		fmt.println("blocked:", finding.rule_id, finding.severity, finding.fingerprint)
 	}
 }
+
+json_blob := shellx.format_security_scan_json(scan, true)
+defer delete(json_blob)
+fmt.println(json_blob)
+```
+
+Batch scanning:
+
+```odin
+files := []string{"./plugins/a.plugin.zsh", "./plugins/b.plugin.zsh"}
+batch := shellx.scan_security_batch(files, .Zsh, policy, opts)
+defer shellx.destroy_security_scan_batch(&batch)
+
+batch_json := shellx.format_security_scan_batch_json(batch[:], true)
+defer delete(batch_json)
+fmt.println(batch_json)
 ```
 
 ### Build scripts programmatically
