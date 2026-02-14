@@ -167,3 +167,21 @@ destroy_translation_result :: proc(result: ^TranslationResult) {
 	}
 	delete(result.errors)
 }
+
+// destroy_security_scan_result releases all heap-owned fields in SecurityScanResult.
+destroy_security_scan_result :: proc(result: ^SecurityScanResult) {
+	for finding in result.findings {
+		delete(finding.rule_id)
+		delete(finding.message)
+		delete(finding.suggestion)
+		delete(finding.phase)
+	}
+	delete(result.findings)
+	for ctx in result.errors {
+		delete(ctx.rule_id)
+		delete(ctx.message)
+		delete(ctx.suggestion)
+		delete(ctx.snippet)
+	}
+	delete(result.errors)
+}

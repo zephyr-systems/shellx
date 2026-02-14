@@ -130,6 +130,32 @@ defer {
 }
 ```
 
+### Security scanning API
+
+Use ShellX as structured scanner (with optional custom policy rules from Zephyr):
+
+```odin
+policy := shellx.DEFAULT_SECURITY_SCAN_POLICY
+policy.custom_rules = []shellx.SecurityScanRule{
+	{
+		rule_id = "zephyr.custom.source_tmp",
+		severity = .High,
+		pattern = "/tmp/",
+		message = "Temporary source path detected",
+		suggestion = "Use trusted immutable module paths",
+	},
+}
+
+scan := shellx.scan_security_file("./plugin.zsh", .Zsh, policy)
+defer shellx.destroy_security_scan_result(&scan)
+
+if scan.blocked {
+	for finding in scan.findings {
+		fmt.println("blocked:", finding.rule_id, finding.message)
+	}
+}
+```
+
 ### Build scripts programmatically
 
 ```odin

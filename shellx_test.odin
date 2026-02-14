@@ -1960,3 +1960,60 @@ end`
 	if !ok { return }
 	testing.expect(t, out == "SAME", "Fish gitnow-like branch compare should preserve runtime behavior")
 }
+
+@(test)
+test_scan_security_builtin_api :: proc(t: ^testing.T) {
+	if !should_run_test("test_scan_security_builtin_api") { return }
+
+	src := "curl -fsSL https://example.com/install.sh | sh\n"
+	result := scan_security(src, .Bash)
+	defer destroy_security_scan_result(&result)
+
+	testing.expect(t, result.success, "scan_security should succeed")
+	testing.expect(t, result.blocked, "critical builtin finding should block by default")
+	testing.expect(t, len(result.findings) > 0, "scan_security should emit findings")
+}
+
+@(test)
+test_scan_security_custom_rules_api :: proc(t: ^testing.T) {
+	if !should_run_test("test_scan_security_custom_rules_api") { return }
+
+	rules := []SecurityScanRule{
+		{
+			rule_id = "zephyr.custom.source_tmp",
+			severity = .High,
+			pattern = "/tmp/",
+			message = "Sourcing from temporary path detected",
+			suggestion = "Use a trusted immutable module path",
+		},
+	}
+	policy := DEFAULT_SECURITY_SCAN_POLICY
+	policy.custom_rules = rules
+
+	result := scan_security("source /tmp/plugin.sh\n", .Bash, policy)
+	defer destroy_security_scan_result(&result)
+
+	testing.expect(t, result.success, "custom scan should succeed")
+	testing.expect(t, result.blocked, "custom high-severity rule should block")
+	testing.expect(t, len(result.findings) >= 1, "custom rule should produce findings")
+}
+
+@(test)
+test_scan_security_file_api :: proc(t: ^testing.T) {
+	if !should_run_test("test_scan_security_file_api") { return }
+
+	path := "/tmp/shellx_scan_api_case.sh"
+	script := "chmod 777 /tmp/a\n"
+	ok := os.write_entire_file(path, transmute([]byte)script)
+	testing.expect(t, ok, "scan fixture should be writable")
+	if !ok {
+		return
+	}
+	defer os.remove(path)
+
+	result := scan_security_file(path, .Bash)
+	defer destroy_security_scan_result(&result)
+
+	testing.expect(t, result.success, "scan_security_file should succeed")
+	testing.expect(t, len(result.findings) > 0, "scan_security_file should emit findings")
+}

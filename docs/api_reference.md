@@ -7,6 +7,9 @@ This document describes the public `shellx` package API.
 `TranslationResult` contains heap-owned fields (`output`, `warnings`, `required_shims`, `supported_features`, `degraded_features`, `unsupported_features`, `findings`, `errors`).
 Call `destroy_translation_result(&result)` when done.
 
+`SecurityScanResult` contains heap-owned fields (`findings`, `errors`).
+Call `destroy_security_scan_result(&result)` when done.
+
 For `translate_batch`, destroy each element, then `delete(batch)`.
 
 ## Enums
@@ -81,6 +84,30 @@ Fields:
 - `suggestion: string`
 - `phase: string` (`source` or `translated`)
 
+### `SecurityScanRule`
+
+- `rule_id: string`
+- `severity: FindingSeverity`
+- `pattern: string` (substring match)
+- `message: string`
+- `suggestion: string`
+
+### `SecurityScanPolicy`
+
+- `use_builtin_rules: bool`
+- `block_threshold: FindingSeverity`
+- `custom_rules: []SecurityScanRule`
+
+Default: `DEFAULT_SECURITY_SCAN_POLICY`.
+
+### `SecurityScanResult`
+
+- `success: bool`
+- `blocked: bool`
+- `findings: [dynamic]SecurityFinding`
+- `error: Error`
+- `errors: [dynamic]ErrorContext`
+
 ## Functions
 
 ### `translate(source_code, from, to, options := DEFAULT_TRANSLATION_OPTIONS) -> TranslationResult`
@@ -132,6 +159,31 @@ defer {
 }
 ```
 
+### `scan_security(source_code, dialect, policy := DEFAULT_SECURITY_SCAN_POLICY, source_name := "<input>") -> SecurityScanResult`
+
+Scans source text for security findings without performing translation.
+
+Example:
+
+```odin
+policy := shellx.DEFAULT_SECURITY_SCAN_POLICY
+policy.custom_rules = []shellx.SecurityScanRule{
+	{
+		rule_id = "zephyr.custom.source_tmp",
+		severity = .High,
+		pattern = "/tmp/",
+		message = "Temporary source path detected",
+		suggestion = "Use trusted immutable module paths",
+	},
+}
+result := shellx.scan_security(code, .Bash, policy)
+defer shellx.destroy_security_scan_result(&result)
+```
+
+### `scan_security_file(filepath, dialect, policy := DEFAULT_SECURITY_SCAN_POLICY) -> SecurityScanResult`
+
+Reads a file and scans it for security findings.
+
 ### `detect_shell(code) -> ShellDialect`
 
 Detects source dialect from content heuristics.
@@ -147,6 +199,10 @@ Returns the library version string.
 ### `destroy_translation_result(result: ^TranslationResult)`
 
 Frees all heap allocations owned by `TranslationResult`.
+
+### `destroy_security_scan_result(result: ^SecurityScanResult)`
+
+Frees all heap allocations owned by `SecurityScanResult`.
 
 ### `report_error(ctx: ErrorContext, source_code := "") -> string`
 

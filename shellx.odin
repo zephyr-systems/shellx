@@ -52,6 +52,33 @@ SecurityFinding :: struct {
 	phase:      string, // "source" or "translated"
 }
 
+SecurityScanRule :: struct {
+	rule_id:    string,
+	severity:   FindingSeverity,
+	pattern:    string,
+	message:    string,
+	suggestion: string,
+}
+
+SecurityScanPolicy :: struct {
+	use_builtin_rules: bool,
+	block_threshold:   FindingSeverity,
+	custom_rules:      []SecurityScanRule,
+}
+
+DEFAULT_SECURITY_SCAN_POLICY :: SecurityScanPolicy{
+	use_builtin_rules = true,
+	block_threshold = .High,
+}
+
+SecurityScanResult :: struct {
+	success:  bool,
+	blocked:  bool,
+	findings: [dynamic]SecurityFinding,
+	error:    Error,
+	errors:   [dynamic]ErrorContext,
+}
+
 posix_output_likely_degraded :: proc(source: string, output: string) -> bool {
 	if source == "" || output == "" {
 		return false
@@ -966,6 +993,156 @@ translate_batch :: proc(
 		append(&results, translate_file(file, from, to, options))
 	}
 	return results
+}
+
+finding_meets_threshold :: proc(sev: FindingSeverity, threshold: FindingSeverity) -> bool {
+	rank := proc(s: FindingSeverity) -> int {
+		switch s {
+		case .Info:
+			return 0
+		case .Warning:
+			return 1
+		case .High:
+			return 2
+		case .Critical:
+			return 3
+		}
+		return 0
+	}
+	return rank(sev) >= rank(threshold)
+}
+
+append_scan_finding :: proc(
+	result: ^SecurityScanResult,
+	rule_id: string,
+	severity: FindingSeverity,
+	message: string,
+	location: ir.SourceLocation,
+	suggestion: string,
+	phase: string,
+) {
+	for finding in result.findings {
+		if finding.rule_id == rule_id &&
+			finding.message == message &&
+			finding.location.line == location.line &&
+			finding.phase == phase {
+			return
+		}
+	}
+	append(
+		&result.findings,
+		SecurityFinding{
+			rule_id = strings.clone(rule_id, context.allocator),
+			severity = severity,
+			message = strings.clone(message, context.allocator),
+			location = location,
+			suggestion = strings.clone(suggestion, context.allocator),
+			phase = strings.clone(phase, context.allocator),
+		},
+	)
+}
+
+scan_custom_security_rules :: proc(
+	result: ^SecurityScanResult,
+	code: string,
+	source_name: string,
+	policy: SecurityScanPolicy,
+) {
+	if code == "" || len(policy.custom_rules) == 0 {
+		return
+	}
+	lines := strings.split_lines(code)
+	defer delete(lines)
+	for line, i in lines {
+		trimmed := strings.trim_space(line)
+		if trimmed == "" {
+			continue
+		}
+		for rule in policy.custom_rules {
+			if rule.rule_id == "" || rule.pattern == "" {
+				continue
+			}
+			if !strings.contains(trimmed, rule.pattern) {
+				continue
+			}
+			loc := ir.SourceLocation{file = source_name, line = i + 1, column = 0, length = len(trimmed)}
+			append_scan_finding(
+				result,
+				rule.rule_id,
+				rule.severity,
+				rule.message,
+				loc,
+				rule.suggestion,
+				"source",
+			)
+		}
+	}
+}
+
+finalize_security_scan_result :: proc(result: ^SecurityScanResult, policy: SecurityScanPolicy) {
+	result.blocked = false
+	for finding in result.findings {
+		if finding_meets_threshold(finding.severity, policy.block_threshold) {
+			result.blocked = true
+			break
+		}
+	}
+}
+
+scan_security :: proc(
+	source_code: string,
+	dialect: ShellDialect,
+	policy := DEFAULT_SECURITY_SCAN_POLICY,
+	source_name := "<input>",
+) -> SecurityScanResult {
+	result := SecurityScanResult{success = true}
+	_ = dialect
+
+	if policy.use_builtin_rules {
+		tmp := TranslationResult{}
+		scan_shell_security_findings(&tmp, source_code, source_name, "source")
+		for finding in tmp.findings {
+			append(&result.findings, finding)
+		}
+		clear(&tmp.findings)
+		delete(tmp.findings)
+	}
+	scan_custom_security_rules(&result, source_code, source_name, policy)
+	finalize_security_scan_result(&result, policy)
+	return result
+}
+
+scan_security_file :: proc(
+	filepath: string,
+	dialect: ShellDialect,
+	policy := DEFAULT_SECURITY_SCAN_POLICY,
+) -> SecurityScanResult {
+	result := SecurityScanResult{success = true}
+	data, ok := os.read_entire_file(filepath)
+	if !ok {
+		result.success = false
+		result.error = .IOError
+		append(
+			&result.errors,
+			ErrorContext{
+				error = .IOError,
+				message = strings.clone("Failed to read input file", context.allocator),
+				location = ir.SourceLocation{file = filepath},
+				suggestion = strings.clone("Check file path and permissions", context.allocator),
+			},
+		)
+		return result
+	}
+	defer delete(data)
+	scanned := scan_security(string(data), dialect, policy, filepath)
+	result.blocked = scanned.blocked
+	result.findings = scanned.findings
+	result.error = scanned.error
+	result.errors = scanned.errors
+	result.success = scanned.success
+	scanned.findings = nil
+	scanned.errors = nil
+	return result
 }
 
 // get_version returns the library semantic version string.
