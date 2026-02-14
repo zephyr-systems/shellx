@@ -139,11 +139,11 @@ function top-history
 	:
 	history HISTTIMEFORMAT=''
 	awk '{
-				a[$argv[2]]++
+				a[$2]++
 			}END{
 				for(i in a)
 				printf("%s\t%s\n", a[i], i)
-			:
+
 	sort --reverse --numeric-sort
 	head
 	:

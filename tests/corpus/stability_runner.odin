@@ -108,6 +108,9 @@ SemanticCase :: struct {
 	probe_source: string,
 	probe_target: string,
 	required_probe_markers: []string,
+	forbidden_probe_markers: []string,
+	enforce_exit_code: bool,
+	expected_exit_code: int,
 	module_mode: bool,
 	from:   shellx.ShellDialect,
 	to:     shellx.ShellDialect,
@@ -406,10 +409,25 @@ run_semantic_case :: proc(c: SemanticCase) -> SemanticOutcome {
 			break
 		}
 	}
-	outcome.pass = src_exit == dst_exit && src_out == dst_out && markers_ok
+	forbidden_ok := true
+	for marker in c.forbidden_probe_markers {
+		if strings.contains(src_out, marker) || strings.contains(dst_out, marker) {
+			forbidden_ok = false
+			break
+		}
+	}
+	exit_ok := src_exit == dst_exit
+	if c.enforce_exit_code {
+		exit_ok = src_exit == c.expected_exit_code && dst_exit == c.expected_exit_code
+	}
+	outcome.pass = exit_ok && src_out == dst_out && markers_ok && forbidden_ok
 	if !outcome.pass {
 		if !markers_ok {
 			outcome.reason = strings.clone("probe marker missing in source/translated output", context.allocator)
+		} else if !forbidden_ok {
+			outcome.reason = strings.clone("forbidden probe marker present in source/translated output", context.allocator)
+		} else if !exit_ok && c.enforce_exit_code {
+			outcome.reason = strings.clone(fmt.tprintf("exit code mismatch (expected %d)", c.expected_exit_code), context.allocator)
 		} else {
 			outcome.reason = strings.clone("stdout/exit mismatch", context.allocator)
 		}
@@ -1735,6 +1753,118 @@ done
 __shellx_run_precmd
 `),
 				required_probe_markers = []string{"ONE", "TWO"},
+			},
+			{
+				name = "probe_async_worker_wait_order_zsh_to_bash",
+				from = .Zsh,
+				to = .Bash,
+				source = strings.trim_space(`
+async_worker() {
+  sleep 0.05
+  echo ASYNC_DONE
+}
+echo BEFORE_WAIT
+async_worker &
+pid=$!
+wait "$pid"
+echo AFTER_WAIT
+`),
+				required_probe_markers = []string{"BEFORE_WAIT", "ASYNC_DONE", "AFTER_WAIT"},
+			},
+			{
+				name = "probe_async_two_worker_pid_wait_order_zsh_to_bash",
+				from = .Zsh,
+				to = .Bash,
+				source = strings.trim_space(`
+(
+  echo "WORKER1_START" >&2
+  sleep 0.1
+  echo "WORKER1_DONE"
+  exit 11
+) &
+pid1=$!
+
+(
+  echo "WORKER2_START" >&2
+  sleep 0.05
+  echo "WORKER2_DONE"
+  exit 22
+) &
+pid2=$!
+
+echo "BEFORE_WAIT"
+wait $pid1
+code1=$?
+wait $pid2
+code2=$?
+echo "AFTER_WAIT pid1=$code1 pid2=$code2"
+`),
+				required_probe_markers = []string{"BEFORE_WAIT", "WORKER2_DONE", "WORKER1_DONE", "AFTER_WAIT pid1=11 pid2=22"},
+			},
+			{
+				name = "probe_async_signal_cleanup_zsh_to_bash",
+				from = .Zsh,
+				to = .Bash,
+				source = strings.trim_space(`
+trap 'echo "CLEANUP"; kill "$worker_pid" 2>/dev/null; exit 130' INT
+
+echo "BEFORE_SLEEP"
+(
+  sleep 0.01
+  echo "WORKER_START"
+  sleep 1
+  echo "WORKER_DONE"
+) &
+worker_pid=$!
+
+sleep 0.2
+echo "SENDING_SIGINT"
+kill -INT $$
+
+echo "AFTER_SIGNAL"
+`),
+				required_probe_markers = []string{"BEFORE_SLEEP", "WORKER_START", "SENDING_SIGINT", "CLEANUP"},
+				forbidden_probe_markers = []string{"WORKER_DONE", "AFTER_SIGNAL"},
+				enforce_exit_code = true,
+				expected_exit_code = 130,
+			},
+			{
+				name = "probe_async_nested_worker_hierarchy_zsh_to_bash",
+				from = .Zsh,
+				to = .Bash,
+				source = strings.trim_space(`
+echo "BEFORE_WAIT"
+(
+  echo "WORKER1_START"
+
+  (
+    echo "WORKER2_START"
+    sleep 0.1
+    echo "WORKER2_DONE"
+    exit 22
+  ) &
+  pid2=$!
+
+  wait $pid2
+  code2=$?
+  echo "WORKER1_DONE code2=$code2"
+  exit 11
+) &
+pid1=$!
+wait $pid1
+code1=$?
+echo "AFTER_WAIT code1=$code1"
+`),
+				required_probe_markers = []string{
+					"BEFORE_WAIT",
+					"WORKER1_START",
+					"WORKER2_START",
+					"WORKER2_DONE",
+					"WORKER1_DONE code2=22",
+					"AFTER_WAIT code1=11",
+				},
+				enforce_exit_code = true,
+				expected_exit_code = 0,
 			},
 			{
 				name = "plugin_zsh_nvm_param_zsh_to_posix",

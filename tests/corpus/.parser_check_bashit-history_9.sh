@@ -585,12 +585,12 @@ alias top-history=top_history
 :
 	about 'print the name and count of the most commonly run tools'
 	history HISTTIMEFORMAT=''
-:
+	awk '{
 				a[$2]++
-:
+			}END{
 				for(i in a)
 				printf("%s\t%s\n", a[i], i)
-			}'
+
 	sort --reverse --numeric-sort
 	head
 	column --table --table-columns 'Command Count,Command Name' --output-separator ' | '

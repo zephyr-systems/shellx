@@ -803,6 +803,20 @@ test_normalize_awk_positional_fields_from_argv_indices :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_rewrite_bashit_history_top_history_repairs_posix :: proc(t: ^testing.T) {
+	if !should_run_test("test_rewrite_bashit_history_top_history_repairs_posix") { return }
+
+	src := "alias top-history=top_history\n\n:\n\tabout 'print the name and count of the most commonly run tools'\n\thistory HISTTIMEFORMAT=''\n\tawk '{\n\t\t\ta[$2]++\n\t\t}END{\n\t\t\tfor(i in a)\n\t\t\tprintf(\"%s\\t%s\\n\", a[i], i)\n\n\tsort --reverse --numeric-sort\n\thead\n\tcolumn --table --table-columns 'Command Count,Command Name' --output-separator ' | '\n:\nabout-plugin 'improve history handling with sane defaults'\n"
+	out, changed := rewrite_bashit_history_top_history_repairs(src, .POSIX, context.allocator)
+	defer delete(out)
+
+	testing.expect(t, changed, "bashit history repair should rewrite malformed top-history block for POSIX targets")
+	testing.expect(t, strings.contains(out, "top_history() {"), "Rewritten output should include a real top_history function")
+	testing.expect(t, strings.contains(out, "HISTTIMEFORMAT='' history | awk"), "Rewritten output should include single-line awk pipeline")
+	testing.expect(t, strings.contains(out, "about-plugin 'improve history handling with sane defaults'"), "Rewritten output should preserve following plugin metadata")
+}
+
+@(test)
 test_semantic_process_substitution_diff_bash_to_posix_runtime :: proc(t: ^testing.T) {
 	if !should_run_test("test_semantic_process_substitution_diff_bash_to_posix_runtime") { return }
 

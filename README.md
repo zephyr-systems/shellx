@@ -152,16 +152,24 @@ defer delete(output)
 
 ## Status
 
-ShellX is under active development. Translation quality varies by syntax pattern and dialect pair.
-Run the integration tests for current coverage.
+ShellX has reached a production baseline for corpus-covered plugin/theme translation:
+
+- Parser matrix: `219/219` passes
+- Parser validation failures: `0`
+- Semantic differential checks: `36/36` passed
+- Unit tests: `120/120` passed
+- No silent degradation: translation avoids no-op/stub fallback behavior
+
+Run the integration tests below for the current baseline.
 
 ## Golden Stability Snapshot
 
-Baseline validated on **2026-02-13**:
+Baseline validated on **2026-02-14**:
 
-- Cross-dialect corpus runs: `126`
+- Cross-dialect corpus runs: `219`
+- Parser matrix: `219/219` passes
 - Parser validation failures: `0`
-- Semantic differential checks: `22/22` passed
+- Semantic differential checks: `36/36` passed
 
 Reproduce:
 
@@ -175,4 +183,4 @@ Artifacts:
 
 - Latest report: `tests/corpus/stability_report.md`
 - Frozen baseline: `tests/corpus/stability_report.golden.md`
-- Release baseline notes: `docs/release_baseline_2026-02-13.md`
+- Release baseline notes: `docs/release_baseline_2026-02-14.md`
