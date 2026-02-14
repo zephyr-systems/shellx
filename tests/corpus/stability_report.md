@@ -9,17 +9,17 @@ Cross-dialect runs executed: 219
 | Pair | Cases | Translate | Parse | Parser Matrix | Parser Skipped | Plugin Parse | Theme Parse | Parse Warn | Compat Warn | Avg Size Ratio | Avg Fn Ratio | With Shims |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | bash->fish | 24 | 24/24 | 24/24 | 22/24 | 0 | 17/17 | 7/7 | 4 | 0 | 2.228 | 7.727 | 22 |
-| bash->posix | 24 | 24/24 | 24/24 | 23/24 | 0 | 17/17 | 7/7 | 4 | 2 | 4.183 | 10.231 | 20 |
-| bash->zsh | 24 | 24/24 | 24/24 | 23/24 | 0 | 17/17 | 7/7 | 4 | 0 | 2.265 | 4.144 | 12 |
-| fish->bash | 17 | 17/17 | 17/17 | 17/17 | 0 | 15/15 | 2/2 | 1 | 0 | 1.357 | 7.246 | 17 |
-| fish->posix | 17 | 17/17 | 17/17 | 17/17 | 0 | 15/15 | 2/2 | 1 | 0 | 1.784 | 9.020 | 17 |
-| fish->zsh | 17 | 17/17 | 17/17 | 17/17 | 0 | 15/15 | 2/2 | 1 | 0 | 1.405 | 6.602 | 17 |
+| bash->posix | 24 | 24/24 | 24/24 | 23/24 | 0 | 17/17 | 7/7 | 4 | 2 | 5.200 | 11.007 | 20 |
+| bash->zsh | 24 | 24/24 | 24/24 | 23/24 | 0 | 17/17 | 7/7 | 4 | 0 | 3.281 | 4.888 | 12 |
+| fish->bash | 17 | 17/17 | 17/17 | 17/17 | 0 | 15/15 | 2/2 | 1 | 0 | 1.494 | 7.374 | 17 |
+| fish->posix | 17 | 17/17 | 17/17 | 17/17 | 0 | 15/15 | 2/2 | 1 | 0 | 1.922 | 9.148 | 17 |
+| fish->zsh | 17 | 17/17 | 17/17 | 17/17 | 0 | 15/15 | 2/2 | 1 | 0 | 1.543 | 6.731 | 17 |
 | posix->bash | 3 | 3/3 | 3/3 | 3/3 | 0 | 3/3 | 0/0 | 2 | 3 | 1.000 | 1.000 | 0 |
 | posix->fish | 3 | 3/3 | 3/3 | 1/3 | 0 | 3/3 | 0/0 | 2 | 0 | 1.104 | 4.692 | 3 |
 | posix->zsh | 3 | 3/3 | 3/3 | 3/3 | 0 | 3/3 | 0/0 | 2 | 3 | 1.000 | 0.000 | 0 |
-| zsh->bash | 29 | 29/29 | 29/29 | 29/29 | 0 | 22/22 | 7/7 | 12 | 0 | 3.280 | 6.284 | 17 |
+| zsh->bash | 29 | 29/29 | 29/29 | 29/29 | 0 | 22/22 | 7/7 | 12 | 0 | 2.840 | 5.895 | 17 |
 | zsh->fish | 29 | 29/29 | 29/29 | 29/29 | 0 | 22/22 | 7/7 | 12 | 0 | 9.030 | 9.162 | 29 |
-| zsh->posix | 29 | 29/29 | 29/29 | 28/29 | 0 | 22/22 | 7/7 | 12 | 1 | 3.033 | 12.683 | 22 |
+| zsh->posix | 29 | 29/29 | 29/29 | 28/29 | 0 | 22/22 | 7/7 | 12 | 1 | 3.495 | 13.544 | 22 |
 
 ## Failures
 
@@ -28,8 +28,8 @@ function top-history
 ^~~~~~~^
 warning: Error while reading file tests/corpus/.parser_check_bashit-history_86.fish
  parser_artifact=tests/corpus/.parser_check_bashit-history_86.fish path=tests/corpus/repos/bash/bash-it/plugins/available/history.plugin.bash
-- [FAIL] bashit-history (plugin) bash->posix translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=2 src_fn=1 out_fn=33 msg= parser_msg=tests/corpus/.parser_check_bashit-history_87.sh: line 495: syntax error near unexpected token `('
-tests/corpus/.parser_check_bashit-history_87.sh: line 495: `				for(i in a)'
+- [FAIL] bashit-history (plugin) bash->posix translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=2 src_fn=1 out_fn=36 msg= parser_msg=tests/corpus/.parser_check_bashit-history_87.sh: line 591: syntax error near unexpected token `('
+tests/corpus/.parser_check_bashit-history_87.sh: line 591: `				for(i in a)'
  parser_artifact=tests/corpus/.parser_check_bashit-history_87.sh path=tests/corpus/repos/bash/bash-it/plugins/available/history.plugin.bash
 - [FAIL] ble-sh-make-command (plugin) bash->zsh translate=true parse=true parser=false/true exit=1 err=None warnings=3(parse=3 compat=0) shims=0 src_fn=63 out_fn=63 msg= parser_msg=tests/corpus/.parser_check_ble-sh-make-command_106.zsh:933: parse error near `\n'
  parser_artifact=tests/corpus/.parser_check_ble-sh-make-command_106.zsh path=tests/corpus/repos/bash/ble.sh/make_command.sh
@@ -48,8 +48,8 @@ sed -e 's/^[^0-9]*//' -e 1q
                     ^
 warning: Error while reading file tests/corpus/.parser_check_autoconf-gendocs-sh_171.fish
  parser_artifact=tests/corpus/.parser_check_autoconf-gendocs-sh_171.fish path=tests/corpus/repos/posix/autoconf/build-aux/gendocs.sh
-- [FAIL] zsh-pure-theme (theme) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=3(parse=2 compat=1) shims=6 src_fn=27 out_fn=67 msg= parser_msg=tests/corpus/.parser_check_zsh-pure-theme_210.sh: line 958: syntax error near unexpected token `then'
-tests/corpus/.parser_check_zsh-pure-theme_210.sh: line 958: `				__shellx_list_set_index if [ $info[top $prompt_pure_vcs_info[top] ]]; then'
+- [FAIL] zsh-pure-theme (theme) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=3(parse=2 compat=1) shims=6 src_fn=27 out_fn=70 msg= parser_msg=tests/corpus/.parser_check_zsh-pure-theme_210.sh: line 1054: syntax error near unexpected token `then'
+tests/corpus/.parser_check_zsh-pure-theme_210.sh: line 1054: `				__shellx_list_set_index if [ $info[top $prompt_pure_vcs_info[top] ]]; then'
  parser_artifact=tests/corpus/.parser_check_zsh-pure-theme_210.sh path=tests/corpus/repos/zsh/pure/pure.zsh
 
 ## Parser Validation Failures
@@ -59,8 +59,8 @@ function top-history
 ^~~~~~~^
 warning: Error while reading file tests/corpus/.parser_check_bashit-history_86.fish
  parser_artifact=tests/corpus/.parser_check_bashit-history_86.fish path=tests/corpus/repos/bash/bash-it/plugins/available/history.plugin.bash
-- [PARSER-FAIL] bashit-history (plugin) bash->posix command=`bash -n tests/corpus/.parser_check_bashit-history_87.sh` exit=2 message=tests/corpus/.parser_check_bashit-history_87.sh: line 495: syntax error near unexpected token `('
-tests/corpus/.parser_check_bashit-history_87.sh: line 495: `				for(i in a)'
+- [PARSER-FAIL] bashit-history (plugin) bash->posix command=`bash -n tests/corpus/.parser_check_bashit-history_87.sh` exit=2 message=tests/corpus/.parser_check_bashit-history_87.sh: line 591: syntax error near unexpected token `('
+tests/corpus/.parser_check_bashit-history_87.sh: line 591: `				for(i in a)'
  parser_artifact=tests/corpus/.parser_check_bashit-history_87.sh path=tests/corpus/repos/bash/bash-it/plugins/available/history.plugin.bash
 - [PARSER-FAIL] ble-sh-make-command (plugin) bash->zsh command=`zsh -n tests/corpus/.parser_check_ble-sh-make-command_106.zsh` exit=1 message=tests/corpus/.parser_check_ble-sh-make-command_106.zsh:933: parse error near `\n'
  parser_artifact=tests/corpus/.parser_check_ble-sh-make-command_106.zsh path=tests/corpus/repos/bash/ble.sh/make_command.sh
@@ -79,8 +79,8 @@ sed -e 's/^[^0-9]*//' -e 1q
                     ^
 warning: Error while reading file tests/corpus/.parser_check_autoconf-gendocs-sh_171.fish
  parser_artifact=tests/corpus/.parser_check_autoconf-gendocs-sh_171.fish path=tests/corpus/repos/posix/autoconf/build-aux/gendocs.sh
-- [PARSER-FAIL] zsh-pure-theme (theme) zsh->posix command=`bash -n tests/corpus/.parser_check_zsh-pure-theme_210.sh` exit=2 message=tests/corpus/.parser_check_zsh-pure-theme_210.sh: line 958: syntax error near unexpected token `then'
-tests/corpus/.parser_check_zsh-pure-theme_210.sh: line 958: `				__shellx_list_set_index if [ $info[top $prompt_pure_vcs_info[top] ]]; then'
+- [PARSER-FAIL] zsh-pure-theme (theme) zsh->posix command=`bash -n tests/corpus/.parser_check_zsh-pure-theme_210.sh` exit=2 message=tests/corpus/.parser_check_zsh-pure-theme_210.sh: line 1054: syntax error near unexpected token `then'
+tests/corpus/.parser_check_zsh-pure-theme_210.sh: line 1054: `				__shellx_list_set_index if [ $info[top $prompt_pure_vcs_info[top] ]]; then'
  parser_artifact=tests/corpus/.parser_check_zsh-pure-theme_210.sh path=tests/corpus/repos/zsh/pure/pure.zsh
 - No parser validation skips.
 
@@ -210,7 +210,7 @@ tests/corpus/.parser_check_zsh-pure-theme_210.sh: line 958: `				__shellx_list_s
 
 ## Semantic Differential Checks
 
-Cases: 35, Passed: 35, Skipped: 0
+Cases: 36, Passed: 36, Skipped: 0
 
 ### Semantic Pair Summary
 
@@ -220,7 +220,7 @@ Cases: 35, Passed: 35, Skipped: 0
 | fish->posix | 1 | 1 | 0 | 0 |
 | fish->zsh | 2 | 2 | 0 | 0 |
 | zsh->fish | 5 | 5 | 0 | 0 |
-| zsh->bash | 8 | 8 | 0 | 0 |
+| zsh->bash | 9 | 9 | 0 | 0 |
 | zsh->posix | 5 | 5 | 0 | 0 |
 | bash->fish | 3 | 3 | 0 | 0 |
 | bash->zsh | 1 | 1 | 0 | 0 |
@@ -257,6 +257,7 @@ Cases: 35, Passed: 35, Skipped: 0
 - [PASS] plugin_ohmyzsh_colored_man_param_zsh_to_posix zsh->posix exit=0 out="PARAM_OK\nCOLOR_OK"
 - [PASS] plugin_ohmyzsh_copyfile_cond_param_zsh_to_bash zsh->bash exit=0 out="PARAM_OK\nCOND_OK\nHAVE_COPYFILE"
 - [PASS] plugin_ysu_hooks_events_zsh_to_bash zsh->bash exit=0 out="HOOKS_OK"
+- [PASS] probe_zsh_hook_order_precmd_chain_zsh_to_bash zsh->bash exit=0 out="ONE\nTWO"
 - [PASS] plugin_zsh_nvm_param_zsh_to_posix zsh->posix exit=0 out="PARAM_OK\nHAVE_NVM_LOAD"
 - [PASS] plugin_zsh_assoc_sparse_zsh_to_bash zsh->bash exit=0 out="ARR_SPARSE_OK"
 - [PASS] plugin_fish_kv_iter_fish_to_zsh fish->zsh exit=0 out="KV:f=fetch\nKV:c=commit"

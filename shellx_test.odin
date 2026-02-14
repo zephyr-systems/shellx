@@ -809,7 +809,6 @@ test_translate_corpus_ohmyzsh_sudo_parse_safe_api :: proc(t: ^testing.T) {
 	opts.insert_shims = true
 	result := translate(string(data), .Zsh, .Bash, opts)
 	defer destroy_translation_result(&result)
-
 	testing.expect(t, result.success, "ohmyzsh sudo corpus plugin should translate to bash")
 	parser_check_snippet(t, result.output, .Bash, "corpus_ohmyzsh_sudo_zsh_to_bash")
 }
@@ -833,7 +832,6 @@ test_translate_corpus_powerlevel10k_parse_safe_api :: proc(t: ^testing.T) {
 	opts.insert_shims = true
 	result := translate(string(data), .Zsh, .Bash, opts)
 	defer destroy_translation_result(&result)
-
 	testing.expect(t, result.success, "powerlevel10k corpus theme should translate to bash")
 	parser_check_snippet(t, result.output, .Bash, "corpus_powerlevel10k_zsh_to_bash")
 }
@@ -857,7 +855,6 @@ test_translate_corpus_gnzh_parse_safe_api :: proc(t: ^testing.T) {
 	opts.insert_shims = true
 	result := translate(string(data), .Zsh, .Bash, opts)
 	defer destroy_translation_result(&result)
-
 	testing.expect(t, result.success, "gnzh corpus theme should translate to bash")
 	parser_check_snippet(t, result.output, .Bash, "corpus_gnzh_zsh_to_bash")
 }
@@ -1323,13 +1320,15 @@ test_normalize_posix_preparse_array_literals :: proc(t: ^testing.T) {
 test_rewrite_posix_array_bridge_callsites_multiline_and_append :: proc(t: ^testing.T) {
 	if !should_run_test("test_rewrite_posix_array_bridge_callsites_multiline_and_append") { return }
 
-	input := "urls=(\n  google\n  github\n)\nenvironment+=( PATH=\"$HOME/bin\" )\n[[ true ]] || opts+=('aliases')\nregion_highlight[-1]=()"
+	input := "urls=(\n  google\n  github\n)\nenvironment+=( PATH=\"$HOME/bin\" )\nempty_append+=()\nempty_set=()\n[[ true ]] || opts+=('aliases')\nregion_highlight[-1]=()"
 	output, changed := rewrite_posix_array_bridge_callsites(input)
 	defer delete(output)
 
 	testing.expect(t, changed, "Multiline and append array forms should lower to POSIX list bridge shims")
 	testing.expect(t, strings.contains(output, "__shellx_list_set urls google github"), "Multiline array assignment should lower to list_set shim")
 	testing.expect(t, strings.contains(output, "__shellx_list_append environment PATH=\"$HOME/bin\""), "Inline append should lower to list_append shim")
+	testing.expect(t, strings.contains(output, "__shellx_list_append empty_append"), "Empty append should still lower to list_append shim")
+	testing.expect(t, strings.contains(output, "__shellx_list_set empty_set"), "Empty assignment should lower to list_set shim")
 	testing.expect(t, strings.contains(output, "[[ true ]] || __shellx_list_append opts 'aliases'"), "Conditional append segment should lower to list_append shim")
 	testing.expect(t, strings.contains(output, "__shellx_list_unset_index region_highlight -1"), "Indexed unset assignment should lower to list_unset_index shim")
 }
@@ -1347,16 +1346,45 @@ test_rewrite_parameter_expansion_callsites_bash_index_to_fish :: proc(t: ^testin
 }
 
 @(test)
+test_rewrite_parameter_expansion_callsites_to_posix_basic_forms :: proc(t: ^testing.T) {
+	if !should_run_test("test_rewrite_parameter_expansion_callsites_to_posix_basic_forms") { return }
+
+	input := `echo ${v//a/b} ${v/#pre/x} ${v/%suf/y} ${v:1:2}`
+	output, changed := rewrite_parameter_expansion_callsites(input, .POSIX)
+	defer delete(output)
+
+	testing.expect(t, changed, "POSIX parameter expansion rewrite should transform unsupported substitution/slice forms")
+	testing.expect(t, strings.contains(output, `sed 's|a|b|g'`), "global replacement should lower to sed")
+	testing.expect(t, strings.contains(output, `sed 's|^pre|x|'`), "prefix replacement should lower to anchored sed")
+	testing.expect(t, strings.contains(output, `sed 's|suf$|y|'`), "suffix replacement should lower to anchored sed")
+	testing.expect(t, strings.contains(output, `cut -c$((1 + 1))-$((1 + 2))`), "slice expansion should lower to cut range")
+}
+
+@(test)
+test_semantic_param_replace_and_slice_bash_to_posix_runtime :: proc(t: ^testing.T) {
+	if !should_run_test("test_semantic_param_replace_and_slice_bash_to_posix_runtime") { return }
+	source := `v="preaabsuf"
+echo ${v//a/b}
+echo ${v/#pre/x}
+echo ${v/%suf/y}
+echo ${v:1:3}`
+	out, ok := run_translated_script_runtime(t, source, .Bash, .POSIX, "param_replace_and_slice_bash_to_posix_runtime")
+	if !ok { return }
+	testing.expect(t, out == "prebbbsuf\nxaabsuf\npreaaby\nrea", "POSIX lowering should preserve replacement and slice semantics")
+}
+
+@(test)
 test_rewrite_posix_array_parameter_expansions_bash :: proc(t: ^testing.T) {
 	if !should_run_test("test_rewrite_posix_array_parameter_expansions_bash") { return }
 
-	input := `echo ${arr[1]} ${#arr[@]} ${arr[@]}`
+	input := `echo ${arr[1]} ${#arr[@]} ${#arr[1]} ${arr[@]}`
 	output, changed := rewrite_posix_array_parameter_expansions(input, .Bash)
 	defer delete(output)
 
 	testing.expect(t, changed, "Bash array expansions should lower to POSIX list shim calls")
 	testing.expect(t, strings.contains(output, "$(__shellx_list_get arr 2)"), "Bash index should shift to POSIX list index")
 	testing.expect(t, strings.contains(output, "$(__shellx_list_len arr)"), "Bash array length should lower to list_len shim")
+	testing.expect(t, strings.contains(output, "printf '%s' \"$(__shellx_list_get arr \"2\")\" | wc -c"), "Bash element length should lower to list_get+wc shim pipeline")
 	testing.expect(t, strings.contains(output, "${arr}") || strings.contains(output, "$arr"), "Bash full array expansion should lower to scalar list text")
 }
 
@@ -1364,13 +1392,26 @@ test_rewrite_posix_array_parameter_expansions_bash :: proc(t: ^testing.T) {
 test_rewrite_posix_array_parameter_expansions_zsh :: proc(t: ^testing.T) {
 	if !should_run_test("test_rewrite_posix_array_parameter_expansions_zsh") { return }
 
-	input := `echo ${arr[2]} ${#arr[@]}`
+	input := `echo ${arr[2]} ${#arr[@]} ${#arr[2]}`
 	output, changed := rewrite_posix_array_parameter_expansions(input, .Zsh)
 	defer delete(output)
 
 	testing.expect(t, changed, "Zsh array expansions should lower to POSIX list shim calls")
 	testing.expect(t, strings.contains(output, "$(__shellx_list_get arr 2)"), "Zsh index should keep one-based semantics in POSIX shim")
 	testing.expect(t, strings.contains(output, "$(__shellx_list_len arr)"), "Zsh array length should lower to list_len shim")
+	testing.expect(t, strings.contains(output, "printf '%s' \"$(__shellx_list_get arr \"2\")\" | wc -c"), "Zsh element length should lower to list_get+wc shim pipeline")
+}
+
+@(test)
+test_rewrite_posix_array_parameter_expansions_string_context :: proc(t: ^testing.T) {
+	if !should_run_test("test_rewrite_posix_array_parameter_expansions_string_context") { return }
+
+	input := `echo "X${arr[1]}Y"`
+	output, changed := rewrite_posix_array_parameter_expansions(input, .Bash)
+	defer delete(output)
+
+	testing.expect(t, changed, "Indexed expansion inside string context should lower to list_get shim")
+	testing.expect(t, strings.contains(output, `echo "X$(__shellx_list_get arr 2)Y"`), "String-context indexed expansion should preserve index-aware list_get call")
 }
 
 @(test)
@@ -1469,10 +1510,11 @@ test_semantic_array_list_bash_to_posix_runtime :: proc(t: ^testing.T) {
 	if !should_run_test("test_semantic_array_list_bash_to_posix_runtime") { return }
 	source := `arr=(one two three)
 echo ${arr[1]}
+echo ${#arr[1]}
 echo ${#arr[@]}`
 	out, ok := run_translated_script_runtime(t, source, .Bash, .POSIX, "array_list_bash_to_posix_runtime")
 	if !ok { return }
-	testing.expect(t, out == "two\n3", "Bash indexed arrays should preserve semantic index/length behavior in POSIX output")
+	testing.expect(t, out == "two\n3\n3", "Bash indexed arrays should preserve semantic index/length behavior in POSIX output")
 }
 
 @(test)
@@ -1480,10 +1522,23 @@ test_semantic_array_list_zsh_to_posix_runtime :: proc(t: ^testing.T) {
 	if !should_run_test("test_semantic_array_list_zsh_to_posix_runtime") { return }
 	source := `arr=(one two three)
 echo ${arr[2]}
+echo ${#arr[2]}
 echo ${#arr[@]}`
 	out, ok := run_translated_script_runtime(t, source, .Zsh, .POSIX, "array_list_zsh_to_posix_runtime")
 	if !ok { return }
-	testing.expect(t, out == "two\n3", "Zsh indexed arrays should preserve semantic index/length behavior in POSIX output")
+	testing.expect(t, out == "two\n3\n3", "Zsh indexed arrays should preserve semantic index/length behavior in POSIX output")
+}
+
+@(test)
+test_semantic_array_empty_index_set_bash_to_posix_runtime :: proc(t: ^testing.T) {
+	if !should_run_test("test_semantic_array_empty_index_set_bash_to_posix_runtime") { return }
+	source := `arr=(one two)
+arr[1]=
+echo "<${arr[1]}>"
+echo ${#arr[@]}`
+	out, ok := run_translated_script_runtime(t, source, .Bash, .POSIX, "array_empty_index_set_bash_to_posix_runtime")
+	if !ok { return }
+	testing.expect(t, out == "<>\n2", "Empty indexed assignment should preserve empty element semantics in POSIX output")
 }
 
 @(test)

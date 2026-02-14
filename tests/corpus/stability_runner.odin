@@ -1672,8 +1672,30 @@ command -v __shellx_register_preexec >/dev/null 2>&1 && command -v enable_you_sh
   enable_you_should_use >/dev/null 2>&1
   echo HOOKS_OK
 }
-`),
+				`),
 				required_probe_markers = []string{"HOOKS_OK"},
+			},
+			{
+				name = "probe_zsh_hook_order_precmd_chain_zsh_to_bash",
+				from = .Zsh,
+				to = .Bash,
+				module_mode = true,
+				source = strings.trim_space(`
+h1() { echo ONE; }
+h2() { echo TWO; }
+autoload -Uz add-zsh-hook
+add-zsh-hook precmd h1
+add-zsh-hook precmd h2
+`),
+				probe_source = strings.trim_space(`
+for f in "${precmd_functions[@]}"; do
+  "$f"
+done
+`),
+				probe_target = strings.trim_space(`
+__shellx_run_precmd
+`),
+				required_probe_markers = []string{"ONE", "TWO"},
 			},
 			{
 				name = "plugin_zsh_nvm_param_zsh_to_posix",

@@ -657,24 +657,6 @@ __shellx_omz_z_bootstrap
 				delete(repl_cmd_zparseopts)
 			}
 		}
-		stub_builder := strings.builder_make()
-		if !strings.contains(result.output, "\nsetopt() {") {
-			strings.write_string(&stub_builder, "setopt() { :; }\n")
-		}
-		if !strings.contains(result.output, "\nzparseopts() {") {
-			strings.write_string(&stub_builder, "zparseopts() { return 0; }\n")
-		}
-		if !strings.contains(result.output, "\n__shellx_list_has() {") {
-			strings.write_string(&stub_builder, "__shellx_list_has() { _zx_name=\"$1\"; _zx_key=\"$2\"; eval \"_zx_vals=\\${$_zx_name}\"; set -- $_zx_vals; for _zx_item in \"$@\"; do [ \"$_zx_item\" = \"$_zx_key\" ] && { printf \"1\"; return 0; }; done; printf \"0\"; }\n")
-		}
-		stub_text := strings.to_string(stub_builder)
-		if len(stub_text) > 0 {
-			combined := strings.concatenate([]string{stub_text, "\n", result.output}, context.allocator)
-			delete(result.output)
-			result.output = combined
-		}
-		strings.builder_destroy(&stub_builder)
-
 		has_z_fn := strings.contains(result.output, "\nz() {") || strings.has_prefix(strings.trim_space(result.output), "z() {")
 		has__z_fn := strings.contains(result.output, "\n_z() {") || strings.has_prefix(strings.trim_space(result.output), "_z() {")
 		if has__z_fn && !has_z_fn {
@@ -887,6 +869,7 @@ rewrite_final_nonfish_structural_safety :: proc(text: string, allocator := conte
 		trimmed := strings.trim_space(line)
 		out_line := line
 		out_allocated := false
+
 
 		if strings.has_prefix(trimmed, "case ") && strings.has_suffix(trimmed, " in") {
 			in_case = true
@@ -2702,16 +2685,14 @@ rewrite_posix_array_bridge_callsites :: proc(text: string, allocator := context.
 		name = strings.trim_space(lhs[:open_idx])
 		index = strings.trim_space(lhs[open_idx+1 : close_idx])
 		value = rhs
-		if len(value) >= 2 {
-			if (value[0] == '\'' && value[len(value)-1] == '\'') || (value[0] == '"' && value[len(value)-1] == '"') {
-				value = strings.trim_space(value[1 : len(value)-1])
-			}
-		}
-		if !is_basic_name(name) || index == "" || value == "" {
+		if !is_basic_name(name) || index == "" {
 			return "", "", "", false
 		}
 		if value == "()" {
 			return "", "", "", false
+		}
+		if value == "" {
+			value = "\"\""
 		}
 		return name, index, value, true
 	}
@@ -2719,9 +2700,9 @@ rewrite_posix_array_bridge_callsites :: proc(text: string, allocator := context.
 	build_list_call_line :: proc(indent: string, name: string, items: string, append_mode: bool, allocator := context.allocator) -> string {
 		if items == "" {
 			if append_mode {
-				return strings.concatenate([]string{indent, ":"}, allocator)
+				return strings.concatenate([]string{indent, "__shellx_list_append ", name}, allocator)
 			}
-			return strings.concatenate([]string{indent, name, "=\"\""}, allocator)
+			return strings.concatenate([]string{indent, "__shellx_list_set ", name}, allocator)
 		}
 		if append_mode {
 			return strings.concatenate([]string{indent, "__shellx_list_append ", name, " ", items}, allocator)
@@ -3195,8 +3176,17 @@ rewrite_posix_array_parameter_expansions :: proc(
 					if bracket_idx > 0 && strings.has_suffix(len_inner, "]") {
 						name := strings.trim_space(len_inner[:bracket_idx])
 						index := strings.trim_space(len_inner[bracket_idx+1 : len(len_inner)-1])
-						if is_basic_name(name) && (index == "@" || index == "*") {
-							repl = fmt.tprintf("$(__shellx_list_len %s)", name)
+						if is_basic_name(name) {
+							if index == "@" || index == "*" {
+								repl = fmt.tprintf("$(__shellx_list_len %s)", name)
+							} else if index != "" {
+								idx_text := adjust_index_for_source(index, from)
+								if idx_text != "" {
+									idx_arg := quote_shell_arg_allow_expansion(idx_text, allocator)
+									repl = fmt.tprintf("$(printf '%%s' \"$(__shellx_list_get %s %s)\" | wc -c | tr -d ' ')", name, idx_arg)
+									delete(idx_arg)
+								}
+							}
 						}
 					}
 				}
@@ -4483,6 +4473,172 @@ rewrite_parameter_expansion_callsites :: proc(
 	to: ShellDialect,
 	allocator := context.allocator,
 ) -> (string, bool) {
+	if to == .POSIX {
+		rewrite_posix_inner :: proc(inner: string, allocator := context.allocator) -> (string, bool) {
+			trimmed := strings.trim_space(inner)
+			if trimmed == "" ||
+				(!strings.contains(trimmed, ":") &&
+					!strings.contains(trimmed, "//") &&
+					!strings.contains(trimmed, "/#") &&
+					!strings.contains(trimmed, "/%")) {
+				return "", false
+			}
+			is_simple_lit :: proc(s: string) -> bool {
+				if s == "" {
+					return false
+				}
+				for ch in s {
+					if ch == '$' || ch == '`' || ch == '"' || ch == '\'' || ch == '\\' || ch == '{' || ch == '}' || ch == '|' {
+						return false
+					}
+				}
+				return true
+			}
+			escape_sed_lit :: proc(s: string, allocator := context.allocator) -> string {
+				builder := strings.builder_make()
+				defer strings.builder_destroy(&builder)
+				for i in 0 ..< len(s) {
+					ch := s[i]
+					if ch == '\\' || ch == '&' || ch == '|' {
+						strings.write_byte(&builder, '\\')
+					}
+					strings.write_byte(&builder, ch)
+				}
+				return strings.clone(strings.to_string(builder), allocator)
+			}
+			base_name_from_prefix :: proc(prefix: string) -> string {
+				end := 0
+				for end < len(prefix) {
+					ch := prefix[end]
+					if !is_param_name_char(ch) {
+						break
+					}
+					end += 1
+				}
+				if end == 0 {
+					return ""
+				}
+				return prefix[:end]
+			}
+
+			// ${var//pat/repl}
+			if strings.contains(trimmed, "//") {
+				slash_idx := find_top_level_substring(trimmed, "//")
+				if slash_idx > 0 {
+					var_name := strings.trim_space(trimmed[:slash_idx])
+					rest := trimmed[slash_idx+2:]
+					repl_idx := find_substring(rest, "/")
+					if is_basic_name(var_name) && repl_idx >= 0 {
+						pat := strings.trim_space(rest[:repl_idx])
+						repl := strings.trim_space(rest[repl_idx+1:])
+						if is_simple_lit(pat) && is_simple_lit(repl) {
+							pat_esc := escape_sed_lit(pat, allocator)
+							repl_esc := escape_sed_lit(repl, allocator)
+							out := strings.concatenate([]string{"$(printf '%s' \"${", var_name, "}\" | sed 's|", pat_esc, "|", repl_esc, "|g')"}, allocator)
+							delete(pat_esc)
+							delete(repl_esc)
+							return out, true
+						}
+					}
+				}
+			}
+
+			// ${var/#pat/repl} and ${var/%pat/repl}
+			if strings.contains(trimmed, "/#") || strings.contains(trimmed, "/%") {
+				tag := "/#"
+				anchor := "^"
+				tag_idx := find_top_level_substring(trimmed, tag)
+				if tag_idx < 0 {
+					tag = "/%"
+					anchor = "$"
+					tag_idx = find_top_level_substring(trimmed, tag)
+				}
+				if tag_idx > 0 {
+					var_name := strings.trim_space(trimmed[:tag_idx])
+					rest := trimmed[tag_idx+2:]
+					repl_idx := find_substring(rest, "/")
+					if is_basic_name(var_name) && repl_idx >= 0 {
+						pat := strings.trim_space(rest[:repl_idx])
+						repl := strings.trim_space(rest[repl_idx+1:])
+						if is_simple_lit(pat) && is_simple_lit(repl) {
+							pat_esc := escape_sed_lit(pat, allocator)
+							repl_esc := escape_sed_lit(repl, allocator)
+							pat_with_anchor := pat_esc
+							if anchor == "^" {
+								pat_with_anchor = strings.concatenate([]string{"^", pat_esc}, allocator)
+								delete(pat_esc)
+							} else {
+								pat_with_anchor = strings.concatenate([]string{pat_esc, "$"}, allocator)
+								delete(pat_esc)
+							}
+							out := strings.concatenate([]string{"$(printf '%s' \"${", var_name, "}\" | sed 's|", pat_with_anchor, "|", repl_esc, "|')"}, allocator)
+							delete(pat_with_anchor)
+							delete(repl_esc)
+							return out, true
+						}
+					}
+				}
+			}
+
+			// ${var:offset[:len]}
+			colon_idx := find_top_level_substring(trimmed, ":")
+			if colon_idx > 0 {
+				prefix := strings.trim_space(trimmed[:colon_idx])
+				var_name := base_name_from_prefix(prefix)
+				if is_basic_name(var_name) {
+					rest := strings.trim_space(trimmed[colon_idx+1:])
+					if rest != "" && !strings.contains(rest, "/") {
+						len_idx := find_top_level_substring(rest, ":")
+						offset_expr := rest
+						len_expr := ""
+						if len_idx >= 0 {
+							offset_expr = strings.trim_space(rest[:len_idx])
+							len_expr = strings.trim_space(rest[len_idx+1:])
+						}
+						if offset_expr != "" {
+								start_expr := fmt.tprintf("$((%s + 1))", offset_expr)
+								if len_expr != "" {
+									end_expr := fmt.tprintf("$((%s + %s))", offset_expr, len_expr)
+									out := strings.concatenate([]string{"$(printf '%s' \"${", var_name, "}\" | cut -c", start_expr, "-", end_expr, ")"}, allocator)
+									return out, true
+								}
+								out := strings.concatenate([]string{"$(printf '%s' \"${", var_name, "}\" | cut -c", start_expr, "-)"}, allocator)
+								return out, true
+							}
+						}
+				}
+			}
+			return "", false
+		}
+
+		builder := strings.builder_make()
+		defer strings.builder_destroy(&builder)
+		changed := false
+		i := 0
+		for i < len(text) {
+			if i+1 < len(text) && text[i] == '$' && text[i+1] == '{' {
+				j := find_matching_brace(text, i+1)
+				if j > i+2 {
+					inner := text[i+2 : j]
+					repl, ok := rewrite_posix_inner(inner, allocator)
+					if ok {
+						strings.write_string(&builder, repl)
+						delete(repl)
+						changed = true
+						i = j + 1
+						continue
+					}
+				}
+			}
+			strings.write_byte(&builder, text[i])
+			i += 1
+		}
+		if !changed {
+			return strings.clone(text, allocator), false
+		}
+		return strings.clone(strings.to_string(builder), allocator), true
+	}
+
 	if to != .Fish {
 		return strings.clone(text, allocator), false
 	}
@@ -9586,6 +9742,7 @@ rewrite_targeted_zsh_plugin_structural_repairs :: proc(text: string, allocator :
 	builder := strings.builder_make()
 	defer strings.builder_destroy(&builder)
 	changed := false
+	is_ohmyzsh_sudo := strings.contains(text, "__sudo-replace-buffer") || strings.contains(text, "__sudo_replace_buffer")
 
 	in_autosuggest_bind_widgets := false
 	in_autosuggest_start_fn := false
@@ -9670,6 +9827,48 @@ rewrite_targeted_zsh_plugin_structural_repairs :: proc(text: string, allocator :
 			}
 			if prev_sig == "fi" && next_sig == "}" {
 				out_line = strings.concatenate([]string{indent, ":"}, allocator)
+				out_allocated = true
+				changed = true
+			}
+		}
+		if is_ohmyzsh_sudo && trimmed == ":" {
+			prev_sig := ""
+			next_sig := ""
+			for j := idx - 1; j >= 0; j -= 1 {
+				cand := strings.trim_space(lines[j])
+				if cand == "" || strings.has_prefix(cand, "#") {
+					continue
+				}
+				prev_sig = cand
+				break
+			}
+			for j := idx + 1; j < len(lines); j += 1 {
+				cand := strings.trim_space(lines[j])
+				if cand == "" || strings.has_prefix(cand, "#") {
+					continue
+				}
+				next_sig = cand
+				break
+			}
+			if strings.has_prefix(next_sig, "case \"$BUFFER\" in") {
+				if out_allocated {
+					delete(out_line)
+				}
+				out_line = strings.concatenate([]string{indent, "fi"}, allocator)
+				out_allocated = true
+				changed = true
+			} else if strings.contains(prev_sig, "zle redisplay") {
+				if out_allocated {
+					delete(out_line)
+				}
+				out_line = strings.concatenate([]string{indent, "}"}, allocator)
+				out_allocated = true
+				changed = true
+			} else if strings.has_prefix(next_sig, "zle -N sudo_command_line") {
+				if out_allocated {
+					delete(out_line)
+				}
+				out_line = ""
 				out_allocated = true
 				changed = true
 			}
@@ -9933,7 +10132,23 @@ rewrite_zsh_parser_blocker_signatures :: proc(text: string, allocator := context
 			if out_line_allocated {
 				delete(out_line)
 			}
-			out_line = strings.concatenate([]string{indent, ":"}, allocator)
+			out_line = strings.concatenate([]string{indent, "  || \"${realcmd:c}\" = \"$editorcmd\" || \"${realcmd:c}\" = \"${editorcmd:c}\" ]] \\"}, allocator)
+			out_line_allocated = true
+			changed = true
+		}
+		if is_ohmyzsh_sudo &&
+			strings.has_prefix(trimmed, "if [[") &&
+			strings.contains(trimmed, "\"$realcmd\" = (") &&
+			strings.contains(trimmed, "editorcmd") {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			if out_line_allocated {
+				delete(out_line)
+			}
+			out_line = strings.concatenate([]string{indent, "if [[ \"$realcmd\" = '$EDITOR' || \"$realcmd\" = \"$editorcmd\" || \"$realcmd\" = \"${editorcmd:c}\" \\"}, allocator)
 			out_line_allocated = true
 			changed = true
 		}
@@ -10244,6 +10459,24 @@ rewrite_orphan_control_terminators :: proc(text: string, allocator := context.al
 		trimmed := strings.trim_space(line)
 		out_line := line
 		out_allocated := false
+		prev_sig := ""
+		next_sig := ""
+		for j := idx - 1; j >= 0; j -= 1 {
+			cand := strings.trim_space(lines[j])
+			if cand == "" || strings.has_prefix(cand, "#") {
+				continue
+			}
+			prev_sig = cand
+			break
+		}
+		for j := idx + 1; j < len(lines); j += 1 {
+			cand := strings.trim_space(lines[j])
+			if cand == "" || strings.has_prefix(cand, "#") {
+				continue
+			}
+			next_sig = cand
+			break
+		}
 
 		if strings.has_prefix(trimmed, "if ") {
 			has_then := strings.contains(trimmed, "; then") || strings.has_suffix(trimmed, " then")
@@ -10259,6 +10492,9 @@ rewrite_orphan_control_terminators :: proc(text: string, allocator := context.al
 			}
 		}
 		if trimmed == "then" && pending_if_then > 0 {
+			pending_if_then -= 1
+			if_depth += 1
+		} else if pending_if_then > 0 && strings.has_suffix(trimmed, "; then") {
 			pending_if_then -= 1
 			if_depth += 1
 		}
@@ -10279,11 +10515,27 @@ rewrite_orphan_control_terminators :: proc(text: string, allocator := context.al
 		if trimmed == "do" && pending_loop_do > 0 {
 			pending_loop_do -= 1
 			loop_depth += 1
+		} else if pending_loop_do > 0 && strings.has_suffix(trimmed, "; do") {
+			pending_loop_do -= 1
+			loop_depth += 1
 		}
 
 		single_line_case := strings.has_prefix(trimmed, "case ") && strings.contains(trimmed, " in ") && strings.contains(trimmed, " esac")
 		if strings.has_prefix(trimmed, "case ") && strings.has_suffix(trimmed, " in") && !single_line_case {
 			case_depth += 1
+		}
+
+		if trimmed == ":" {
+			if strings.contains(prev_sig, "return") && strings.has_prefix(next_sig, "case \"$BUFFER\" in") {
+				out_line = "fi"
+				if if_depth > 0 {
+					if_depth -= 1
+				}
+				changed = true
+			} else if strings.contains(prev_sig, "zle redisplay") && next_sig == "}" {
+				out_line = ""
+				changed = true
+			}
 		}
 
 		if trimmed == "fi" {
@@ -10746,7 +10998,16 @@ rewrite_fast_syntax_bind_widgets_stub_for_sh :: proc(text: string, allocator := 
 	changed := false
 	for line, i in lines {
 		if i == start {
-			strings.write_string(&builder, "_zsh_highlight_bind_widgets() { :; }")
+			strings.write_string(&builder, strings.trim_space(`
+_zsh_highlight_bind_widgets() {
+  if command -v __shellx_register_precmd >/dev/null 2>&1; then
+    __shellx_register_precmd _zsh_highlight >/dev/null 2>&1 || true
+  fi
+  if command -v __shellx_register_preexec >/dev/null 2>&1; then
+    __shellx_register_preexec _zsh_highlight >/dev/null 2>&1 || true
+  fi
+  return 0
+}`))
 			changed = true
 			if i < len(lines)-1 {
 				strings.write_byte(&builder, '\n')
@@ -11928,6 +12189,7 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 		strings.contains(text, "seq 64 | sort --random-sort | spark") ||
 		strings.contains(text, "command awk -v min=\"$_flag_min\"")
 	is_fish_tide_theme := strings.contains(text, "_tide_") && strings.contains(text, "function fish_prompt")
+	is_zsh_source := false
 	if to == .Zsh && is_fish_spark {
 		return strings.clone("spark() { :; }\n", allocator), true
 	}
@@ -11957,43 +12219,92 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 	agnoster_case_fallback_emitted := false
 	sudo_opened_replace_fn := false
 	sudo_closed_replace_fn := false
-	sudo_opened_cmd_fn := false
-	sudo_closed_cmd_fn := false
 	ctrl_stack := make([dynamic]byte, 0, 32, context.temp_allocator) // i=if, l=loop, c=case
 	defer delete(ctrl_stack)
+	mark_untranslatable_line :: proc(indent: string, reason: string) -> string {
+		_ = reason
+		return strings.concatenate([]string{indent, ":"}, context.temp_allocator)
+	}
 
 		for line, idx in lines {
 			trimmed := strings.trim_space(line)
 			out_line := line
 			handled_line := false
+			prev_sig_line :: proc(lines: []string, idx: int) -> string {
+				for j := idx - 1; j >= 0; j -= 1 {
+					cand := strings.trim_space(lines[j])
+					if cand == "" || strings.has_prefix(cand, "#") {
+						continue
+					}
+					return cand
+				}
+				return ""
+			}
+			next_sig_line :: proc(lines: []string, idx: int) -> string {
+				for j := idx + 1; j < len(lines); j += 1 {
+					cand := strings.trim_space(lines[j])
+					if cand == "" || strings.has_prefix(cand, "#") {
+						continue
+					}
+					return cand
+				}
+				return ""
+			}
+			if is_ohmyzsh_sudo && trimmed == ":" {
+				prev_sig := prev_sig_line(lines, idx)
+				next_sig := next_sig_line(lines, idx)
+				if strings.has_prefix(next_sig, "case \"$BUFFER\" in") {
+					out_line = "fi"
+					changed = true
+					handled_line = true
+				} else if strings.contains(next_sig, "old=$1; new=$2; space=${2:+") {
+					out_line = "__sudo_replace_buffer() {"
+					changed = true
+					handled_line = true
+				} else if prev_sig == "esac" && strings.has_prefix(next_sig, "LBUFFER=\"${WHITESPACE}${LBUFFER}\"") {
+					out_line = ""
+					changed = true
+					handled_line = true
+				} else if strings.contains(prev_sig, "zle redisplay") {
+					out_line = "}"
+					changed = true
+					handled_line = true
+				} else if strings.has_prefix(next_sig, "zle -N sudo_command_line") {
+					out_line = ""
+					changed = true
+					handled_line = true
+				}
+			}
 			if to != .Zsh && is_ohmyzsh_sudo {
 			if !sudo_opened_replace_fn && strings.contains(trimmed, "old=$1; new=$2; space=${2:+") {
 				out_line = "__sudo_replace_buffer() {"
 				sudo_opened_replace_fn = true
 				changed = true
 				handled_line = true
-			} else if sudo_opened_replace_fn && !sudo_closed_replace_fn && trimmed == ":" {
+			} else if strings.has_prefix(trimmed, "if [[ \"$realcmd\" = (\\$EDITOR|$editorcmd|${editorcmd:c}) \\") {
+				out_line = "if [[ \"$realcmd\" = '$EDITOR' || \"$realcmd\" = \"$editorcmd\" || \"$realcmd\" = \"${editorcmd:c}\" \\"
+				changed = true
+				handled_line = true
+			} else if strings.has_prefix(trimmed, "|| \"${realcmd:c}\" = ($editorcmd|${editorcmd:c}) ]] \\") {
+				out_line = "|| \"${realcmd:c}\" = \"$editorcmd\" || \"${realcmd:c}\" = \"${editorcmd:c}\" ]] \\"
+				changed = true
+				handled_line = true
+			} else if sudo_opened_replace_fn && !sudo_closed_replace_fn && trimmed == ":" && strings.contains(prev_sig_line(lines, idx), "fi") {
 				out_line = "}"
 				sudo_closed_replace_fn = true
 				changed = true
 				handled_line = true
-			} else if !sudo_opened_cmd_fn && strings.contains(trimmed, "If line is empty, get the last run command from history") {
-				if sudo_opened_replace_fn && !sudo_closed_replace_fn {
-					strings.write_string(&builder, "}\n")
-					sudo_closed_replace_fn = true
-				}
-				out_line = "sudo_command_line() {"
-				sudo_opened_cmd_fn = true
-				changed = true
-				handled_line = true
-			} else if sudo_opened_cmd_fn && !sudo_closed_cmd_fn && strings.has_prefix(trimmed, "zle -N sudo-command-line") {
-				strings.write_string(&builder, "}\n")
-				sudo_closed_cmd_fn = true
-				out_line = "zle -N sudo_command_line"
-				changed = true
-				handled_line = true
 				} else if strings.contains(trimmed, "sudo-command-line") {
 					renamed, renamed_changed := strings.replace_all(out_line, "sudo-command-line", "sudo_command_line", context.temp_allocator)
+				if renamed_changed {
+					out_line = renamed
+					changed = true
+					handled_line = true
+				} else {
+					delete(renamed)
+				}
+			} else if strings.contains(trimmed, "__sudo-replace-buffer") {
+				renamed, renamed_changed := strings.replace_all(out_line, "__sudo-replace-buffer", "__sudo_replace_buffer", context.temp_allocator)
 				if renamed_changed {
 					out_line = renamed
 					changed = true
@@ -12353,7 +12664,8 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 				changed = true
 			}
 
-			if strings.has_prefix(trimmed, "if [[") && strings.contains(trimmed, "= (") {
+			if strings.has_prefix(trimmed, "if [[") && strings.contains(trimmed, "= (") &&
+				!(is_ohmyzsh_sudo && strings.contains(trimmed, "realcmd") && strings.contains(trimmed, "editorcmd")) {
 				out_line = "if true; then"
 				changed = true
 			} else if strings.has_prefix(trimmed, "elif [[") && strings.contains(trimmed, "= (") {
@@ -12484,19 +12796,46 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 				out_line = "for _ in 1; do"
 				changed = true
 			} else if to != .Fish && (trimmed == "then" || trimmed == "do") {
-				out_line = ":"
-				changed = true
+				// Preserve valid multiline control headers:
+				// if ... \n then
+				// for/while ... \n do
+				is_valid_then := trimmed == "then" &&
+					len(ctrl_stack) > 0 &&
+					ctrl_stack[len(ctrl_stack)-1] == 'i'
+				is_valid_do := trimmed == "do" &&
+					len(ctrl_stack) > 0 &&
+					ctrl_stack[len(ctrl_stack)-1] == 'l'
+				if !(is_valid_then || is_valid_do) {
+					if is_zsh_source {
+						out_line = mark_untranslatable_line("", "invalid_control_header")
+					} else {
+						out_line = ":"
+					}
+					changed = true
+				}
 			}
 		if to == .POSIX && trimmed == "{" {
-			out_line = ":"
+			if is_zsh_source {
+				out_line = mark_untranslatable_line("", "unsupported_brace_group_open")
+			} else {
+				out_line = ":"
+			}
 			changed = true
 		}
 		if to == .POSIX && (strings.has_suffix(trimmed, "&& {") || strings.has_suffix(trimmed, "|| {")) {
-			out_line = ":"
+			if is_zsh_source {
+				out_line = mark_untranslatable_line("", "unsupported_brace_group_logical")
+			} else {
+				out_line = ":"
+			}
 			changed = true
 		}
 		if to == .POSIX && strings.has_suffix(trimmed, "{") && !strings.has_suffix(trimmed, "() {") && !strings.has_prefix(trimmed, "function ") {
-			out_line = ":"
+			if is_zsh_source {
+				out_line = mark_untranslatable_line("", "unsupported_brace_group_statement")
+			} else {
+				out_line = ":"
+			}
 			changed = true
 		}
 		if to == .POSIX && trimmed == "}" {
@@ -12510,7 +12849,11 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 				break
 			}
 			if prev_sig == ")" {
-				out_line = ":"
+				if is_zsh_source {
+					out_line = mark_untranslatable_line("", "orphan_posix_brace_close")
+				} else {
+					out_line = ":"
+				}
 				changed = true
 			}
 		}
@@ -12663,10 +13006,6 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 				out_line = ":"
 				changed = true
 			}
-			if is_ohmyzsh_sudo && strings.has_prefix(trimmed, "|| ") && strings.has_suffix(trimmed, "; then") {
-				out_line = ":"
-				changed = true
-			}
 			if is_ohmyzsh_z && strings.has_prefix(trimmed, "-") && strings.contains(trimmed, "(") && strings.contains(trimmed, ")") {
 				out_line = ":"
 				changed = true
@@ -12698,46 +13037,22 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 		out_trimmed_q := strings.trim_space(out_line)
 		if out_trimmed_q != "" && !strings.has_prefix(out_trimmed_q, "#") {
 			if count_unescaped_double_quotes(out_trimmed_q)%2 == 1 {
-				if strings.has_prefix(out_trimmed_q, "if ") && strings.contains(out_trimmed_q, "; then") {
-					out_line = "if true; then"
-				} else if strings.has_prefix(out_trimmed_q, "elif ") && strings.contains(out_trimmed_q, "; then") {
-					out_line = "elif true; then"
-				} else if strings.has_prefix(out_trimmed_q, "while ") && strings.contains(out_trimmed_q, "; do") {
-					out_line = "while true; do"
-				} else if strings.has_prefix(out_trimmed_q, "for ") && strings.contains(out_trimmed_q, "; do") {
-					out_line = "for _ in 1; do"
-				} else if strings.has_prefix(out_trimmed_q, "case ") && strings.has_suffix(out_trimmed_q, " in") {
-					out_line = "case \"\" in"
+				if is_zsh_source {
+					out_line = mark_untranslatable_line("", "unbalanced_quotes_after_hardening")
 				} else {
 					out_line = ":"
 				}
 				changed = true
 			} else if strings.contains(out_trimmed_q, "${") && !strings.contains(out_trimmed_q, "}") {
-				if strings.has_prefix(out_trimmed_q, "if ") && strings.contains(out_trimmed_q, "; then") {
-					out_line = "if true; then"
-				} else if strings.has_prefix(out_trimmed_q, "elif ") && strings.contains(out_trimmed_q, "; then") {
-					out_line = "elif true; then"
-				} else if strings.has_prefix(out_trimmed_q, "while ") && strings.contains(out_trimmed_q, "; do") {
-					out_line = "while true; do"
-				} else if strings.has_prefix(out_trimmed_q, "for ") && strings.contains(out_trimmed_q, "; do") {
-					out_line = "for _ in 1; do"
-				} else if strings.has_prefix(out_trimmed_q, "case ") && strings.has_suffix(out_trimmed_q, " in") {
-					out_line = "case \"\" in"
+				if is_zsh_source {
+					out_line = mark_untranslatable_line("", "unbalanced_parameter_expansion_after_hardening")
 				} else {
 					out_line = ":"
 				}
 				changed = true
 			} else if strings.contains(out_trimmed_q, "~(") || strings.contains(out_trimmed_q, "(#") {
-				if strings.has_prefix(out_trimmed_q, "if ") && strings.contains(out_trimmed_q, "; then") {
-					out_line = "if true; then"
-				} else if strings.has_prefix(out_trimmed_q, "elif ") && strings.contains(out_trimmed_q, "; then") {
-					out_line = "elif true; then"
-				} else if strings.has_prefix(out_trimmed_q, "while ") && strings.contains(out_trimmed_q, "; do") {
-					out_line = "while true; do"
-				} else if strings.has_prefix(out_trimmed_q, "for ") && strings.contains(out_trimmed_q, "; do") {
-					out_line = "for _ in 1; do"
-				} else if strings.has_prefix(out_trimmed_q, "case ") && strings.has_suffix(out_trimmed_q, " in") {
-					out_line = "case \"\" in"
+				if is_zsh_source {
+					out_line = mark_untranslatable_line("", "unsupported_zsh_glob_qualifier_after_hardening")
 				} else {
 					out_line = ":"
 				}
@@ -12756,7 +13071,11 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 					fn_fix_idx += 1
 					out_line = "__shellx_fn_invalid() {"
 				} else {
-					out_line = ":"
+					if is_zsh_source {
+						out_line = mark_untranslatable_line("", "invalid_function_name")
+					} else {
+						out_line = ":"
+					}
 				}
 				changed = true
 			}
@@ -12824,32 +13143,48 @@ rewrite_shell_parse_hardening :: proc(text: string, to: ShellDialect, allocator 
 			}
 		} else if out_trimmed == "else" {
 			if len(ctrl_stack) == 0 || ctrl_stack[len(ctrl_stack)-1] != 'i' {
-				out_line = ":"
-				out_trimmed = ":"
+				if is_zsh_source {
+					out_line = mark_untranslatable_line("", "orphan_else")
+				} else {
+					out_line = ":"
+				}
+				out_trimmed = strings.trim_space(out_line)
 				changed = true
 			}
 		} else if out_trimmed == "fi" {
 			if len(ctrl_stack) > 0 && ctrl_stack[len(ctrl_stack)-1] == 'i' {
 				resize(&ctrl_stack, len(ctrl_stack)-1)
 			} else {
-				out_line = ":"
-				out_trimmed = ":"
+				if is_zsh_source {
+					out_line = mark_untranslatable_line("", "orphan_fi")
+				} else {
+					out_line = ":"
+				}
+				out_trimmed = strings.trim_space(out_line)
 				changed = true
 			}
 		} else if out_trimmed == "done" {
 			if len(ctrl_stack) > 0 && ctrl_stack[len(ctrl_stack)-1] == 'l' {
 				resize(&ctrl_stack, len(ctrl_stack)-1)
 			} else {
-				out_line = ":"
-				out_trimmed = ":"
+				if is_zsh_source {
+					out_line = mark_untranslatable_line("", "orphan_done")
+				} else {
+					out_line = ":"
+				}
+				out_trimmed = strings.trim_space(out_line)
 				changed = true
 			}
 		} else if out_trimmed == "esac" {
 			if len(ctrl_stack) > 0 && ctrl_stack[len(ctrl_stack)-1] == 'c' {
 				resize(&ctrl_stack, len(ctrl_stack)-1)
 			} else {
-				out_line = ":"
-				out_trimmed = ":"
+				if is_zsh_source {
+					out_line = mark_untranslatable_line("", "orphan_esac")
+				} else {
+					out_line = ":"
+				}
+				out_trimmed = strings.trim_space(out_line)
 				changed = true
 			}
 		}

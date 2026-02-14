@@ -843,6 +843,102 @@ print() {
   fi
 }
 
+setopt() {
+  _zx_rc=0
+  for _zx_opt in "$@"; do
+    case "$_zx_opt" in
+      -*) continue ;;
+    esac
+    _zx_enable=1
+    _zx_name="$_zx_opt"
+    case "$_zx_name" in
+      no*) _zx_enable=0; _zx_name="${_zx_name#no}" ;;
+    esac
+    _zx_key="$(printf "%s" "$_zx_name" | tr '-' '_' | tr '[:lower:]' '[:upper:]')"
+    eval "SHELLX_SETOPT_${_zx_key}=\$_zx_enable"
+    if [ -n "${BASH_VERSION-}" ]; then
+      case "$_zx_name" in
+        aliases)
+          if command -v shopt >/dev/null 2>&1; then
+            if [ "$_zx_enable" -eq 1 ]; then shopt -s expand_aliases >/dev/null 2>&1 || _zx_rc=1; else shopt -u expand_aliases >/dev/null 2>&1 || _zx_rc=1; fi
+          fi
+          ;;
+        braceexpand)
+          if [ "$_zx_enable" -eq 1 ]; then set +o braceexpand >/dev/null 2>&1 || true; else set +B >/dev/null 2>&1 || true; fi
+          ;;
+        extendedglob|kshglob)
+          if command -v shopt >/dev/null 2>&1; then
+            if [ "$_zx_enable" -eq 1 ]; then shopt -s extglob >/dev/null 2>&1 || _zx_rc=1; else shopt -u extglob >/dev/null 2>&1 || _zx_rc=1; fi
+          fi
+          ;;
+        noglob|glob)
+          if [ "$_zx_enable" -eq 1 ]; then set +f >/dev/null 2>&1 || true; else set -f >/dev/null 2>&1 || true; fi
+          ;;
+      esac
+    fi
+  done
+  return "$_zx_rc"
+}
+
+zparseopts() {
+  _zx_assoc=""
+  _zx_array=""
+  _zx_specs=""
+  _zx_mode="spec"
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -A) shift; _zx_assoc="$1" ;;
+      -a) shift; _zx_array="$1" ;;
+      --) _zx_mode="args"; shift; break ;;
+      -*) ;;
+      *)
+        if [ "$_zx_mode" = "spec" ]; then
+          if [ -n "$_zx_specs" ]; then _zx_specs="$_zx_specs $1"; else _zx_specs="$1"; fi
+        fi
+        ;;
+    esac
+    shift
+  done
+  _zx_args="$*"
+  _zx_assoc_out=""
+  _zx_arr_out=""
+  for _zx_arg in $_zx_args; do
+    case "$_zx_arg" in
+      -*)
+        _zx_item="${_zx_arg#-}"
+        _zx_key="${_zx_item%%=*}"
+        _zx_val="1"
+        if [ "$_zx_item" != "$_zx_key" ]; then
+          _zx_val="${_zx_item#*=}"
+        fi
+        if [ -n "$_zx_assoc" ]; then
+          if [ -n "$_zx_assoc_out" ]; then _zx_assoc_out="$_zx_assoc_out ${_zx_key}=${_zx_val}"; else _zx_assoc_out="${_zx_key}=${_zx_val}"; fi
+        fi
+        if [ -n "$_zx_array" ]; then
+          if [ -n "$_zx_arr_out" ]; then _zx_arr_out="$_zx_arr_out $_zx_arg"; else _zx_arr_out="$_zx_arg"; fi
+        fi
+        ;;
+    esac
+  done
+  if [ -n "$_zx_assoc" ]; then eval "$_zx_assoc=\"\$_zx_assoc_out\""; fi
+  if [ -n "$_zx_array" ]; then eval "$_zx_array=\"\$_zx_arr_out\""; fi
+  return 0
+}
+
+__shellx_list_has() {
+  _zx_name="$1"
+  _zx_key="$2"
+  eval "_zx_vals=\${$_zx_name}"
+  set -- $_zx_vals
+  for _zx_item in "$@"; do
+    if [ "$_zx_item" = "$_zx_key" ]; then
+      printf "1"
+      return 0
+    fi
+  done
+  printf "0"
+}
+
 if [ -n "${BASH_VERSION-}" ]; then
   typeset() {
     _zx_opt=""
