@@ -482,6 +482,71 @@ dialect_name :: proc(d: shellx.ShellDialect) -> string {
 	return "unknown"
 }
 
+parse_dialect_name :: proc(s: string) -> (shellx.ShellDialect, bool) {
+	switch strings.to_lower(strings.trim_space(s)) {
+	case "bash":
+		return .Bash, true
+	case "zsh":
+		return .Zsh, true
+	case "fish":
+		return .Fish, true
+	case "posix", "sh":
+		return .POSIX, true
+	}
+	return .POSIX, false
+}
+
+parse_pair_selector :: proc(s: string) -> (PairKey, bool) {
+	trimmed := strings.trim_space(s)
+	parts := strings.split(trimmed, "->")
+	defer delete(parts)
+	if len(parts) != 2 {
+		return PairKey{}, false
+	}
+	from, ok_from := parse_dialect_name(parts[0])
+	to, ok_to := parse_dialect_name(parts[1])
+	if !ok_from || !ok_to || from == to {
+		return PairKey{}, false
+	}
+	return PairKey{from = from, to = to}, true
+}
+
+matches_gate_filters :: proc(
+	out: CaseOutcome,
+	gate_pairs: []PairKey,
+	gate_case_filters: []string,
+	gate_kind: string,
+) -> bool {
+	if len(gate_pairs) > 0 {
+		matched_pair := false
+		for p in gate_pairs {
+			if out.case_.from == p.from && out.to == p.to {
+				matched_pair = true
+				break
+			}
+		}
+		if !matched_pair {
+			return false
+		}
+	}
+	if gate_kind != "" && out.case_.kind != gate_kind {
+		return false
+	}
+	if len(gate_case_filters) > 0 {
+		matched_case := false
+		for f in gate_case_filters {
+			if strings.contains(out.case_.name, f) || strings.contains(out.case_.path, f) {
+				matched_case = true
+				break
+			}
+		}
+		if !matched_case {
+			return false
+		}
+	}
+	return true
+}
+
 make_analysis_arena :: proc(source_len: int) -> ir.Arena_IR {
 	size := source_len * 8
 	if size < 8*1024*1024 {
@@ -526,14 +591,104 @@ pair_summary_ptr :: proc(summaries: ^[dynamic]PairSummary, key: PairKey) -> ^Pai
 main :: proc() {
 	semantic_mode := false
 	validation_debug := false
-	for arg in os.args {
+	gate_pairs := make([dynamic]PairKey, 0, 4)
+	defer delete(gate_pairs)
+	gate_case_filters := make([dynamic]string, 0, 8)
+	defer {
+		for f in gate_case_filters {
+			delete(f)
+		}
+		delete(gate_case_filters)
+	}
+	gate_kind := ""
+
+	i := 0
+	for i < len(os.args) {
+		arg := os.args[i]
 		if arg == "--semantic" {
 			semantic_mode = true
+			i += 1
 			continue
 		}
 		if arg == "--validation-debug" {
 			validation_debug = true
+			i += 1
+			continue
 		}
+		if strings.has_prefix(arg, "--gate-pair=") {
+			spec := arg[len("--gate-pair="):]
+			p, ok := parse_pair_selector(spec)
+			if !ok {
+				fmt.eprintln(fmt.tprintf("invalid --gate-pair value: %s", spec))
+				os.exit(2)
+			}
+			append(&gate_pairs, p)
+			i += 1
+			continue
+		}
+		if arg == "--gate-pair" {
+			if i+1 >= len(os.args) {
+				fmt.eprintln("missing value for --gate-pair")
+				os.exit(2)
+			}
+			p, ok := parse_pair_selector(os.args[i+1])
+			if !ok {
+				fmt.eprintln(fmt.tprintf("invalid --gate-pair value: %s", os.args[i+1]))
+				os.exit(2)
+			}
+			append(&gate_pairs, p)
+			i += 2
+			continue
+		}
+		if strings.has_prefix(arg, "--gate-case=") {
+			spec := strings.trim_space(arg[len("--gate-case="):])
+			if spec == "" {
+				fmt.eprintln("invalid empty --gate-case filter")
+				os.exit(2)
+			}
+			append(&gate_case_filters, strings.clone(spec, context.allocator))
+			i += 1
+			continue
+		}
+		if arg == "--gate-case" {
+			if i+1 >= len(os.args) {
+				fmt.eprintln("missing value for --gate-case")
+				os.exit(2)
+			}
+			spec := strings.trim_space(os.args[i+1])
+			if spec == "" {
+				fmt.eprintln("invalid empty --gate-case filter")
+				os.exit(2)
+			}
+			append(&gate_case_filters, strings.clone(spec, context.allocator))
+			i += 2
+			continue
+		}
+		if strings.has_prefix(arg, "--gate-kind=") {
+			spec := strings.to_lower(strings.trim_space(arg[len("--gate-kind="):]))
+			if spec != "plugin" && spec != "theme" {
+				fmt.eprintln(fmt.tprintf("invalid --gate-kind value: %s (expected plugin|theme)", spec))
+				os.exit(2)
+			}
+			gate_kind = spec
+			i += 1
+			continue
+		}
+		if arg == "--gate-kind" {
+			if i+1 >= len(os.args) {
+				fmt.eprintln("missing value for --gate-kind")
+				os.exit(2)
+			}
+			spec := strings.to_lower(strings.trim_space(os.args[i+1]))
+			if spec != "plugin" && spec != "theme" {
+				fmt.eprintln(fmt.tprintf("invalid --gate-kind value: %s (expected plugin|theme)", spec))
+				os.exit(2)
+			}
+			gate_kind = spec
+			i += 2
+			continue
+		}
+		i += 1
 	}
 
 	cases := []Case{
@@ -1625,5 +1780,27 @@ command -v _zsh_nvm_load >/dev/null 2>&1 && echo HAVE_NVM_LOAD
 				s.with_shims,
 			),
 		)
+	}
+
+	if len(gate_pairs) > 0 || len(gate_case_filters) > 0 || gate_kind != "" {
+		gate_total := 0
+		gate_fail := 0
+		for out in outcomes {
+			if !matches_gate_filters(out, gate_pairs[:], gate_case_filters[:], gate_kind) {
+				continue
+			}
+			gate_total += 1
+			if !out.translate_success || !out.parser_ran || !out.parser_success {
+				gate_fail += 1
+			}
+		}
+		fmt.println(fmt.tprintf("Gate selection: %d outcomes, parser-matrix failures: %d", gate_total, gate_fail))
+		if gate_total == 0 {
+			fmt.eprintln("Gate selection matched no outcomes.")
+			os.exit(2)
+		}
+		if gate_fail > 0 {
+			os.exit(1)
+		}
 	}
 }

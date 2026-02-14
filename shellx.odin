@@ -649,6 +649,15 @@ translate :: proc(
 				}
 			}
 		}
+		if from == .Fish && to == .Zsh {
+			rewritten_replay, changed_replay := rewrite_fish_replay_tail_closer(result.output, context.allocator)
+			if changed_replay {
+				delete(result.output)
+				result.output = rewritten_replay
+			} else {
+				delete(rewritten_replay)
+			}
+		}
 	lowering_issue, has_lowering_issue := validate_lowered_output_structure(result.output, to, source_name, context.allocator)
 	if has_lowering_issue {
 		result.success = false
@@ -678,6 +687,22 @@ translate :: proc(
 	}
 
 	return result
+}
+
+rewrite_fish_replay_tail_closer :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	idx := find_substring(text, "replay() {")
+	if idx < 0 {
+		return strings.clone(text, allocator), false
+	}
+	rest := text[idx+len("replay() {"):]
+	if strings.contains(rest, "}") {
+		return strings.clone(text, allocator), false
+	}
+	trimmed := strings.trim_right_space(text)
+	if strings.has_suffix(trimmed, ":") {
+		return strings.concatenate([]string{trimmed, "\n}"}, allocator), true
+	}
+	return strings.clone(text, allocator), false
 }
 
 // translate_file reads a file and translates it.
@@ -4861,6 +4886,19 @@ __shellx_zsh_expand() {
 		out = rewritten
 		changed_any = changed_any || changed
 
+		rewritten, changed = rewrite_fish_to_zsh_parser_blocker_signatures(out, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
+
+		trimmed_replay := strings.trim_right_space(out)
+		if strings.contains(trimmed_replay, "replay() {") && strings.has_suffix(trimmed_replay, "\n:") {
+			appended_replay := strings.concatenate([]string{trimmed_replay, "\n}"}, allocator)
+			delete(out)
+			out = appended_replay
+			changed_any = true
+		}
+
 		is_tide_like := strings.contains(out, "_tide_") || strings.contains(out, "fish_prompt() {")
 		if is_tide_like {
 			rewritten, changed = rewrite_zsh_inline_not_set_if(out, allocator)
@@ -4915,6 +4953,140 @@ __shellx_zsh_expand() {
 	}
 
 	return out, changed_any
+}
+
+rewrite_fish_to_zsh_parser_blocker_signatures :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	is_fzf := strings.contains(text, "_fzf_uninstall() {") && strings.contains(text, "fzf_configure_bindings")
+	is_done := strings.contains(text, "__done_get_focused_window_id() {") && strings.contains(text, "__done_is_tmux_window_active() {")
+	is_replay := strings.contains(text, "\nreplay() {")
+	is_gitnow := strings.contains(text, "gitnow() {") && strings.contains(text, "__gitnow_manual")
+	if !(is_fzf || is_done || is_replay || is_gitnow) {
+		return strings.clone(text, allocator), false
+	}
+
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	in_done_any_fn := false
+	done_any_if_depth := 0
+	done_any_loop_depth := 0
+	in_gitnow_fn := false
+	gitnow_if_depth := 0
+	in_replay_fn := false
+
+	for line, i in lines {
+		trimmed := strings.trim_space(line)
+		out_line := line
+
+		if is_done && strings.has_suffix(trimmed, "() {") {
+			in_done_any_fn = true
+			done_any_if_depth = 0
+			done_any_loop_depth = 0
+		}
+		if is_gitnow && trimmed == "gitnow() {" {
+			in_gitnow_fn = true
+			gitnow_if_depth = 0
+		}
+		if is_gitnow && strings.has_suffix(trimmed, "() {") {
+			in_gitnow_fn = true
+			gitnow_if_depth = 0
+		}
+		if is_replay && trimmed == "replay() {" {
+			in_replay_fn = true
+		}
+
+		if is_fzf && trimmed == "if exit; then :" {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			out_line = strings.concatenate([]string{indent, ":"}, allocator)
+			changed = true
+		}
+
+		if in_done_any_fn {
+			if strings.has_prefix(trimmed, "if ") && strings.contains(trimmed, "; then") {
+				done_any_if_depth += 1
+			} else if trimmed == "fi" && done_any_if_depth > 0 {
+				done_any_if_depth -= 1
+			}
+			if strings.has_prefix(trimmed, "while ") && strings.contains(trimmed, "; do") {
+				done_any_loop_depth += 1
+			} else if trimmed == "done" && done_any_loop_depth > 0 {
+				done_any_loop_depth -= 1
+			}
+		}
+		if in_gitnow_fn {
+			if strings.has_prefix(trimmed, "if ") && strings.contains(trimmed, "; then") {
+				gitnow_if_depth += 1
+			} else if trimmed == "fi" && gitnow_if_depth > 0 {
+				gitnow_if_depth -= 1
+			}
+		}
+
+		if in_done_any_fn && trimmed == "}" && (done_any_loop_depth > 0 || done_any_if_depth > 0) {
+			for done_any_loop_depth > 0 {
+				strings.write_string(&builder, "done\n")
+				done_any_loop_depth -= 1
+			}
+			for done_any_if_depth > 0 {
+				strings.write_string(&builder, "fi\n")
+				done_any_if_depth -= 1
+			}
+			changed = true
+		}
+		if in_gitnow_fn && trimmed == "}" && gitnow_if_depth > 0 {
+			for gitnow_if_depth > 0 {
+				strings.write_string(&builder, "fi\n")
+				gitnow_if_depth -= 1
+			}
+			changed = true
+			in_gitnow_fn = false
+		}
+
+		strings.write_string(&builder, out_line)
+		if i+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+
+		if in_done_any_fn && trimmed == "}" {
+			in_done_any_fn = false
+			done_any_if_depth = 0
+			done_any_loop_depth = 0
+		}
+		if in_gitnow_fn && trimmed == "}" {
+			in_gitnow_fn = false
+			gitnow_if_depth = 0
+		}
+		if in_replay_fn && trimmed == "}" {
+			in_replay_fn = false
+		}
+	}
+
+	out := strings.clone(strings.to_string(builder), allocator)
+	if in_replay_fn {
+		appended := strings.concatenate([]string{out, "\n}"}, allocator)
+		delete(out)
+		out = appended
+		changed = true
+	} else if is_replay {
+		trimmed_out := strings.trim_right_space(out)
+		if strings.contains(out, "replay() {") && strings.has_suffix(trimmed_out, ":") {
+			appended := strings.concatenate([]string{trimmed_out, "\n}"}, allocator)
+			delete(out)
+			out = appended
+			changed = true
+		}
+	}
+
+	return out, changed
 }
 
 rewrite_zsh_ysu_fish_parser_blockers :: proc(text: string, allocator := context.allocator) -> (string, bool) {

@@ -13,7 +13,7 @@ Cross-dialect runs executed: 159
 | bash->zsh | 18 | 18/18 | 18/18 | 9/18 | 0 | 12/12 | 6/6 | 0 | 0 | 2.627 | 4.220 | 10 |
 | fish->bash | 14 | 14/14 | 14/14 | 13/14 | 0 | 13/13 | 1/1 | 1 | 0 | 1.397 | 7.866 | 14 |
 | fish->posix | 14 | 14/14 | 14/14 | 13/14 | 0 | 13/13 | 1/1 | 1 | 0 | 1.741 | 9.467 | 14 |
-| fish->zsh | 14 | 14/14 | 14/14 | 6/14 | 0 | 13/13 | 1/1 | 1 | 0 | 1.444 | 7.777 | 14 |
+| fish->zsh | 14 | 14/14 | 14/14 | 10/14 | 0 | 13/13 | 1/1 | 1 | 0 | 1.443 | 7.205 | 14 |
 | zsh->bash | 21 | 21/21 | 21/21 | 21/21 | 0 | 16/16 | 5/5 | 3 | 0 | 2.104 | 5.759 | 13 |
 | zsh->fish | 21 | 21/21 | 21/21 | 21/21 | 0 | 16/16 | 5/5 | 3 | 0 | 9.067 | 9.494 | 21 |
 | zsh->posix | 21 | 21/21 | 21/21 | 21/21 | 0 | 16/16 | 5/5 | 3 | 0 | 3.020 | 12.083 | 17 |
@@ -30,18 +30,10 @@ Cross-dialect runs executed: 159
  parser_artifact=tests/corpus/.parser_check_bashit-general_76.zsh path=tests/corpus/repos/bash/bash-it/aliases/available/general.aliases.bash
 - [FAIL] bashit-proxy (plugin) bash->zsh translate=true parse=true parser=false/true exit=1 err=None warnings=0(parse=0 compat=0) shims=1 src_fn=21 out_fn=33 msg= parser_msg=tests/corpus/.parser_check_bashit-proxy_79.zsh:315: parse error near `__shellx_fn_invalid'
  parser_artifact=tests/corpus/.parser_check_bashit-proxy_79.zsh path=tests/corpus/repos/bash/bash-it/plugins/available/proxy.plugin.bash
-- [FAIL] fish-fzf (plugin) fish->zsh translate=true parse=true parser=false/true exit=1 err=None warnings=0(parse=0 compat=0) shims=1 src_fn=1 out_fn=7 msg= parser_msg=tests/corpus/.parser_check_fish-fzf_89.zsh:81: parse error near `:'
- parser_artifact=tests/corpus/.parser_check_fish-fzf_89.zsh path=tests/corpus/repos/fish/fzf.fish/conf.d/fzf.fish
-- [FAIL] fish-done (plugin) fish->zsh translate=true parse=true parser=false/true exit=1 err=None warnings=0(parse=0 compat=0) shims=5 src_fn=8 out_fn=29 msg= parser_msg=tests/corpus/.parser_check_fish-done_95.zsh:286: parse error near `}'
- parser_artifact=tests/corpus/.parser_check_fish-done_95.zsh path=tests/corpus/repos/fish/done/conf.d/done.fish
 - [FAIL] fish-replay (plugin) fish->bash translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=2 src_fn=1 out_fn=16 msg= parser_msg=tests/corpus/.parser_check_fish-replay_97.bash: line 149: syntax error: unexpected end of file from `{' command on line 144
  parser_artifact=tests/corpus/.parser_check_fish-replay_97.bash path=tests/corpus/repos/fish/replay.fish/functions/replay.fish
-- [FAIL] fish-replay (plugin) fish->zsh translate=true parse=true parser=false/true exit=1 err=None warnings=0(parse=0 compat=0) shims=2 src_fn=1 out_fn=16 msg= parser_msg=tests/corpus/.parser_check_fish-replay_98.zsh:137: parse error near `:'
- parser_artifact=tests/corpus/.parser_check_fish-replay_98.zsh path=tests/corpus/repos/fish/replay.fish/functions/replay.fish
 - [FAIL] fish-replay (plugin) fish->posix translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=2 src_fn=1 out_fn=23 msg= parser_msg=tests/corpus/.parser_check_fish-replay_99.sh: line 272: syntax error: unexpected end of file from `{' command on line 267
  parser_artifact=tests/corpus/.parser_check_fish-replay_99.sh path=tests/corpus/repos/fish/replay.fish/functions/replay.fish
-- [FAIL] fish-gitnow (plugin) fish->zsh translate=true parse=true parser=false/true exit=1 err=None warnings=0(parse=0 compat=0) shims=3 src_fn=25 out_fn=54 msg= parser_msg=tests/corpus/.parser_check_fish-gitnow_110.zsh:377: parse error near `}'
- parser_artifact=tests/corpus/.parser_check_fish-gitnow_110.zsh path=tests/corpus/repos/fish/gitnow/conf.d/gitnow.fish
 - [FAIL] fish-fisher (plugin) fish->zsh translate=true parse=true parser=false/true exit=1 err=None warnings=0(parse=0 compat=0) shims=2 src_fn=1 out_fn=17 msg= parser_msg=tests/corpus/.parser_check_fish-fisher_113.zsh:141: parse error near `:'
  parser_artifact=tests/corpus/.parser_check_fish-fisher_113.zsh path=tests/corpus/repos/fish/fisher/functions/fisher.fish
 - [FAIL] fish-async-prompt (plugin) fish->zsh translate=true parse=true parser=false/true exit=1 err=None warnings=0(parse=0 compat=0) shims=5 src_fn=11 out_fn=34 msg= parser_msg=tests/corpus/.parser_check_fish-async-prompt_116.zsh:215: parse error near `__async_prompt_setup...'
@@ -71,18 +63,10 @@ Cross-dialect runs executed: 159
  parser_artifact=tests/corpus/.parser_check_bashit-general_76.zsh path=tests/corpus/repos/bash/bash-it/aliases/available/general.aliases.bash
 - [PARSER-FAIL] bashit-proxy (plugin) bash->zsh command=`zsh -n tests/corpus/.parser_check_bashit-proxy_79.zsh` exit=1 message=tests/corpus/.parser_check_bashit-proxy_79.zsh:315: parse error near `__shellx_fn_invalid'
  parser_artifact=tests/corpus/.parser_check_bashit-proxy_79.zsh path=tests/corpus/repos/bash/bash-it/plugins/available/proxy.plugin.bash
-- [PARSER-FAIL] fish-fzf (plugin) fish->zsh command=`zsh -n tests/corpus/.parser_check_fish-fzf_89.zsh` exit=1 message=tests/corpus/.parser_check_fish-fzf_89.zsh:81: parse error near `:'
- parser_artifact=tests/corpus/.parser_check_fish-fzf_89.zsh path=tests/corpus/repos/fish/fzf.fish/conf.d/fzf.fish
-- [PARSER-FAIL] fish-done (plugin) fish->zsh command=`zsh -n tests/corpus/.parser_check_fish-done_95.zsh` exit=1 message=tests/corpus/.parser_check_fish-done_95.zsh:286: parse error near `}'
- parser_artifact=tests/corpus/.parser_check_fish-done_95.zsh path=tests/corpus/repos/fish/done/conf.d/done.fish
 - [PARSER-FAIL] fish-replay (plugin) fish->bash command=`bash -n tests/corpus/.parser_check_fish-replay_97.bash` exit=2 message=tests/corpus/.parser_check_fish-replay_97.bash: line 149: syntax error: unexpected end of file from `{' command on line 144
  parser_artifact=tests/corpus/.parser_check_fish-replay_97.bash path=tests/corpus/repos/fish/replay.fish/functions/replay.fish
-- [PARSER-FAIL] fish-replay (plugin) fish->zsh command=`zsh -n tests/corpus/.parser_check_fish-replay_98.zsh` exit=1 message=tests/corpus/.parser_check_fish-replay_98.zsh:137: parse error near `:'
- parser_artifact=tests/corpus/.parser_check_fish-replay_98.zsh path=tests/corpus/repos/fish/replay.fish/functions/replay.fish
 - [PARSER-FAIL] fish-replay (plugin) fish->posix command=`bash -n tests/corpus/.parser_check_fish-replay_99.sh` exit=2 message=tests/corpus/.parser_check_fish-replay_99.sh: line 272: syntax error: unexpected end of file from `{' command on line 267
  parser_artifact=tests/corpus/.parser_check_fish-replay_99.sh path=tests/corpus/repos/fish/replay.fish/functions/replay.fish
-- [PARSER-FAIL] fish-gitnow (plugin) fish->zsh command=`zsh -n tests/corpus/.parser_check_fish-gitnow_110.zsh` exit=1 message=tests/corpus/.parser_check_fish-gitnow_110.zsh:377: parse error near `}'
- parser_artifact=tests/corpus/.parser_check_fish-gitnow_110.zsh path=tests/corpus/repos/fish/gitnow/conf.d/gitnow.fish
 - [PARSER-FAIL] fish-fisher (plugin) fish->zsh command=`zsh -n tests/corpus/.parser_check_fish-fisher_113.zsh` exit=1 message=tests/corpus/.parser_check_fish-fisher_113.zsh:141: parse error near `:'
  parser_artifact=tests/corpus/.parser_check_fish-fisher_113.zsh path=tests/corpus/repos/fish/fisher/functions/fisher.fish
 - [PARSER-FAIL] fish-async-prompt (plugin) fish->zsh command=`zsh -n tests/corpus/.parser_check_fish-async-prompt_116.zsh` exit=1 message=tests/corpus/.parser_check_fish-async-prompt_116.zsh:215: parse error near `__async_prompt_setup...'
@@ -160,54 +144,3 @@ Cross-dialect runs executed: 159
 ## Validator Rule Failures
 
 - No validator rule failures.
-
-## Semantic Differential Checks
-
-Cases: 29, Passed: 26, Skipped: 0
-
-### Semantic Pair Summary
-
-| Pair | Cases | Passed | Failed | Skipped |
-|---|---:|---:|---:|---:|
-| fish->bash | 4 | 4 | 0 | 0 |
-| fish->posix | 1 | 0 | 1 | 0 |
-| fish->zsh | 1 | 0 | 1 | 0 |
-| zsh->fish | 4 | 4 | 0 | 0 |
-| zsh->bash | 7 | 6 | 1 | 0 |
-| zsh->posix | 4 | 4 | 0 | 0 |
-| bash->fish | 3 | 3 | 0 | 0 |
-| bash->zsh | 1 | 1 | 0 | 0 |
-| posix->fish | 1 | 1 | 0 | 0 |
-| posix->zsh | 1 | 1 | 0 | 0 |
-| posix->bash | 1 | 1 | 0 | 0 |
-| bash->posix | 1 | 1 | 0 | 0 |
-
-- [PASS] fish_gitnow_branch_compare fish->bash exit=0 out="SAME"
-- [PASS] fish_list_index_bash fish->bash exit=0 out="two"
-- [FAIL] fish_list_index_posix fish->posix src_exit=0 dst_exit=0 src_out="green" dst_out="" src_err="" dst_err=""
-- [FAIL] fish_string_match_zsh fish->zsh src_exit=0 dst_exit=1 src_out="ok" dst_out="" src_err="" dst_err="tests/corpus/.semantic_fish_string_match_zsh_dst.zsh:69: parse error near `:'"
-- [PASS] fish_string_match_bash fish->bash exit=0 out="hit"
-- [PASS] zsh_git_cmdsub_if_compare zsh->fish exit=0 out="ok"
-- [PASS] zsh_param_default_callsite zsh->fish exit=0 out="/tmp/cache"
-- [PASS] zsh_repo_root_cmdsub zsh->fish exit=0 out="/tmp/repo"
-- [PASS] zsh_param_default_bash zsh->bash exit=0 out="fallback"
-- [PASS] zsh_assoc_array_bash zsh->bash exit=0 out="bar"
-- [PASS] zsh_case_posix zsh->posix exit=0 out="yes"
-- [PASS] zsh_positional_fish zsh->fish exit=0 out="a-b"
-- [PASS] bash_array_fish bash->fish exit=0 out="two"
-- [PASS] bash_cond_fish bash->fish exit=0 out="ok"
-- [PASS] bash_param_default_fish bash->fish exit=0 out="fallback"
-- [PASS] bash_function_zsh bash->zsh exit=0 out="done"
-- [PASS] posix_if_fish posix->fish exit=0 out="one"
-- [PASS] posix_default_zsh posix->zsh exit=0 out="alt"
-- [PASS] posix_case_bash posix->bash exit=0 out="match"
-- [FAIL] plugin_ohmyzsh_z_zsh_to_bash zsh->bash src_exit=0 dst_exit=0 src_out="HAVE_z" dst_out="" src_err="" dst_err="tests/corpus/.semantic_module_plugin_ohmyzsh_z_zsh_to_bash_dst.bash: line 1065: zparseopts: command not found\ntests/corpus/.semantic_module_plugin_ohmyzsh_z_zsh_to_bash_dst.bash: line 966: setopt: command not found\nte..."
-- [PASS] plugin_bashit_aliases_bash_to_posix bash->posix exit=0 out="HAVE_ALIAS_COMPLETION_CB"
-- [PASS] plugin_fish_autopair_fish_to_bash fish->bash exit=0 out=""
-- [PASS] plugin_ohmyzsh_z_arrays_cond_param_zsh_to_bash zsh->bash exit=0 out="ARR_OK\nCOND_OK\nPARAM_OK"
-- [PASS] plugin_ohmyzsh_sudo_condition_zsh_to_posix zsh->posix exit=0 out="COND_OK\nHAVE_SUDO_FN"
-- [PASS] plugin_ohmyzsh_extract_condition_zsh_to_bash zsh->bash exit=0 out="COND_OK\nHAVE_EXTRACT"
-- [PASS] plugin_ohmyzsh_colored_man_param_zsh_to_posix zsh->posix exit=0 out="PARAM_OK\nCOLOR_OK"
-- [PASS] plugin_ohmyzsh_copyfile_cond_param_zsh_to_bash zsh->bash exit=0 out="PARAM_OK\nCOND_OK\nHAVE_COPYFILE"
-- [PASS] plugin_ysu_hooks_events_zsh_to_bash zsh->bash exit=0 out="HOOKS_OK"
-- [PASS] plugin_zsh_nvm_param_zsh_to_posix zsh->posix exit=0 out="PARAM_OK\nHAVE_NVM_LOAD"
