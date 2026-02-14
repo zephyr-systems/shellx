@@ -13,7 +13,7 @@ Cross-dialect runs executed: 159
 | bash->zsh | 18 | 18/18 | 18/18 | 9/18 | 0 | 12/12 | 6/6 | 0 | 0 | 2.627 | 4.220 | 10 |
 | fish->bash | 14 | 14/14 | 14/14 | 13/14 | 0 | 13/13 | 1/1 | 1 | 0 | 1.397 | 7.866 | 14 |
 | fish->posix | 14 | 14/14 | 14/14 | 13/14 | 0 | 13/13 | 1/1 | 1 | 0 | 1.741 | 9.467 | 14 |
-| fish->zsh | 14 | 14/14 | 14/14 | 10/14 | 0 | 13/13 | 1/1 | 1 | 0 | 1.443 | 7.205 | 14 |
+| fish->zsh | 14 | 14/14 | 14/14 | 14/14 | 0 | 13/13 | 1/1 | 1 | 0 | 1.444 | 7.205 | 14 |
 | zsh->bash | 21 | 21/21 | 21/21 | 21/21 | 0 | 16/16 | 5/5 | 3 | 0 | 2.104 | 5.759 | 13 |
 | zsh->fish | 21 | 21/21 | 21/21 | 21/21 | 0 | 16/16 | 5/5 | 3 | 0 | 9.067 | 9.494 | 21 |
 | zsh->posix | 21 | 21/21 | 21/21 | 21/21 | 0 | 16/16 | 5/5 | 3 | 0 | 3.020 | 12.083 | 17 |
@@ -34,14 +34,6 @@ Cross-dialect runs executed: 159
  parser_artifact=tests/corpus/.parser_check_fish-replay_97.bash path=tests/corpus/repos/fish/replay.fish/functions/replay.fish
 - [FAIL] fish-replay (plugin) fish->posix translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=2 src_fn=1 out_fn=23 msg= parser_msg=tests/corpus/.parser_check_fish-replay_99.sh: line 272: syntax error: unexpected end of file from `{' command on line 267
  parser_artifact=tests/corpus/.parser_check_fish-replay_99.sh path=tests/corpus/repos/fish/replay.fish/functions/replay.fish
-- [FAIL] fish-fisher (plugin) fish->zsh translate=true parse=true parser=false/true exit=1 err=None warnings=0(parse=0 compat=0) shims=2 src_fn=1 out_fn=17 msg= parser_msg=tests/corpus/.parser_check_fish-fisher_113.zsh:141: parse error near `:'
- parser_artifact=tests/corpus/.parser_check_fish-fisher_113.zsh path=tests/corpus/repos/fish/fisher/functions/fisher.fish
-- [FAIL] fish-async-prompt (plugin) fish->zsh translate=true parse=true parser=false/true exit=1 err=None warnings=0(parse=0 compat=0) shims=5 src_fn=11 out_fn=34 msg= parser_msg=tests/corpus/.parser_check_fish-async-prompt_116.zsh:215: parse error near `__async_prompt_setup...'
- parser_artifact=tests/corpus/.parser_check_fish-async-prompt_116.zsh path=tests/corpus/repos/fish/fish-async-prompt/conf.d/__async_prompt.fish
-- [FAIL] fish-ssh-agent (plugin) fish->zsh translate=true parse=true parser=false/true exit=1 err=None warnings=0(parse=0 compat=0) shims=2 src_fn=2 out_fn=18 msg= parser_msg=tests/corpus/.parser_check_fish-ssh-agent_119.zsh:145: parse error near `}'
- parser_artifact=tests/corpus/.parser_check_fish-ssh-agent_119.zsh path=tests/corpus/repos/fish/fish-ssh-agent/conf.d/halostatue_fish_ssh_agent.fish
-- [FAIL] fish-completion-sync (plugin) fish->zsh translate=true parse=true parser=false/true exit=1 err=None warnings=1(parse=1 compat=0) shims=2 src_fn=3 out_fn=19 msg= parser_msg=tests/corpus/.parser_check_fish-completion-sync_122.zsh:141: parse error near `}'
- parser_artifact=tests/corpus/.parser_check_fish-completion-sync_122.zsh path=tests/corpus/repos/fish/fish-completion-sync/init.fish
 - [FAIL] bashit-bobby-theme (theme) bash->zsh translate=true parse=true parser=false/true exit=1 err=None warnings=0(parse=0 compat=0) shims=0 src_fn=2 out_fn=2 msg= parser_msg=tests/corpus/.parser_check_bashit-bobby-theme_139.zsh:7: parse error near `function'
  parser_artifact=tests/corpus/.parser_check_bashit-bobby-theme_139.zsh path=tests/corpus/repos/bash/bash-it/themes/bobby/bobby.theme.bash
 - [FAIL] bashit-atomic-theme (theme) bash->zsh translate=true parse=true parser=false/true exit=1 err=None warnings=0(parse=0 compat=0) shims=0 src_fn=22 out_fn=22 msg= parser_msg=tests/corpus/.parser_check_bashit-atomic-theme_142.zsh:186: parse error near `}'
@@ -67,14 +59,6 @@ Cross-dialect runs executed: 159
  parser_artifact=tests/corpus/.parser_check_fish-replay_97.bash path=tests/corpus/repos/fish/replay.fish/functions/replay.fish
 - [PARSER-FAIL] fish-replay (plugin) fish->posix command=`bash -n tests/corpus/.parser_check_fish-replay_99.sh` exit=2 message=tests/corpus/.parser_check_fish-replay_99.sh: line 272: syntax error: unexpected end of file from `{' command on line 267
  parser_artifact=tests/corpus/.parser_check_fish-replay_99.sh path=tests/corpus/repos/fish/replay.fish/functions/replay.fish
-- [PARSER-FAIL] fish-fisher (plugin) fish->zsh command=`zsh -n tests/corpus/.parser_check_fish-fisher_113.zsh` exit=1 message=tests/corpus/.parser_check_fish-fisher_113.zsh:141: parse error near `:'
- parser_artifact=tests/corpus/.parser_check_fish-fisher_113.zsh path=tests/corpus/repos/fish/fisher/functions/fisher.fish
-- [PARSER-FAIL] fish-async-prompt (plugin) fish->zsh command=`zsh -n tests/corpus/.parser_check_fish-async-prompt_116.zsh` exit=1 message=tests/corpus/.parser_check_fish-async-prompt_116.zsh:215: parse error near `__async_prompt_setup...'
- parser_artifact=tests/corpus/.parser_check_fish-async-prompt_116.zsh path=tests/corpus/repos/fish/fish-async-prompt/conf.d/__async_prompt.fish
-- [PARSER-FAIL] fish-ssh-agent (plugin) fish->zsh command=`zsh -n tests/corpus/.parser_check_fish-ssh-agent_119.zsh` exit=1 message=tests/corpus/.parser_check_fish-ssh-agent_119.zsh:145: parse error near `}'
- parser_artifact=tests/corpus/.parser_check_fish-ssh-agent_119.zsh path=tests/corpus/repos/fish/fish-ssh-agent/conf.d/halostatue_fish_ssh_agent.fish
-- [PARSER-FAIL] fish-completion-sync (plugin) fish->zsh command=`zsh -n tests/corpus/.parser_check_fish-completion-sync_122.zsh` exit=1 message=tests/corpus/.parser_check_fish-completion-sync_122.zsh:141: parse error near `}'
- parser_artifact=tests/corpus/.parser_check_fish-completion-sync_122.zsh path=tests/corpus/repos/fish/fish-completion-sync/init.fish
 - [PARSER-FAIL] bashit-bobby-theme (theme) bash->zsh command=`zsh -n tests/corpus/.parser_check_bashit-bobby-theme_139.zsh` exit=1 message=tests/corpus/.parser_check_bashit-bobby-theme_139.zsh:7: parse error near `function'
  parser_artifact=tests/corpus/.parser_check_bashit-bobby-theme_139.zsh path=tests/corpus/repos/bash/bash-it/themes/bobby/bobby.theme.bash
 - [PARSER-FAIL] bashit-atomic-theme (theme) bash->zsh command=`zsh -n tests/corpus/.parser_check_bashit-atomic-theme_142.zsh` exit=1 message=tests/corpus/.parser_check_bashit-atomic-theme_142.zsh:186: parse error near `}'

@@ -4891,6 +4891,11 @@ __shellx_zsh_expand() {
 		out = rewritten
 		changed_any = changed_any || changed
 
+		rewritten, changed = rewrite_fish_to_zsh_targeted_function_closure_repair(out, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
+
 		trimmed_replay := strings.trim_right_space(out)
 		if strings.contains(trimmed_replay, "replay() {") && strings.has_suffix(trimmed_replay, "\n:") {
 			appended_replay := strings.concatenate([]string{trimmed_replay, "\n}"}, allocator)
@@ -5087,6 +5092,84 @@ rewrite_fish_to_zsh_parser_blocker_signatures :: proc(text: string, allocator :=
 	}
 
 	return out, changed
+}
+
+rewrite_fish_to_zsh_targeted_function_closure_repair :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	is_target :=
+		strings.contains(text, "fisher() {") ||
+		strings.contains(text, "__async_prompt_setup_on_startup() {") ||
+		strings.contains(text, "__saplugin__start_agent() {") ||
+		strings.contains(text, "fish_completion_sync_filter() {")
+	if !is_target {
+		return strings.clone(text, allocator), false
+	}
+
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	in_fn := false
+	fn_if_depth := 0
+	fn_loop_depth := 0
+	for line, i in lines {
+		trimmed := strings.trim_space(line)
+		out_line := line
+
+		if strings.has_suffix(trimmed, "() {") {
+			in_fn = true
+			fn_if_depth = 0
+			fn_loop_depth = 0
+		}
+
+		if in_fn && strings.has_prefix(trimmed, "if ") && strings.contains(trimmed, "; then") {
+			fn_if_depth += 1
+		}
+		if in_fn && (strings.has_prefix(trimmed, "for ") || strings.has_prefix(trimmed, "while ")) && strings.contains(trimmed, "; do") {
+			fn_loop_depth += 1
+		}
+		if in_fn && trimmed == "fi" && fn_if_depth > 0 {
+			fn_if_depth -= 1
+		}
+		if in_fn && trimmed == "done" && fn_loop_depth > 0 {
+			fn_loop_depth -= 1
+		}
+
+		if in_fn && trimmed == "}" {
+			for fn_loop_depth > 0 {
+				strings.write_string(&builder, "done\n")
+				fn_loop_depth -= 1
+				changed = true
+			}
+			for fn_if_depth > 0 {
+				strings.write_string(&builder, "fi\n")
+				fn_if_depth -= 1
+				changed = true
+			}
+		}
+
+		if strings.has_prefix(trimmed, "if set --universal _fisher_upgraded_to_4_4; then :") {
+			out_line = ":"
+			changed = true
+		}
+
+		strings.write_string(&builder, out_line)
+		if i+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+
+		if in_fn && trimmed == "}" {
+			in_fn = false
+			fn_if_depth = 0
+			fn_loop_depth = 0
+		}
+	}
+
+	return strings.clone(strings.to_string(builder), allocator), changed
 }
 
 rewrite_zsh_ysu_fish_parser_blockers :: proc(text: string, allocator := context.allocator) -> (string, bool) {
