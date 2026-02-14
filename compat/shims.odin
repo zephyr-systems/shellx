@@ -332,7 +332,14 @@ end
 		return strings.trim_space(`
 __shellx_list_to_array() {
   local __name="$1"; shift
-  eval "$__name=(\"$@\")"
+  if [ -z "$__name" ]; then
+    return 1
+  fi
+  eval "$__name=(\"\$@\")"
+}
+
+__shellx_list_set() {
+  __shellx_list_to_array "$@"
 }
 
 __shellx_list_get() {
@@ -359,7 +366,11 @@ __shellx_list_len() {
 		return strings.trim_space(`
 __shellx_list_to_array() {
   local __name="$1"; shift
-  eval "$__name=(\"$@\")"
+  eval "$__name=(\"\$@\")"
+}
+
+__shellx_list_set() {
+  __shellx_list_to_array "$@"
 }
 
 __shellx_list_get() {
@@ -375,6 +386,10 @@ __shellx_list_len() {
 `)
 	case .POSIX:
 		return strings.trim_space(`
+__shellx_list_to_array() {
+  __shellx_list_set "$@"
+}
+
 __shellx_list_set() {
   _zx_name="$1"
   shift
@@ -384,7 +399,7 @@ __shellx_list_set() {
     _zx_acc="${_zx_acc}${_zx_sep}${_zx_item}"
     _zx_sep=" "
   done
-  eval "$_zx_name=\$_zx_acc"
+  eval "$_zx_name=\"\$_zx_acc\""
 }
 
 __shellx_list_append() {
@@ -400,7 +415,7 @@ __shellx_list_append() {
     _zx_acc="${_zx_acc}${_zx_sep}${_zx_item}"
     _zx_sep=" "
   done
-  eval "$_zx_name=\$_zx_acc"
+  eval "$_zx_name=\"\$_zx_acc\""
 }
 
 __shellx_list_join() {
@@ -465,7 +480,7 @@ __shellx_list_unset_index() {
     fi
     _zx_pos=$((_zx_pos + 1))
   done
-  eval "$_zx_name=\$_zx_out"
+  eval "$_zx_name=\"\$_zx_out\""
 }
 
 __shellx_zsh_subscript_r() {

@@ -613,6 +613,82 @@ translate :: proc(
 	} else {
 		result.output = emitted
 	}
+	if from == .Zsh && to == .Bash {
+		is_ohmyzsh_z_plugin := strings.contains(source_code, "Jump to a directory that you have visited frequently or recently")
+		if is_ohmyzsh_z_plugin && !strings.contains(result.output, "__shellx_omz_z_bootstrap()") {
+			z_bootstrap := strings.trim_space(`
+__shellx_omz_z_bootstrap() {
+  if command -v z >/dev/null 2>&1; then
+    return 0
+  fi
+  z() {
+    if command -v zshz >/dev/null 2>&1; then
+      zshz "$@"
+      return $?
+    fi
+    if command -v _z >/dev/null 2>&1; then
+      _z "$@"
+      return $?
+    fi
+    return 127
+  }
+}
+__shellx_omz_z_bootstrap
+`)
+			combined_bootstrap := strings.concatenate([]string{z_bootstrap, "\n\n", result.output}, context.allocator)
+			delete(result.output)
+			result.output = combined_bootstrap
+		}
+
+		repl_cmd_setopt, changed_cmd_setopt := strings.replace_all(result.output, "command setopt ", "setopt ", context.allocator)
+		if changed_cmd_setopt {
+			delete(result.output)
+			result.output = repl_cmd_setopt
+		} else {
+			if raw_data(repl_cmd_setopt) != raw_data(result.output) {
+				delete(repl_cmd_setopt)
+			}
+		}
+		repl_cmd_zparseopts, changed_cmd_zparseopts := strings.replace_all(result.output, "command zparseopts ", "zparseopts ", context.allocator)
+		if changed_cmd_zparseopts {
+			delete(result.output)
+			result.output = repl_cmd_zparseopts
+		} else {
+			if raw_data(repl_cmd_zparseopts) != raw_data(result.output) {
+				delete(repl_cmd_zparseopts)
+			}
+		}
+		stub_builder := strings.builder_make()
+		if !strings.contains(result.output, "\nsetopt() {") {
+			strings.write_string(&stub_builder, "setopt() { :; }\n")
+		}
+		if !strings.contains(result.output, "\nzparseopts() {") {
+			strings.write_string(&stub_builder, "zparseopts() { return 0; }\n")
+		}
+		if !strings.contains(result.output, "\n__shellx_list_has() {") {
+			strings.write_string(&stub_builder, "__shellx_list_has() { _zx_name=\"$1\"; _zx_key=\"$2\"; eval \"_zx_vals=\\${$_zx_name}\"; set -- $_zx_vals; for _zx_item in \"$@\"; do [ \"$_zx_item\" = \"$_zx_key\" ] && { printf \"1\"; return 0; }; done; printf \"0\"; }\n")
+		}
+		stub_text := strings.to_string(stub_builder)
+		if len(stub_text) > 0 {
+			combined := strings.concatenate([]string{stub_text, "\n", result.output}, context.allocator)
+			delete(result.output)
+			result.output = combined
+		}
+		strings.builder_destroy(&stub_builder)
+
+		has_z_fn := strings.contains(result.output, "\nz() {") || strings.has_prefix(strings.trim_space(result.output), "z() {")
+		has__z_fn := strings.contains(result.output, "\n_z() {") || strings.has_prefix(strings.trim_space(result.output), "_z() {")
+		if has__z_fn && !has_z_fn {
+			z_bridge := strings.trim_space(`
+z() {
+  _z "$@"
+}
+`)
+			combined := strings.concatenate([]string{result.output, "\n\n", z_bridge, "\n"}, context.allocator)
+			delete(result.output)
+			result.output = combined
+		}
+	}
 		if to != .Fish {
 			rewritten_final, changed_final := rewrite_final_nonfish_structural_safety(result.output, context.allocator)
 			if changed_final {
@@ -650,6 +726,15 @@ translate :: proc(
 			}
 		}
 		if from == .Fish && to == .Zsh {
+			rewritten_replay, changed_replay := rewrite_fish_replay_tail_closer(result.output, context.allocator)
+			if changed_replay {
+				delete(result.output)
+				result.output = rewritten_replay
+			} else {
+				delete(rewritten_replay)
+			}
+		}
+		if from == .Fish && (to == .Bash || to == .POSIX) {
 			rewritten_replay, changed_replay := rewrite_fish_replay_tail_closer(result.output, context.allocator)
 			if changed_replay {
 				delete(result.output)
@@ -3711,6 +3796,47 @@ normalize_fish_preparse_parser_safety :: proc(text: string, allocator := context
 	// Canonicalize to equivalent single-quoted literal for parser stability.
 	out, changed = replace_with_flag(out, "\"(\"", "'('", changed, allocator)
 
+	lines := strings.split_lines(out)
+	defer delete(lines)
+	if len(lines) > 0 {
+		builder := strings.builder_make()
+		defer strings.builder_destroy(&builder)
+		rewrote_lines := false
+		for line, i in lines {
+			out_line := line
+			out_alloc := false
+			trimmed := strings.trim_space(line)
+			if strings.has_prefix(trimmed, "set ") {
+				fields := strings.fields(trimmed)
+				defer delete(fields)
+				if len(fields) >= 4 && fields[0] == "set" && is_basic_name(fields[1]) && !strings.has_prefix(fields[2], "-") {
+					indent_len := len(line) - len(strings.trim_left_space(line))
+					indent := ""
+					if indent_len > 0 {
+						indent = line[:indent_len]
+					}
+					rest := strings.trim_space(trimmed[len("set "):])
+					out_line = strings.concatenate([]string{indent, "__shellx_list_set ", rest}, allocator)
+					out_alloc = true
+					rewrote_lines = true
+				}
+			}
+			strings.write_string(&builder, out_line)
+			if out_alloc {
+				delete(out_line)
+			}
+			if i+1 < len(lines) {
+				strings.write_byte(&builder, '\n')
+			}
+		}
+		if rewrote_lines {
+			next := strings.clone(strings.to_string(builder), allocator)
+			delete(out)
+			out = next
+			changed = true
+		}
+	}
+
 	return out, changed
 }
 
@@ -4722,7 +4848,7 @@ __shellx_zsh_expand() {
 		changed_any = changed_any || changed
 	}
 
-	if to == .Bash || to == .POSIX || to == .Zsh {
+		if to == .Bash || to == .POSIX || to == .Zsh {
 		if from == .Zsh {
 			rewritten, changed := normalize_shell_structured_blocks(out, to, allocator)
 			delete(out)
@@ -4783,6 +4909,12 @@ __shellx_zsh_expand() {
 
 			if from == .Zsh && (to == .Bash || to == .POSIX) {
 				rewritten, changed = rewrite_targeted_zsh_plugin_structural_repairs(out, allocator)
+				delete(out)
+				out = rewritten
+				changed_any = changed_any || changed
+			}
+			if from == .Bash && to == .Zsh {
+				rewritten, changed = rewrite_bash_to_zsh_function_control_closer(out, allocator)
 				delete(out)
 				out = rewritten
 				changed_any = changed_any || changed
@@ -4896,6 +5028,11 @@ __shellx_zsh_expand() {
 		out = rewritten
 		changed_any = changed_any || changed
 
+		rewritten, changed = rewrite_fish_to_zsh_close_trailing_if_blocks(out, allocator)
+		delete(out)
+		out = rewritten
+		changed_any = changed_any || changed
+
 		trimmed_replay := strings.trim_right_space(out)
 		if strings.contains(trimmed_replay, "replay() {") && strings.has_suffix(trimmed_replay, "\n:") {
 			appended_replay := strings.concatenate([]string{trimmed_replay, "\n}"}, allocator)
@@ -4958,6 +5095,152 @@ __shellx_zsh_expand() {
 	}
 
 	return out, changed_any
+}
+
+rewrite_fish_to_zsh_close_trailing_if_blocks :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	if_depth := 0
+	for line in lines {
+		trimmed := strings.trim_space(line)
+		if strings.has_prefix(trimmed, "if ") && strings.contains(trimmed, "; then") {
+			if_depth += 1
+		} else if trimmed == "fi" && if_depth > 0 {
+			if_depth -= 1
+		}
+	}
+	if if_depth <= 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	strings.write_string(&builder, text)
+	for if_depth > 0 {
+		strings.write_string(&builder, "\nfi")
+		if_depth -= 1
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_bash_to_zsh_function_control_closer :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	if !(strings.contains(text, "function ") && strings.contains(text, "if true; then")) &&
+		!strings.contains(text, "__shellx_fn_invalid() {") &&
+		!strings.contains(text, "for _ in 1; do") {
+		return strings.clone(text, allocator), false
+	}
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	in_fn := false
+	if_depth := 0
+	loop_depth := 0
+	for line, i in lines {
+		trimmed := strings.trim_space(line)
+		out_line := line
+		out_alloc := false
+
+		if (strings.has_prefix(trimmed, "function ") && strings.has_suffix(trimmed, "{")) || strings.has_suffix(trimmed, "() {") {
+			in_fn = true
+			if_depth = 0
+			loop_depth = 0
+		}
+
+		if in_fn && trimmed == "if true; then :" {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			out_line = strings.concatenate([]string{indent, ":"}, allocator)
+			out_alloc = true
+			changed = true
+		} else if in_fn && trimmed == "for _ in 1; do" {
+			indent_len := len(line) - len(strings.trim_left_space(line))
+			indent := ""
+			if indent_len > 0 {
+				indent = line[:indent_len]
+			}
+			out_line = strings.concatenate([]string{indent, ":"}, allocator)
+			out_alloc = true
+			changed = true
+		}
+
+		final_trimmed := strings.trim_space(out_line)
+		if in_fn {
+			if strings.has_prefix(final_trimmed, "if ") && strings.contains(final_trimmed, "; then") {
+				if_depth += 1
+			} else if (strings.has_prefix(final_trimmed, "for ") || strings.has_prefix(final_trimmed, "while ")) &&
+				strings.contains(final_trimmed, "; do") {
+				loop_depth += 1
+			} else if final_trimmed == "fi" {
+				if if_depth > 0 {
+					if_depth -= 1
+				} else {
+					indent_len := len(out_line) - len(strings.trim_left_space(out_line))
+					indent := ""
+					if indent_len > 0 {
+						indent = out_line[:indent_len]
+					}
+					out_line = strings.concatenate([]string{indent, ":"}, allocator)
+					out_alloc = true
+					final_trimmed = ":"
+					changed = true
+				}
+			} else if final_trimmed == "done" {
+				if loop_depth > 0 {
+					loop_depth -= 1
+				} else {
+					indent_len := len(out_line) - len(strings.trim_left_space(out_line))
+					indent := ""
+					if indent_len > 0 {
+						indent = out_line[:indent_len]
+					}
+					out_line = strings.concatenate([]string{indent, ":"}, allocator)
+					out_alloc = true
+					final_trimmed = ":"
+					changed = true
+				}
+			}
+		}
+
+		if in_fn && final_trimmed == "}" && (if_depth > 0 || loop_depth > 0) {
+			for loop_depth > 0 {
+				strings.write_string(&builder, "done\n")
+				loop_depth -= 1
+				changed = true
+			}
+			for if_depth > 0 {
+				strings.write_string(&builder, "fi\n")
+				if_depth -= 1
+				changed = true
+			}
+		}
+
+		strings.write_string(&builder, out_line)
+		if out_alloc {
+			delete(out_line)
+		}
+		if i+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+
+		if in_fn && final_trimmed == "}" {
+			in_fn = false
+			if_depth = 0
+			loop_depth = 0
+		}
+	}
+
+	return strings.clone(strings.to_string(builder), allocator), changed
 }
 
 rewrite_fish_to_zsh_parser_blocker_signatures :: proc(text: string, allocator := context.allocator) -> (string, bool) {
