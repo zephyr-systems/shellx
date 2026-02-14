@@ -3280,7 +3280,8 @@ normalize_zsh_preparse_syntax :: proc(text: string, allocator := context.allocat
 	out, changed = replace_with_flag(out, "(P)", "", changed, allocator)
 	out, changed = replace_with_flag(out, "(@On)", "", changed, allocator)
 	out, changed = replace_with_flag(out, "(@on)", "", changed, allocator)
-	out, changed = replace_with_flag(out, "(@)", "", changed, allocator)
+	// Do not globally strip "(@)" tokens; preserve them for structured
+	// zsh->bash rewriting (e.g. ${(@)arr} -> ${arr[@]}).
 	out, changed = replace_with_flag(out, "(M)", "", changed, allocator)
 	out, changed = replace_with_flag(out, "(q-)", "", changed, allocator)
 	out, changed = replace_with_flag(out, "(qq)", "", changed, allocator)
@@ -4767,10 +4768,20 @@ rewrite_target_callsites :: proc(
 		delete(zero)
 		first, first_changed := rewrite_zsh_parameter_expansion_for_bash(zero_b, allocator)
 		delete(zero_b)
-		firstb, firstb_changed := rewrite_posix_array_parameter_expansions(first, from, allocator)
-		delete(first)
-		second, second_changed := rewrite_zsh_syntax_for_bash(firstb, allocator)
-		delete(firstb)
+		first_for_next := first
+		firstb_changed := false
+		if to == .POSIX {
+			firstb, changed_posix_arrays := rewrite_posix_array_parameter_expansions(first_for_next, from, allocator)
+			if changed_posix_arrays {
+				delete(first_for_next)
+				first_for_next = firstb
+				firstb_changed = true
+			} else {
+				delete(firstb)
+			}
+		}
+		second, second_changed := rewrite_zsh_syntax_for_bash(first_for_next, allocator)
+		delete(first_for_next)
 		secondb, secondb_changed := rewrite_empty_then_blocks_for_bash(second, allocator)
 		delete(second)
 		third, third_changed := rewrite_unsupported_zsh_expansions_for_bash(secondb, allocator)
@@ -8377,7 +8388,8 @@ repair_shell_split_echo_param_expansion :: proc(text: string, allocator := conte
 		trimmed := strings.trim_space(line)
 		if i+1 < len(lines) && trimmed == "echo" {
 			next := strings.trim_space(lines[i+1])
-			if strings.has_prefix(next, "${") && strings.has_suffix(next, "}") {
+			if (strings.has_prefix(next, "${") && strings.has_suffix(next, "}")) ||
+				(strings.has_prefix(next, "$(") && strings.has_suffix(next, ")")) {
 				indent_len := len(line) - len(strings.trim_left_space(line))
 				indent := ""
 				if indent_len > 0 {
