@@ -8,14 +8,14 @@ Cross-dialect runs executed: 219
 
 | Pair | Cases | Translate | Parse | Parser Matrix | Parser Skipped | Plugin Parse | Theme Parse | Parse Warn | Compat Warn | Avg Size Ratio | Avg Fn Ratio | With Shims |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| bash->fish | 24 | 24/24 | 24/24 | 24/24 | 0 | 17/17 | 7/7 | 4 | 0 | 2.221 | 7.929 | 22 |
-| bash->posix | 24 | 24/24 | 24/24 | 24/24 | 0 | 17/17 | 7/7 | 4 | 1 | 4.035 | 10.231 | 20 |
-| bash->zsh | 24 | 24/24 | 24/24 | 24/24 | 0 | 17/17 | 7/7 | 4 | 0 | 2.122 | 4.115 | 12 |
+| bash->fish | 24 | 24/24 | 24/24 | 22/24 | 0 | 17/17 | 7/7 | 4 | 0 | 2.228 | 7.727 | 22 |
+| bash->posix | 24 | 24/24 | 24/24 | 23/24 | 0 | 17/17 | 7/7 | 4 | 2 | 4.183 | 10.231 | 20 |
+| bash->zsh | 24 | 24/24 | 24/24 | 23/24 | 0 | 17/17 | 7/7 | 4 | 0 | 2.265 | 4.144 | 12 |
 | fish->bash | 17 | 17/17 | 17/17 | 17/17 | 0 | 15/15 | 2/2 | 1 | 0 | 1.357 | 7.246 | 17 |
 | fish->posix | 17 | 17/17 | 17/17 | 17/17 | 0 | 15/15 | 2/2 | 1 | 0 | 1.784 | 9.020 | 17 |
 | fish->zsh | 17 | 17/17 | 17/17 | 17/17 | 0 | 15/15 | 2/2 | 1 | 0 | 1.405 | 6.602 | 17 |
 | posix->bash | 3 | 3/3 | 3/3 | 3/3 | 0 | 3/3 | 0/0 | 2 | 3 | 1.000 | 1.000 | 0 |
-| posix->fish | 3 | 3/3 | 3/3 | 3/3 | 0 | 3/3 | 0/0 | 2 | 0 | 0.943 | 4.692 | 3 |
+| posix->fish | 3 | 3/3 | 3/3 | 1/3 | 0 | 3/3 | 0/0 | 2 | 0 | 1.104 | 4.692 | 3 |
 | posix->zsh | 3 | 3/3 | 3/3 | 3/3 | 0 | 3/3 | 0/0 | 2 | 3 | 1.000 | 0.000 | 0 |
 | zsh->bash | 29 | 29/29 | 29/29 | 29/29 | 0 | 22/22 | 7/7 | 12 | 0 | 3.280 | 6.284 | 17 |
 | zsh->fish | 29 | 29/29 | 29/29 | 29/29 | 0 | 22/22 | 7/7 | 12 | 0 | 9.030 | 9.162 | 29 |
@@ -23,12 +23,62 @@ Cross-dialect runs executed: 219
 
 ## Failures
 
+- [FAIL] bashit-history (plugin) bash->fish translate=true parse=true parser=false/true exit=127 err=None warnings=0(parse=0 compat=0) shims=2 src_fn=1 out_fn=14 msg= parser_msg=tests/corpus/.parser_check_bashit-history_86.fish (line 138): Missing end to balance this function definition
+function top-history
+^~~~~~~^
+warning: Error while reading file tests/corpus/.parser_check_bashit-history_86.fish
+ parser_artifact=tests/corpus/.parser_check_bashit-history_86.fish path=tests/corpus/repos/bash/bash-it/plugins/available/history.plugin.bash
+- [FAIL] bashit-history (plugin) bash->posix translate=true parse=true parser=false/true exit=2 err=None warnings=0(parse=0 compat=0) shims=2 src_fn=1 out_fn=33 msg= parser_msg=tests/corpus/.parser_check_bashit-history_87.sh: line 495: syntax error near unexpected token `('
+tests/corpus/.parser_check_bashit-history_87.sh: line 495: `				for(i in a)'
+ parser_artifact=tests/corpus/.parser_check_bashit-history_87.sh path=tests/corpus/repos/bash/bash-it/plugins/available/history.plugin.bash
+- [FAIL] ble-sh-make-command (plugin) bash->zsh translate=true parse=true parser=false/true exit=1 err=None warnings=3(parse=3 compat=0) shims=0 src_fn=63 out_fn=63 msg= parser_msg=tests/corpus/.parser_check_ble-sh-make-command_106.zsh:933: parse error near `\n'
+ parser_artifact=tests/corpus/.parser_check_ble-sh-make-command_106.zsh path=tests/corpus/repos/bash/ble.sh/make_command.sh
+- [FAIL] ble-sh-make-command (plugin) bash->fish translate=true parse=true parser=false/true exit=127 err=None warnings=3(parse=3 compat=0) shims=6 src_fn=63 out_fn=63 msg= parser_msg=tests/corpus/.parser_check_ble-sh-make-command_107.fish (line 729): Unexpected end of string, quotes are not balanced
+	awk -F : -v funcname="$funcname" '
+	                                 ^
+warning: Error while reading file tests/corpus/.parser_check_ble-sh-make-command_107.fish
+ parser_artifact=tests/corpus/.parser_check_ble-sh-make-command_107.fish path=tests/corpus/repos/bash/ble.sh/make_command.sh
+- [FAIL] openrc-network-init (plugin) posix->fish translate=true parse=true parser=false/true exit=127 err=None warnings=1(parse=1 compat=0) shims=3 src_fn=13 out_fn=31 msg= parser_msg=tests/corpus/.parser_check_openrc-network-init_165.fish (line 302): Unexpected end of string, quotes are not balanced
+__zx_set __nl " default 0
+              ^
+warning: Error while reading file tests/corpus/.parser_check_openrc-network-init_165.fish
+ parser_artifact=tests/corpus/.parser_check_openrc-network-init_165.fish path=tests/corpus/repos/posix/openrc/init.d/network.in
+- [FAIL] autoconf-gendocs-sh (plugin) posix->fish translate=true parse=true parser=false/true exit=127 err=None warnings=0(parse=0 compat=0) shims=3 src_fn=3 out_fn=21 msg= parser_msg=tests/corpus/.parser_check_autoconf-gendocs-sh_171.fish (line 453): Unexpected end of string, quotes are not balanced
+sed -e 's/^[^0-9]*//' -e 1q
+                    ^
+warning: Error while reading file tests/corpus/.parser_check_autoconf-gendocs-sh_171.fish
+ parser_artifact=tests/corpus/.parser_check_autoconf-gendocs-sh_171.fish path=tests/corpus/repos/posix/autoconf/build-aux/gendocs.sh
 - [FAIL] zsh-pure-theme (theme) zsh->posix translate=true parse=true parser=false/true exit=2 err=None warnings=3(parse=2 compat=1) shims=6 src_fn=27 out_fn=67 msg= parser_msg=tests/corpus/.parser_check_zsh-pure-theme_210.sh: line 958: syntax error near unexpected token `then'
 tests/corpus/.parser_check_zsh-pure-theme_210.sh: line 958: `				__shellx_list_set_index if [ $info[top $prompt_pure_vcs_info[top] ]]; then'
  parser_artifact=tests/corpus/.parser_check_zsh-pure-theme_210.sh path=tests/corpus/repos/zsh/pure/pure.zsh
 
 ## Parser Validation Failures
 
+- [PARSER-FAIL] bashit-history (plugin) bash->fish command=`fish --no-execute tests/corpus/.parser_check_bashit-history_86.fish` exit=127 message=tests/corpus/.parser_check_bashit-history_86.fish (line 138): Missing end to balance this function definition
+function top-history
+^~~~~~~^
+warning: Error while reading file tests/corpus/.parser_check_bashit-history_86.fish
+ parser_artifact=tests/corpus/.parser_check_bashit-history_86.fish path=tests/corpus/repos/bash/bash-it/plugins/available/history.plugin.bash
+- [PARSER-FAIL] bashit-history (plugin) bash->posix command=`bash -n tests/corpus/.parser_check_bashit-history_87.sh` exit=2 message=tests/corpus/.parser_check_bashit-history_87.sh: line 495: syntax error near unexpected token `('
+tests/corpus/.parser_check_bashit-history_87.sh: line 495: `				for(i in a)'
+ parser_artifact=tests/corpus/.parser_check_bashit-history_87.sh path=tests/corpus/repos/bash/bash-it/plugins/available/history.plugin.bash
+- [PARSER-FAIL] ble-sh-make-command (plugin) bash->zsh command=`zsh -n tests/corpus/.parser_check_ble-sh-make-command_106.zsh` exit=1 message=tests/corpus/.parser_check_ble-sh-make-command_106.zsh:933: parse error near `\n'
+ parser_artifact=tests/corpus/.parser_check_ble-sh-make-command_106.zsh path=tests/corpus/repos/bash/ble.sh/make_command.sh
+- [PARSER-FAIL] ble-sh-make-command (plugin) bash->fish command=`fish --no-execute tests/corpus/.parser_check_ble-sh-make-command_107.fish` exit=127 message=tests/corpus/.parser_check_ble-sh-make-command_107.fish (line 729): Unexpected end of string, quotes are not balanced
+	awk -F : -v funcname="$funcname" '
+	                                 ^
+warning: Error while reading file tests/corpus/.parser_check_ble-sh-make-command_107.fish
+ parser_artifact=tests/corpus/.parser_check_ble-sh-make-command_107.fish path=tests/corpus/repos/bash/ble.sh/make_command.sh
+- [PARSER-FAIL] openrc-network-init (plugin) posix->fish command=`fish --no-execute tests/corpus/.parser_check_openrc-network-init_165.fish` exit=127 message=tests/corpus/.parser_check_openrc-network-init_165.fish (line 302): Unexpected end of string, quotes are not balanced
+__zx_set __nl " default 0
+              ^
+warning: Error while reading file tests/corpus/.parser_check_openrc-network-init_165.fish
+ parser_artifact=tests/corpus/.parser_check_openrc-network-init_165.fish path=tests/corpus/repos/posix/openrc/init.d/network.in
+- [PARSER-FAIL] autoconf-gendocs-sh (plugin) posix->fish command=`fish --no-execute tests/corpus/.parser_check_autoconf-gendocs-sh_171.fish` exit=127 message=tests/corpus/.parser_check_autoconf-gendocs-sh_171.fish (line 453): Unexpected end of string, quotes are not balanced
+sed -e 's/^[^0-9]*//' -e 1q
+                    ^
+warning: Error while reading file tests/corpus/.parser_check_autoconf-gendocs-sh_171.fish
+ parser_artifact=tests/corpus/.parser_check_autoconf-gendocs-sh_171.fish path=tests/corpus/repos/posix/autoconf/build-aux/gendocs.sh
 - [PARSER-FAIL] zsh-pure-theme (theme) zsh->posix command=`bash -n tests/corpus/.parser_check_zsh-pure-theme_210.sh` exit=2 message=tests/corpus/.parser_check_zsh-pure-theme_210.sh: line 958: syntax error near unexpected token `then'
 tests/corpus/.parser_check_zsh-pure-theme_210.sh: line 958: `				__shellx_list_set_index if [ $info[top $prompt_pure_vcs_info[top] ]]; then'
  parser_artifact=tests/corpus/.parser_check_zsh-pure-theme_210.sh path=tests/corpus/repos/zsh/pure/pure.zsh
@@ -50,8 +100,9 @@ tests/corpus/.parser_check_zsh-pure-theme_210.sh: line 958: `				__shellx_list_s
 
 ### bash->posix
 
-- `arrays_maps/indexed_arrays`: 1
+- `arrays_maps/indexed_arrays`: 2
   - bash-preexec (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
+  - ble-sh-make-command (plugin) Compat[indexed_arrays]: Array features are not POSIX portable
 - `parse_recovery/parse_diagnostic`: 4
   - ble-sh-make-command (plugin) Parse diagnostic at <input>:37:19: Syntax error
   - ble-sh-make-command (plugin) Parse diagnostic at <input>:883:29: Syntax error
@@ -159,7 +210,7 @@ tests/corpus/.parser_check_zsh-pure-theme_210.sh: line 958: `				__shellx_list_s
 
 ## Semantic Differential Checks
 
-Cases: 35, Passed: 34, Skipped: 0
+Cases: 35, Passed: 35, Skipped: 0
 
 ### Semantic Pair Summary
 
@@ -176,7 +227,7 @@ Cases: 35, Passed: 34, Skipped: 0
 | posix->fish | 1 | 1 | 0 | 0 |
 | posix->zsh | 1 | 1 | 0 | 0 |
 | posix->bash | 1 | 1 | 0 | 0 |
-| bash->posix | 2 | 1 | 1 | 0 |
+| bash->posix | 2 | 2 | 0 | 0 |
 
 - [PASS] fish_gitnow_branch_compare fish->bash exit=0 out="SAME"
 - [PASS] fish_list_index_bash fish->bash exit=0 out="two"
@@ -211,5 +262,5 @@ Cases: 35, Passed: 34, Skipped: 0
 - [PASS] plugin_fish_kv_iter_fish_to_zsh fish->zsh exit=0 out="KV:f=fetch\nKV:c=commit"
 - [PASS] probe_zsh_nested_index_zsh_to_posix zsh->posix exit=0 out="NESTED_OK"
 - [PASS] probe_zsh_assoc_keycheck_zsh_to_fish zsh->fish exit=0 out="KEYCHECK_OK"
-- [FAIL] probe_bash_sparse_preserve_bash_to_posix bash->posix src_exit=0 dst_exit=0 src_out="SPARSE_IDX_100:git\nSPARSE_OK" dst_out="SPARSE_OK" src_err="" dst_err=""
+- [PASS] probe_bash_sparse_preserve_bash_to_posix bash->posix exit=0 out="SPARSE_IDX_100:git\nSPARSE_OK"
 - [PASS] probe_fish_map_merge_fish_to_bash fish->bash exit=0 out="a,b,b,c\nMERGE_OK"

@@ -510,7 +510,6 @@ translate :: proc(
 		} else {
 			delete(rewritten)
 		}
-
 	}
 	if options.insert_shims && from == .Fish && to != .Fish && len(fish_event_regs) > 0 {
 		rewritten, changed := append_missing_registration_lines(emitted, fish_event_regs[:], context.allocator)

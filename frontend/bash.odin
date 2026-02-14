@@ -184,7 +184,11 @@ convert_bash_command_to_statement :: proc(
 					break
 				}
 			}
-		} else if child_type == "string" || child_type == "word" {
+		} else if child_type == "string" ||
+			child_type == "raw_string" ||
+			child_type == "ansi_c_string" ||
+			child_type == "word" ||
+			child_type == "number" {
 			// Arguments can be strings or words
 			arg_text := intern_node_text(arena, child, source)
 			append(&arguments, text_to_expression(arena, arg_text))
@@ -192,6 +196,16 @@ convert_bash_command_to_statement :: proc(
 			// Preserve expansion/substitution arguments for downstream rewrites.
 			arg_text := intern_node_text(arena, child, source)
 			append(&arguments, text_to_expression(arena, arg_text))
+		} else if is_named(child) &&
+			child_type != "comment" &&
+			child_type != "file_redirect" &&
+			child_type != "heredoc_redirect" &&
+			child_type != "redirected_statement" {
+			// Keep additional named argument-like nodes instead of dropping them.
+			arg_text := intern_node_text(arena, child, source)
+			if strings.trim_space(arg_text) != "" {
+				append(&arguments, text_to_expression(arena, arg_text))
+			}
 		}
 	}
 
@@ -228,7 +242,15 @@ convert_bash_assignment_to_statement :: proc(
 
 		if child_type == "variable_name" {
 			variable_name = intern_node_text(arena, child, source) // Pass allocator
-		} else if child_type == "word" || child_type == "number" || child_type == "expansion" || child_type == "simple_expansion" || child_type == "parameter_expansion" || child_type == "concatenation" {
+		} else if child_type == "word" ||
+			child_type == "number" ||
+			child_type == "string" ||
+			child_type == "raw_string" ||
+			child_type == "ansi_c_string" ||
+			child_type == "expansion" ||
+			child_type == "simple_expansion" ||
+			child_type == "parameter_expansion" ||
+			child_type == "concatenation" {
 			value = text_to_expression(
 				arena,
 				intern_node_text(arena, child, source),
