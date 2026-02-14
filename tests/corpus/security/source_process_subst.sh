@@ -1,0 +1,2 @@
+source <(echo 'echo sourced')
+

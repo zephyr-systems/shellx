@@ -12,40 +12,36 @@ make_fixture :: proc(path: string, content: string) -> bool {
 }
 
 main :: proc() {
-	policy := shellx.DEFAULT_SECURITY_SCAN_POLICY
-	policy.ruleset_version = "zephyr-policy-2026-02"
-	policy.allowlist_paths = []string{"trusted/vendor"}
-	policy.custom_rules = []shellx.SecurityScanRule{
-		{
-			rule_id = "zephyr.custom.runtime_source_tmp",
-			enabled = true,
-			severity = .High,
-			match_kind = .Regex,
-			category = "source",
-			confidence = 0.90,
-			phases = { .Source },
-			pattern = "source\\s+/tmp/",
-			message = "Temporary source path detected",
-			suggestion = "Use trusted immutable module paths",
-		},
-		{
-			rule_id = "zephyr.custom.eval_exec",
-			enabled = true,
-			severity = .Critical,
-			match_kind = .AstCommand,
-			category = "execution",
-			confidence = 0.95,
-			phases = { .Source },
-			command_name = "eval",
-			arg_pattern = "$(",
-			message = "Dynamic eval pattern detected",
-			suggestion = "Avoid eval on dynamic command strings",
-		},
+	policy_json := `{
+  "use_builtin_rules": true,
+  "block_threshold": 2,
+  "ruleset_version": "zephyr-policy-2026-02"
+}`
+	policy, validation_errors, ok := shellx.load_security_policy_json(policy_json)
+	defer {
+		for err in validation_errors {
+			delete(err.rule_id)
+			delete(err.message)
+			delete(err.suggestion)
+			delete(err.snippet)
+		}
+		delete(validation_errors)
 	}
+	if !ok {
+		fmt.println("invalid policy json")
+		for err in validation_errors {
+			fmt.println(shellx.report_error(err))
+		}
+		return
+	}
+	policy.allowlist_paths = []string{"trusted/vendor"}
 
 	opts := shellx.DEFAULT_SECURITY_SCAN_OPTIONS
 	opts.max_file_size = 2 * 1024 * 1024
 	opts.timeout_ms = 3000
+	opts.ast_parse_failure_mode = .FailOpen
+	opts.max_files = 1000
+	opts.max_total_bytes = 128 * 1024 * 1024
 
 	p1 := "/tmp/zephyr_scan_fixture_1.zsh"
 	p2 := "/tmp/zephyr_scan_fixture_2.zsh"
@@ -85,4 +81,3 @@ main :: proc() {
 	defer delete(json_batch)
 	fmt.println(json_batch)
 }
-

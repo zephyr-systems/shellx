@@ -2111,7 +2111,7 @@ test_scan_security_overrides_and_allowlist :: proc(t: ^testing.T) {
 		},
 	}
 	policy.block_threshold = .High
-	policy.allowlist_paths = []string{"trusted_plugins"}
+	policy.allowlist_paths = []string{"/tmp/trusted_plugins"}
 
 	opts := DEFAULT_SECURITY_SCAN_OPTIONS
 	result := scan_security("source /tmp/plugin.sh\n", .Bash, policy, "/tmp/trusted_plugins/demo.sh", opts)
@@ -2170,6 +2170,11 @@ test_scan_security_adversarial_corpus_samples :: proc(t: ^testing.T) {
 		"tests/corpus/security/nested_cmdsub.sh",
 		"tests/corpus/security/obfuscated_eval.sh",
 		"tests/corpus/security/multiline_mutation.sh",
+		"tests/corpus/security/string_concat_payload.sh",
+		"tests/corpus/security/escaped_heredoc_exec.sh",
+		"tests/corpus/security/split_eval_tokens.sh",
+		"tests/corpus/security/source_process_subst.sh",
+		"tests/corpus/security/shell_dash_c_dynamic.sh",
 	}
 	for p in cases {
 		result := scan_security_file(p, .Bash)
@@ -2177,4 +2182,137 @@ test_scan_security_adversarial_corpus_samples :: proc(t: ^testing.T) {
 		testing.expect(t, len(result.findings) > 0, fmt.tprintf("adversarial sample should produce findings: %s", p))
 		destroy_security_scan_result(&result)
 	}
+}
+
+@(test)
+test_scan_security_ast_parse_fallback_modes :: proc(t: ^testing.T) {
+	if !should_run_test("test_scan_security_ast_parse_fallback_modes") { return }
+	src := "<<<\n"
+	open_opts := DEFAULT_SECURITY_SCAN_OPTIONS
+	open_opts.ast_parse_failure_mode = .FailOpen
+	open_result := scan_security(src, .Bash, DEFAULT_SECURITY_SCAN_POLICY, "<input>", open_opts)
+	defer destroy_security_scan_result(&open_result)
+	testing.expect(t, open_result.success, "fail-open ast parse should keep success=true")
+	testing.expect(t, len(open_result.errors) > 0, "fail-open ast parse should append runtime error context")
+
+	closed_opts := DEFAULT_SECURITY_SCAN_OPTIONS
+	closed_opts.ast_parse_failure_mode = .FailClosed
+	closed_result := scan_security(src, .Bash, DEFAULT_SECURITY_SCAN_POLICY, "<input>", closed_opts)
+	defer destroy_security_scan_result(&closed_result)
+	testing.expect(t, !closed_result.success, "fail-closed ast parse should set success=false")
+	testing.expect(t, len(closed_result.errors) > 0, "fail-closed ast parse should append runtime error context")
+}
+
+@(test)
+test_scan_security_policy_validate_and_load :: proc(t: ^testing.T) {
+	if !should_run_test("test_scan_security_policy_validate_and_load") { return }
+	p := DEFAULT_SECURITY_SCAN_POLICY
+	p.custom_rules = []SecurityScanRule{
+		{
+			rule_id = "",
+			enabled = true,
+			severity = .High,
+			match_kind = .Regex,
+			pattern = "(",
+			confidence = 1.5,
+			message = "bad",
+		},
+	}
+	errs := validate_security_policy(p)
+	defer {
+		for e in errs {
+			delete(e.rule_id)
+			delete(e.message)
+			delete(e.suggestion)
+			delete(e.snippet)
+		}
+		delete(errs)
+	}
+	testing.expect(t, len(errs) >= 2, "policy validator should return multiple actionable errors")
+
+	json_data := `{"use_builtin_rules":true,"block_threshold":2}`
+	_, load_errs, ok := load_security_policy_json(json_data)
+	defer {
+		for e in load_errs {
+			delete(e.rule_id)
+			delete(e.message)
+			delete(e.suggestion)
+			delete(e.snippet)
+		}
+		delete(load_errs)
+	}
+	testing.expect(t, ok, "valid policy JSON should load and validate")
+	testing.expect(t, len(load_errs) == 0, "valid policy JSON should not produce validation errors")
+}
+
+@(test)
+test_scan_security_fingerprint_contract :: proc(t: ^testing.T) {
+	if !should_run_test("test_scan_security_fingerprint_contract") { return }
+	loc := ir.SourceLocation{file = "<input>", line = 1, column = 0, length = 6}
+	fp1 := scanner_fingerprint("sec.ast.eval", loc, "eval", "source")
+	defer delete(fp1)
+	fp2 := scanner_fingerprint("sec.ast.eval", loc, "eval", "source")
+	defer delete(fp2)
+	testing.expect(t, fp1 == fp2, "fingerprint should be stable across repeated calls")
+	testing.expect(t, fp1 == "28b0c697cf9e0772", "fingerprint algorithm contract changed unexpectedly")
+}
+
+@(test)
+test_scan_security_allowlist_path_normalization :: proc(t: ^testing.T) {
+	if !should_run_test("test_scan_security_allowlist_path_normalization") { return }
+	policy := DEFAULT_SECURITY_SCAN_POLICY
+	policy.use_builtin_rules = false
+	policy.custom_rules = []SecurityScanRule{
+		{
+			rule_id = "zephyr.tmp",
+			enabled = true,
+			severity = .High,
+			match_kind = .Substring,
+			pattern = "/tmp/",
+			message = "tmp",
+			suggestion = "avoid tmp",
+		},
+	}
+	policy.allowlist_paths = []string{"/tmp/allowroot"}
+	opts := DEFAULT_SECURITY_SCAN_OPTIONS
+	allowed := scan_security("source /tmp/x\n", .Bash, policy, "/tmp/allowroot/plugin.sh", opts)
+	defer destroy_security_scan_result(&allowed)
+	testing.expect(t, len(allowed.findings) == 0, "allowlist should match canonical in-root path")
+
+	bypass := scan_security("source /tmp/x\n", .Bash, policy, "/tmp/allowroot/../escape/plugin.sh", opts)
+	defer destroy_security_scan_result(&bypass)
+	testing.expect(t, len(bypass.findings) > 0, "allowlist should not match traversal-escaped path")
+}
+
+@(test)
+test_scan_security_batch_guardrails_and_ast_signatures :: proc(t: ^testing.T) {
+	if !should_run_test("test_scan_security_batch_guardrails_and_ast_signatures") { return }
+	f1 := "/tmp/shellx_batch_guard_1.sh"
+	f2 := "/tmp/shellx_batch_guard_2.sh"
+	c1 := "bash -c \"$CMD\"\n"
+	c2 := "source <(echo hi)\n"
+	ok1 := os.write_entire_file(f1, transmute([]byte)c1)
+	ok2 := os.write_entire_file(f2, transmute([]byte)c2)
+	testing.expect(t, ok1 && ok2, "guardrail fixtures should be writable")
+	if !ok1 || !ok2 { return }
+	defer os.remove(f1)
+	defer os.remove(f2)
+
+	opts := DEFAULT_SECURITY_SCAN_OPTIONS
+	opts.max_files = 1
+	guard := scan_security_batch([]string{f1, f2}, .Bash, DEFAULT_SECURITY_SCAN_POLICY, opts)
+	defer destroy_security_scan_batch(&guard)
+	testing.expect(t, len(guard) == 2, "max_files guard should still return deterministic batch items")
+	testing.expect(t, !guard[0].result.success, "max_files guard should mark items as runtime failures")
+
+	opts2 := DEFAULT_SECURITY_SCAN_OPTIONS
+	sig := scan_security_file(f1, .Bash, DEFAULT_SECURITY_SCAN_POLICY, opts2)
+	defer destroy_security_scan_result(&sig)
+	has_dash_c := false
+	for finding in sig.findings {
+		if finding.rule_id == "sec.ast.shell_dash_c" || finding.rule_id == "sec.ast.shell_dash_c_dynamic" {
+			has_dash_c = true
+		}
+	}
+	testing.expect(t, has_dash_c, "ast signature scan should detect shell -c dynamic risk")
 }

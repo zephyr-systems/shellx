@@ -156,6 +156,9 @@ policy.ruleset_version = "zephyr-policy-2026-02"
 opts := shellx.DEFAULT_SECURITY_SCAN_OPTIONS
 opts.max_file_size = 4 * 1024 * 1024
 opts.timeout_ms = 5000
+opts.ast_parse_failure_mode = .FailOpen
+opts.max_files = 0
+opts.max_total_bytes = 0
 
 scan := shellx.scan_security_file("./plugin.zsh", .Zsh, policy, opts)
 defer shellx.destroy_security_scan_result(&scan)
@@ -176,6 +179,29 @@ if scan.blocked {
 json_blob := shellx.format_security_scan_json(scan, true)
 defer delete(json_blob)
 fmt.println(json_blob)
+```
+
+Policy loading + validation:
+
+```odin
+policy_json := `{"use_builtin_rules":true,"block_threshold":2}`
+loaded_policy, validation_errors, ok := shellx.load_security_policy_json(policy_json)
+defer {
+	for err in validation_errors {
+		delete(err.rule_id)
+		delete(err.message)
+		delete(err.suggestion)
+		delete(err.snippet)
+	}
+	delete(validation_errors)
+}
+if !ok {
+	for err in validation_errors {
+		fmt.println(shellx.report_error(err))
+	}
+	return
+}
+policy = loaded_policy
 ```
 
 Batch scanning:

@@ -81,6 +81,8 @@ Result semantics:
 - `success=false` only for scanner runtime failures (I/O, timeout, invalid rule pattern, parse/IR scan failure).
 - Findings do not imply runtime failure; policy threshold controls `blocked`.
 - `ruleset_version` is returned in every `SecurityScanResult` for policy pinning.
+- AST parse fallback is configurable via `SecurityScanOptions.ast_parse_failure_mode` (`FailOpen` or `FailClosed`).
+- Batch guardrails are configurable via `SecurityScanOptions.max_files` and `SecurityScanOptions.max_total_bytes`.
 
 Zephyr integration model:
 

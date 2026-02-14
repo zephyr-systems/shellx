@@ -44,12 +44,89 @@ scanner_command_allowlisted :: proc(command: string, policy: SecurityScanPolicy)
 	return false
 }
 
+scanner_normalize_path :: proc(path: string) -> string {
+	if path == "" {
+		return ""
+	}
+	clean_text_path :: proc(path_text: string, allocator := context.temp_allocator) -> string {
+		p, _ := strings.replace_all(path_text, "\\", "/", allocator)
+		rooted := strings.has_prefix(p, "/")
+		parts := strings.split(p, "/")
+		defer delete(parts)
+		stack := make([dynamic]string, 0, len(parts), allocator)
+		defer delete(stack)
+		for part in parts {
+			if part == "" || part == "." {
+				continue
+			}
+			if part == ".." {
+				if len(stack) > 0 {
+					pop(&stack)
+				}
+				continue
+			}
+			append(&stack, part)
+		}
+		builder := strings.builder_make()
+		defer strings.builder_destroy(&builder)
+		if rooted {
+			strings.write_byte(&builder, '/')
+		}
+		for part, i in stack {
+			if i > 0 {
+				strings.write_byte(&builder, '/')
+			}
+			strings.write_string(&builder, part)
+		}
+		out := strings.clone(strings.to_string(builder), allocator)
+		if out == "" {
+			if rooted {
+				return strings.clone("/", allocator)
+			}
+			return strings.clone(".", allocator)
+		}
+		return out
+	}
+
+	abs, err := os.absolute_path_from_relative(path, context.temp_allocator)
+	if err != nil {
+		cleaned := clean_text_path(path, context.temp_allocator)
+		return strings.clone(cleaned, context.allocator)
+	}
+	cleaned := clean_text_path(abs, context.temp_allocator)
+	return strings.clone(cleaned, context.allocator)
+}
+
+scanner_path_matches_allowlist_root :: proc(path: string, root: string) -> bool {
+	if root == "" || path == "" {
+		return false
+	}
+	if path == root {
+		return true
+	}
+	if strings.has_prefix(path, root) {
+		if len(path) > len(root) {
+			ch := path[len(root)]
+			return ch == '/' || ch == '\\'
+		}
+		return true
+	}
+	return false
+}
+
 scanner_path_allowlisted :: proc(path: string, policy: SecurityScanPolicy) -> bool {
 	if path == "" {
 		return false
 	}
+	normalized_path := scanner_normalize_path(path)
+	defer delete(normalized_path)
 	for allowed in policy.allowlist_paths {
-		if allowed != "" && strings.contains(path, allowed) {
+		if allowed == "" {
+			continue
+		}
+		normalized_allowed := scanner_normalize_path(allowed)
+		defer delete(normalized_allowed)
+		if scanner_path_matches_allowlist_root(normalized_path, normalized_allowed) {
 			return true
 		}
 	}
@@ -148,8 +225,11 @@ scanner_append_runtime_error :: proc(
 	location := ir.SourceLocation{},
 	suggestion := "",
 	rule_id := "",
+	mark_failure := true,
 ) {
-	result.success = false
+	if mark_failure {
+		result.success = false
+	}
 	if result.error == .None {
 		result.error = err
 	}
@@ -296,7 +376,7 @@ scanner_regex_match :: proc(line: string, pattern: string) -> (bool, string, str
 	defer regex.destroy(r)
 	capture, ok := regex.match_and_allocate_capture(r, line)
 	if ok && len(capture.groups) > 0 {
-		matched := capture.groups[0]
+		matched := strings.clone(capture.groups[0], context.allocator)
 		regex.destroy(capture)
 		return true, matched, ""
 	}
@@ -308,7 +388,7 @@ scanner_line_matches_rule :: proc(line: string, rule: SecurityScanRule) -> (bool
 	switch rule.match_kind {
 	case .Substring:
 		if strings.contains(line, rule.pattern) {
-			return true, rule.pattern, ""
+			return true, strings.clone(rule.pattern, context.allocator), ""
 		}
 		return false, "", ""
 	case .Regex:
@@ -328,8 +408,8 @@ scanner_scan_text_rules :: proc(
 	options: SecurityScanOptions,
 	sw: ^time.Stopwatch,
 ) {
-	lines := strings.split_lines(code)
-	defer delete(lines)
+	lines := strings.split_lines(code, context.temp_allocator)
+	defer delete(lines, context.temp_allocator)
 	for line, i in lines {
 		if scanner_check_timeout(result, sw^, options) {
 			return
@@ -356,6 +436,9 @@ scanner_scan_text_rules :: proc(
 			}
 			result.stats.rules_evaluated += 1
 			matched, matched_text, match_err := scanner_line_matches_rule(trimmed, effective_rule)
+			if matched_text != "" {
+				defer delete(matched_text)
+			}
 			if match_err != "" {
 				scanner_append_runtime_error(
 					result,
@@ -416,6 +499,28 @@ scanner_eval_ast_rules_for_call :: proc(
 	}
 	joined_args := strings.clone(strings.to_string(arg_text), context.allocator)
 	defer delete(joined_args)
+	first_arg := ""
+	second_arg := ""
+	if len(call.arguments) > 0 {
+		#partial switch a in call.arguments[0] {
+		case ^ir.Literal:
+			first_arg = a.value
+		case ^ir.Variable:
+			first_arg = a.name
+		case ^ir.RawExpression:
+			first_arg = a.text
+		}
+	}
+	if len(call.arguments) > 1 {
+		#partial switch a in call.arguments[1] {
+		case ^ir.Literal:
+			second_arg = a.value
+		case ^ir.Variable:
+			second_arg = a.name
+		case ^ir.RawExpression:
+			second_arg = a.text
+		}
+	}
 
 	loc := call.location
 	loc.file = source_name
@@ -463,6 +568,64 @@ scanner_eval_ast_rules_for_call :: proc(
 			"source",
 			0.93,
 			joined_args,
+		)
+		if strings.contains(joined_args, "<(") {
+			scanner_append_finding(
+				result,
+				"sec.ast.source_process_subst",
+				.Critical,
+				"Source invocation uses process substitution",
+				loc,
+				"Avoid sourcing process substitutions; use trusted temporary file flow",
+				phase,
+				"source",
+				0.96,
+				joined_args,
+			)
+		}
+	}
+
+	if (name == "bash" || name == "sh" || name == "zsh" || name == "fish") && first_arg == "-c" {
+		scanner_append_finding(
+			result,
+			"sec.ast.shell_dash_c",
+			.High,
+			"Shell command string execution via -c detected",
+			loc,
+			"Avoid passing dynamic command strings to shell -c",
+			phase,
+			"execution",
+			0.92,
+			joined_args,
+		)
+		if strings.contains(second_arg, "$") || strings.contains(second_arg, "$(") || strings.contains(second_arg, "`") {
+			scanner_append_finding(
+				result,
+				"sec.ast.shell_dash_c_dynamic",
+				.Critical,
+				"Dynamic shell -c command string detected",
+				loc,
+				"Avoid dynamic shell command strings",
+				phase,
+				"execution",
+				0.97,
+				second_arg,
+			)
+		}
+	}
+
+	if strings.has_prefix(name, "$") || strings.contains(name, "${") {
+		scanner_append_finding(
+			result,
+			"sec.ast.indirect_exec",
+			.High,
+			"Indirect command execution via variable command name detected",
+			loc,
+			"Use explicit allowlisted command dispatch",
+			phase,
+			"execution",
+			0.91,
+			name,
 		)
 	}
 
@@ -586,10 +749,29 @@ scanner_scan_ast_rules :: proc(
 			ir.SourceLocation{file = source_name},
 			"Fix parser errors or disable AST rules for this pass",
 			"sec.runtime.parse",
+			options.ast_parse_failure_mode == .FailClosed,
 		)
 		return
 	}
 	defer frontend.destroy_tree(tree)
+	parse_diags := frontend.collect_parse_diagnostics(tree, code, source_name, context.temp_allocator)
+	defer delete(parse_diags)
+	if len(parse_diags) > 0 {
+		loc := ir.SourceLocation{file = source_name}
+		if len(parse_diags) > 0 {
+			loc = parse_diags[0].location
+		}
+		scanner_append_runtime_error(
+			result,
+			.ScanParseError,
+			"AST scan failed due to parse diagnostics",
+			loc,
+			"Fix syntax errors or disable AST rules for this pass",
+			"sec.runtime.parse_diag",
+			options.ast_parse_failure_mode == .FailClosed,
+		)
+		return
+	}
 
 	program, conv_err := convert_to_ir(&arena, dialect, tree, code)
 	if conv_err.error != .None || program == nil {
@@ -600,6 +782,7 @@ scanner_scan_ast_rules :: proc(
 			ir.SourceLocation{file = source_name},
 			"Fix parser conversion issues for this dialect",
 			"sec.runtime.convert",
+			options.ast_parse_failure_mode == .FailClosed,
 		)
 		return
 	}
@@ -682,6 +865,129 @@ scanner_finalize :: proc(result: ^SecurityScanResult, policy: SecurityScanPolicy
 	}
 }
 
+scanner_append_policy_error :: proc(
+	errors: ^[dynamic]ErrorContext,
+	rule_id: string,
+	message: string,
+	suggestion := "",
+) {
+	append(
+		errors,
+		ErrorContext{
+			error = .ScanInvalidRule,
+			rule_id = strings.clone(rule_id, context.allocator),
+			message = strings.clone(message, context.allocator),
+			suggestion = strings.clone(suggestion, context.allocator),
+		},
+	)
+}
+
+SCANNER_BUILTIN_RULE_IDS :: [13]string{
+	"sec.pipe_download_exec",
+	"sec.eval_download",
+	"sec.dangerous_rm",
+	"sec.overpermissive_chmod",
+	"sec.source_tmp",
+	"sec.ast.eval",
+	"sec.ast.dynamic_exec",
+	"sec.ast.source",
+	"sec.ast.pipe_download_exec",
+	"sec.ast.shell_dash_c",
+	"sec.ast.shell_dash_c_dynamic",
+	"sec.ast.source_process_subst",
+	"sec.ast.indirect_exec",
+}
+
+validate_security_policy :: proc(policy: SecurityScanPolicy) -> [dynamic]ErrorContext {
+	errors := make([dynamic]ErrorContext, 0, 8, context.allocator)
+	seen := make(map[string]bool, context.temp_allocator)
+	defer delete(seen)
+
+	valid_ids := make(map[string]bool, context.temp_allocator)
+	defer delete(valid_ids)
+	for id in SCANNER_BUILTIN_RULE_IDS {
+		valid_ids[id] = true
+	}
+
+	for rule in policy.custom_rules {
+		if rule.rule_id == "" {
+			scanner_append_policy_error(&errors, "sec.policy.rule_id", "Custom rule has empty rule_id", "Set a unique non-empty rule_id")
+		} else {
+			if seen[rule.rule_id] {
+				scanner_append_policy_error(&errors, rule.rule_id, "Duplicate custom rule_id", "Ensure each rule_id is unique")
+			}
+			seen[rule.rule_id] = true
+			valid_ids[rule.rule_id] = true
+		}
+
+		if rule.confidence < 0 || rule.confidence > 1 {
+			scanner_append_policy_error(&errors, rule.rule_id, "Rule confidence must be between 0.0 and 1.0", "Set confidence in range [0,1]")
+		}
+
+		switch rule.match_kind {
+		case .Substring:
+			if strings.trim_space(rule.pattern) == "" {
+				scanner_append_policy_error(&errors, rule.rule_id, "Substring rule requires non-empty pattern", "Set SecurityScanRule.pattern")
+			}
+		case .Regex:
+			if strings.trim_space(rule.pattern) == "" {
+				scanner_append_policy_error(&errors, rule.rule_id, "Regex rule requires non-empty pattern", "Set SecurityScanRule.pattern")
+			} else {
+				r, err := regex.create(rule.pattern, {}, context.temp_allocator, context.temp_allocator)
+				if err != nil {
+					scanner_append_policy_error(&errors, rule.rule_id, fmt.tprintf("Invalid regex pattern: %v", err), "Fix regex syntax")
+				} else {
+					regex.destroy(r)
+				}
+			}
+		case .AstCommand:
+			if strings.trim_space(rule.command_name) == "" && strings.trim_space(rule.arg_pattern) == "" {
+				scanner_append_policy_error(&errors, rule.rule_id, "AstCommand rule requires command_name or arg_pattern", "Set command_name and/or arg_pattern")
+			}
+		}
+	}
+
+	for override in policy.rule_overrides {
+		if override.rule_id == "" {
+			scanner_append_policy_error(&errors, "sec.policy.override", "Rule override has empty rule_id", "Set override.rule_id")
+			continue
+		}
+		if !valid_ids[override.rule_id] {
+			scanner_append_policy_error(&errors, override.rule_id, "Rule override references unknown rule_id", "Define corresponding custom rule or remove override")
+		}
+	}
+
+	return errors
+}
+
+load_security_policy_json :: proc(data: string) -> (SecurityScanPolicy, [dynamic]ErrorContext, bool) {
+	policy := DEFAULT_SECURITY_SCAN_POLICY
+	if strings.trim_space(data) == "" {
+		errs := make([dynamic]ErrorContext, 0, 1, context.allocator)
+		scanner_append_policy_error(&errs, "sec.policy.load", "Policy JSON is empty", "Provide valid policy JSON")
+		return policy, errs, false
+	}
+	if err := json.unmarshal_string(data, &policy); err != nil {
+		errs := make([dynamic]ErrorContext, 0, 1, context.allocator)
+		scanner_append_policy_error(&errs, "sec.policy.load", fmt.tprintf("Failed to parse policy JSON: %v", err), "Fix policy JSON syntax")
+		return policy, errs, false
+	}
+	errs := validate_security_policy(policy)
+	return policy, errs, len(errs) == 0
+}
+
+load_security_policy_file :: proc(path: string) -> (SecurityScanPolicy, [dynamic]ErrorContext, bool) {
+	data, ok := os.read_entire_file(path)
+	if !ok {
+		policy := DEFAULT_SECURITY_SCAN_POLICY
+		errs := make([dynamic]ErrorContext, 0, 1, context.allocator)
+		scanner_append_policy_error(&errs, "sec.policy.load_file", "Failed to read policy file", "Check file path and permissions")
+		return policy, errs, false
+	}
+	defer delete(data)
+	return load_security_policy_json(string(data))
+}
+
 scanner_scan_phase :: proc(
 	result: ^SecurityScanResult,
 	code: string,
@@ -759,8 +1065,59 @@ scan_security_batch :: proc(
 	allocator := context.allocator,
 ) -> [dynamic]SecurityBatchItemResult {
 	results := make([dynamic]SecurityBatchItemResult, 0, len(files), allocator)
+	if options.max_files > 0 && len(files) > options.max_files {
+		for file in files {
+			item := SecurityBatchItemResult{
+				filepath = strings.clone(file, allocator),
+				result = SecurityScanResult{
+					success = false,
+					ruleset_version = strings.clone(policy.ruleset_version, context.allocator),
+				},
+			}
+			if item.result.ruleset_version == "" {
+				item.result.ruleset_version = strings.clone(SECURITY_RULESET_VERSION, context.allocator)
+			}
+			scanner_append_runtime_error(
+				&item.result,
+				.ScanError,
+				"Batch file count exceeds max_files guardrail",
+				ir.SourceLocation{file = file},
+				"Increase max_files or split scan into smaller batches",
+				"sec.runtime.max_files",
+			)
+			append(&results, item)
+		}
+		return results
+	}
+
+	total_bytes: i64 = 0
 	for file in files {
 		item := SecurityBatchItemResult{filepath = strings.clone(file, allocator)}
+		if options.max_total_bytes > 0 {
+			sz := os.file_size_from_path(file)
+			if sz > 0 {
+				total_bytes += sz
+			}
+			if total_bytes > i64(options.max_total_bytes) {
+				item.result = SecurityScanResult{
+					success = false,
+					ruleset_version = strings.clone(policy.ruleset_version, context.allocator),
+				}
+				if item.result.ruleset_version == "" {
+					item.result.ruleset_version = strings.clone(SECURITY_RULESET_VERSION, context.allocator)
+				}
+				scanner_append_runtime_error(
+					&item.result,
+					.ScanError,
+					"Batch total size exceeds max_total_bytes guardrail",
+					ir.SourceLocation{file = file},
+					"Increase max_total_bytes or split scan into smaller batches",
+					"sec.runtime.max_total_bytes",
+				)
+				append(&results, item)
+				continue
+			}
+		}
 		item.result = scan_security_file(file, dialect, policy, options)
 		append(&results, item)
 	}

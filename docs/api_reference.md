@@ -110,6 +110,11 @@ Fields:
 
 `bit_set[SecurityScanPhase; u8]`
 
+### `AstParseFailureMode`
+
+- `.FailOpen`
+- `.FailClosed`
+
 ### `SecurityScanRule`
 
 - `rule_id: string`
@@ -148,6 +153,9 @@ Fields:
 - `timeout_ms: int`
 - `scan_translated_output: bool`
 - `include_phases: SecurityScanPhases`
+- `ast_parse_failure_mode: AstParseFailureMode`
+- `max_files: int`
+- `max_total_bytes: int`
 
 Default: `DEFAULT_SECURITY_SCAN_OPTIONS`.
 
@@ -233,6 +241,11 @@ Scans source text for policy findings and optional AST-aware checks.
 Runtime failures (I/O/timeout/invalid rule/parse infra) set `success=false`.
 Findings alone do not set `success=false`.
 
+AST parse fallback behavior:
+
+- `.FailOpen`: parse error is reported in `errors` but scan keeps `success=true`.
+- `.FailClosed`: parse error sets `success=false`.
+
 Example:
 
 ```odin
@@ -262,6 +275,11 @@ Reads a file and scans it for security findings.
 
 Scans many files and returns one result per file.
 
+Guardrails:
+
+- `options.max_files`
+- `options.max_total_bytes`
+
 ### `format_security_scan_json(result, pretty := false, allocator := context.allocator) -> string`
 
 Returns a JSON representation of a scan result.
@@ -269,6 +287,18 @@ Returns a JSON representation of a scan result.
 ### `format_security_scan_batch_json(results, pretty := false, allocator := context.allocator) -> string`
 
 Returns a JSON representation of batch scan results.
+
+### `validate_security_policy(policy) -> [dynamic]ErrorContext`
+
+Validates scanner policy and returns all actionable validation errors.
+
+### `load_security_policy_json(data) -> (SecurityScanPolicy, [dynamic]ErrorContext, bool)`
+
+Loads and validates a scanner policy from JSON.
+
+### `load_security_policy_file(path) -> (SecurityScanPolicy, [dynamic]ErrorContext, bool)`
+
+Loads and validates a scanner policy from JSON file path.
 
 ### `detect_shell(code) -> ShellDialect`
 

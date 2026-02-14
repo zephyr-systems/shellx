@@ -56,6 +56,11 @@ SecurityScanPhase :: enum {
 
 SecurityScanPhases :: bit_set[SecurityScanPhase; u8]
 
+AstParseFailureMode :: enum {
+	FailOpen,
+	FailClosed,
+}
+
 SecurityFinding :: struct {
 	rule_id:    string,
 	severity:   FindingSeverity,
@@ -112,12 +117,16 @@ SecurityScanOptions :: struct {
 	timeout_ms:             int,
 	scan_translated_output: bool,
 	include_phases:         SecurityScanPhases,
+	ast_parse_failure_mode: AstParseFailureMode,
+	max_files:              int,
+	max_total_bytes:        int,
 }
 
 DEFAULT_SECURITY_SCAN_OPTIONS :: SecurityScanOptions{
 	max_file_size = 2 * 1024 * 1024,
 	timeout_ms = 2000,
 	include_phases = { .Source },
+	ast_parse_failure_mode = .FailOpen,
 }
 
 SecurityScanStats :: struct {
