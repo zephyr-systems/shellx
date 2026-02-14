@@ -9447,6 +9447,7 @@ rewrite_zsh_parser_blocker_signatures :: proc(text: string, allocator := context
 	nvm_loop_depth := 0
 	for line, idx in lines {
 		out_line := line
+		out_line_allocated := false
 		trimmed := strings.trim_space(line)
 
 		if is_ohmyzsh_z && strings.contains(trimmed, "q_chars=$((") {
@@ -9455,7 +9456,11 @@ rewrite_zsh_parser_blocker_signatures :: proc(text: string, allocator := context
 			if indent_len > 0 {
 				indent = line[:indent_len]
 			}
+			if out_line_allocated {
+				delete(out_line)
+			}
 			out_line = strings.concatenate([]string{indent, "q_chars=0"}, allocator)
+			out_line_allocated = true
 			changed = true
 		}
 
@@ -9465,7 +9470,11 @@ rewrite_zsh_parser_blocker_signatures :: proc(text: string, allocator := context
 			if indent_len > 0 {
 				indent = line[:indent_len]
 			}
+			if out_line_allocated {
+				delete(out_line)
+			}
 			out_line = strings.concatenate([]string{indent, ":"}, allocator)
+			out_line_allocated = true
 			changed = true
 		}
 
@@ -9476,10 +9485,14 @@ rewrite_zsh_parser_blocker_signatures :: proc(text: string, allocator := context
 				if indent_len > 0 {
 					indent = line[:indent_len]
 				}
-				out_line = strings.concatenate([]string{indent, ":"}, allocator)
-				changed = true
+					if out_line_allocated {
+						delete(out_line)
+					}
+					out_line = strings.concatenate([]string{indent, ":"}, allocator)
+					out_line_allocated = true
+					changed = true
+				}
 			}
-		}
 
 		if is_nvm && trimmed == "done" {
 			next_sig := ""
@@ -9506,10 +9519,14 @@ rewrite_zsh_parser_blocker_signatures :: proc(text: string, allocator := context
 				if indent_len > 0 {
 					indent = line[:indent_len]
 				}
-				out_line = strings.concatenate([]string{indent, ":"}, allocator)
-				changed = true
+					if out_line_allocated {
+						delete(out_line)
+					}
+					out_line = strings.concatenate([]string{indent, ":"}, allocator)
+					out_line_allocated = true
+					changed = true
+				}
 			}
-		}
 		if is_ysu && trimmed == "done" {
 			next_sig := ""
 			for j := idx + 1; j < len(lines); j += 1 {
@@ -9535,7 +9552,11 @@ rewrite_zsh_parser_blocker_signatures :: proc(text: string, allocator := context
 				if indent_len > 0 {
 					indent = line[:indent_len]
 				}
+				if out_line_allocated {
+					delete(out_line)
+				}
 				out_line = strings.concatenate([]string{indent, ":"}, allocator)
+				out_line_allocated = true
 				changed = true
 			}
 		}
@@ -9668,6 +9689,9 @@ rewrite_zsh_parser_blocker_signatures :: proc(text: string, allocator := context
 		}
 
 		strings.write_string(&builder, out_line)
+		if out_line_allocated {
+			delete(out_line)
+		}
 		if idx+1 < len(lines) {
 			strings.write_byte(&builder, '\n')
 		}
