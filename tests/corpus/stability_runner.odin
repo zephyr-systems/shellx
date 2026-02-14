@@ -1755,6 +1755,40 @@ __shellx_run_precmd
 				required_probe_markers = []string{"ONE", "TWO"},
 			},
 			{
+				name = "probe_zle_widget_bridge_buffer_cursor_zsh_to_bash",
+				from = .Zsh,
+				to = .Bash,
+				module_mode = true,
+				source = strings.trim_space(`
+my_widget_impl() {
+  LBUFFER="${LBUFFER}X"
+}
+zle -N my-widget my_widget_impl
+bindkey '^X^E' my-widget
+`),
+				probe_source = strings.trim_space(`
+BUFFER="ab"
+CURSOR=1
+LBUFFER="${BUFFER:0:$CURSOR}"
+RBUFFER="${BUFFER:$CURSOR}"
+my_widget_impl
+BUFFER="${LBUFFER}${RBUFFER}"
+CURSOR=${#LBUFFER}
+echo "ZLE_BUF:$BUFFER CUR:$CURSOR"
+`),
+				probe_target = strings.trim_space(`
+BUFFER="ab"
+CURSOR=1
+LBUFFER="${BUFFER:0:$CURSOR}"
+RBUFFER="${BUFFER:$CURSOR}"
+__shellx_zle_invoke my-widget
+echo "ZLE_BUF:$BUFFER CUR:$CURSOR"
+`),
+				required_probe_markers = []string{"ZLE_BUF:aXb CUR:2"},
+				enforce_exit_code = true,
+				expected_exit_code = 0,
+			},
+			{
 				name = "probe_async_worker_wait_order_zsh_to_bash",
 				from = .Zsh,
 				to = .Bash,
@@ -1863,6 +1897,154 @@ echo "AFTER_WAIT code1=$code1"
 					"WORKER1_DONE code2=22",
 					"AFTER_WAIT code1=11",
 				},
+				enforce_exit_code = true,
+				expected_exit_code = 0,
+			},
+			{
+				name = "probe_signal_trap_compose_exit_zsh_to_bash",
+				from = .Zsh,
+				to = .Bash,
+				source = strings.trim_space(`
+trap 'echo EXIT_A; echo EXIT_B' EXIT
+echo BODY
+`),
+				required_probe_markers = []string{"BODY", "EXIT_A", "EXIT_B"},
+				enforce_exit_code = true,
+				expected_exit_code = 0,
+			},
+			{
+				name = "probe_signal_trap_compose_int_exit_zsh_to_bash",
+				from = .Zsh,
+				to = .Bash,
+				source = strings.trim_space(`
+trap 'echo INT_A; echo INT_B; exit 130' INT
+trap 'echo EXIT_A; echo EXIT_B' EXIT
+echo BEFORE
+kill -INT $$
+echo AFTER
+`),
+				required_probe_markers = []string{"BEFORE", "INT_A", "INT_B", "EXIT_A", "EXIT_B"},
+				forbidden_probe_markers = []string{"AFTER"},
+				enforce_exit_code = true,
+				expected_exit_code = 130,
+			},
+			{
+				name = "probe_signal_trap_worker_cleanup_zsh_to_bash",
+				from = .Zsh,
+				to = .Bash,
+				source = strings.trim_space(`
+trap 'echo INT_TRAP; kill "$worker_pid" 2>/dev/null; echo INT_DONE; exit 130' INT
+trap 'echo EXIT_TRAP' EXIT
+echo READY
+(
+  sleep 0.05
+  echo WORKER_START
+  sleep 1
+  echo WORKER_DONE
+) &
+worker_pid=$!
+sleep 0.2
+kill -INT $$
+echo AFTER
+`),
+				required_probe_markers = []string{"READY", "WORKER_START", "INT_TRAP", "INT_DONE", "EXIT_TRAP"},
+				forbidden_probe_markers = []string{"WORKER_DONE", "AFTER"},
+				enforce_exit_code = true,
+				expected_exit_code = 130,
+			},
+			{
+				name = "probe_subshell_scope_boundary_zsh_to_bash",
+				from = .Zsh,
+				to = .Bash,
+				source = strings.trim_space(`
+x=outer
+(
+  x=inner
+  echo "IN_SUBSHELL:$x"
+)
+echo "OUTSIDE:$x"
+`),
+				required_probe_markers = []string{"IN_SUBSHELL:inner", "OUTSIDE:outer"},
+				enforce_exit_code = true,
+				expected_exit_code = 0,
+			},
+			{
+				name = "probe_command_substitution_exit_capture_zsh_to_bash",
+				from = .Zsh,
+				to = .Bash,
+				source = strings.trim_space(`
+out=$(sh -c 'echo SUB_OUT; exit 7')
+rc=$?
+echo "$out"
+echo "STATUS:$rc"
+`),
+				required_probe_markers = []string{"SUB_OUT", "STATUS:7"},
+				enforce_exit_code = true,
+				expected_exit_code = 0,
+			},
+			{
+				name = "probe_pipeline_exit_guard_zsh_to_bash",
+				from = .Zsh,
+				to = .Bash,
+				source = strings.trim_space(`
+false | cat >/dev/null
+rc=$?
+echo "PIPE_STATUS:$rc"
+`),
+				required_probe_markers = []string{"PIPE_STATUS:0"},
+				enforce_exit_code = true,
+				expected_exit_code = 0,
+			},
+			{
+				name = "probe_pipeline_status_array_zsh_to_bash",
+				from = .Zsh,
+				to = .Bash,
+				source = strings.trim_space(`
+set -o pipefail
+pipe_rc=$(false | true; printf '%s' $?)
+echo "PIPE_CMDSUB_STATUS:$pipe_rc"
+`),
+				required_probe_markers = []string{"PIPE_CMDSUB_STATUS:1"},
+				enforce_exit_code = true,
+				expected_exit_code = 0,
+			},
+			{
+				name = "probe_ansi_escape_preservation_bash_to_zsh",
+				from = .Bash,
+				to = .Zsh,
+				source = strings.trim_space(`
+ansi=$'\033[31mRED\033[0m'
+hex=$(printf '%s' "$ansi" | od -An -t x1 | tr -d ' \n')
+[ "$hex" = "1b5b33316d5245441b5b306d" ] && echo ANSI_OK
+`),
+				required_probe_markers = []string{"ANSI_OK"},
+				enforce_exit_code = true,
+				expected_exit_code = 0,
+			},
+			{
+				name = "probe_tput_fallback_integrity_bash_to_zsh",
+				from = .Bash,
+				to = .Zsh,
+				source = strings.trim_space(`
+tput sgr0 2>/dev/null || :
+printf '\033[0m'
+echo TPUT_OK
+`),
+				required_probe_markers = []string{"TPUT_OK"},
+				enforce_exit_code = true,
+				expected_exit_code = 0,
+			},
+			{
+				name = "probe_prompt_sequence_integrity_bash_to_zsh",
+				from = .Bash,
+				to = .Zsh,
+				source = strings.trim_space(`
+PS1=$'\[\033[32m\]shellx\[\033[0m\]$ '
+case "$PS1" in
+  *shellx* ) echo PROMPT_OK ;;
+esac
+`),
+				required_probe_markers = []string{"PROMPT_OK"},
 				enforce_exit_code = true,
 				expected_exit_code = 0,
 			},

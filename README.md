@@ -25,6 +25,7 @@ ShellX aims to provide a practical shell translation pipeline that is:
   - Parse -> IR -> optimize -> emit
 - Structured error reporting with source locations
 - Compatibility analysis and optional shim discovery
+- Runtime bridge shims for cross-shell hook/event and ZLE-widget compatibility
 - Batch and file-based translation APIs
 - Builder utilities for constructing scripts in tests/examples
 
@@ -148,6 +149,7 @@ defer delete(output)
 - [Architecture](docs/architecture.md)
 - [IR specification](docs/ir_spec.md)
 - [Compatibility matrix](docs/compatibility_matrix.md)
+- [Explicit failure boundaries](docs/compatibility_matrix.md#explicit-failure-boundaries)
 - [Contributing](CONTRIBUTING.md)
 
 ## Status
@@ -156,7 +158,7 @@ ShellX has reached a production baseline for corpus-covered plugin/theme transla
 
 - Parser matrix: `219/219` passes
 - Parser validation failures: `0`
-- Semantic differential checks: `36/36` passed
+- Semantic differential checks: `51/51` passed
 - Unit tests: `120/120` passed
 - No silent degradation: translation avoids no-op/stub fallback behavior
 
@@ -169,7 +171,13 @@ Baseline validated on **2026-02-14**:
 - Cross-dialect corpus runs: `219`
 - Parser matrix: `219/219` passes
 - Parser validation failures: `0`
-- Semantic differential checks: `36/36` passed
+- Semantic differential checks: `51/51` passed
+
+Notable baseline capabilities:
+
+- Hook/event bridge shims (`precmd`/`preexec`/Fish events) for runtime parity.
+- ZLE widget bridge for `zle -N` / `bindkey` flows when targeting Bash.
+- Semantic probes for async workers, signal traps, subshell boundaries, pipeline status, and terminal-control behavior.
 
 Reproduce:
 

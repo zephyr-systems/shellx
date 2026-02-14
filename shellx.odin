@@ -717,12 +717,19 @@ z() {
 					} else {
 						delete(rewritten_blockers)
 					}
-					rewritten_async_wait, changed_async_wait := rewrite_zsh_async_wait_pid_assignments(result.output, context.allocator)
-					if changed_async_wait {
+					rewritten_bg_amp, changed_bg_amp := rewrite_zsh_restore_background_subshell_ampersands(result.output, context.allocator)
+					if changed_bg_amp {
 						delete(result.output)
-						result.output = rewritten_async_wait
+						result.output = rewritten_bg_amp
 					} else {
-						delete(rewritten_async_wait)
+						delete(rewritten_bg_amp)
+					}
+					rewritten_subshell, changed_subshell := rewrite_zsh_restore_plain_subshell_closers(result.output, context.allocator)
+					if changed_subshell {
+						delete(result.output)
+						result.output = rewritten_subshell
+					} else {
+						delete(rewritten_subshell)
 					}
 				}
 			}
@@ -862,13 +869,22 @@ z() {
 			return result
 		}
 		if from == .Zsh && (to == .Bash || to == .POSIX) {
-			rewritten_async_wait_final, changed_async_wait_final := rewrite_zsh_async_wait_pid_assignments(result.output, context.allocator)
-			if changed_async_wait_final {
+			rewritten_assign_restore, changed_assign_restore := rewrite_zsh_restore_blank_assignments_from_source(result.output, source_code, context.allocator)
+			if changed_assign_restore {
 				delete(result.output)
-				result.output = rewritten_async_wait_final
+				result.output = rewritten_assign_restore
 			} else {
-				delete(rewritten_async_wait_final)
+				delete(rewritten_assign_restore)
 			}
+			rewritten_bg_amp_final, changed_bg_amp_final := rewrite_zsh_restore_background_subshell_ampersands(result.output, context.allocator)
+			if changed_bg_amp_final {
+				delete(result.output)
+				result.output = rewritten_bg_amp_final
+			} else {
+				delete(rewritten_bg_amp_final)
+			}
+			result.output, _ = replace_with_flag(result.output, "\n)\npid", "\n) &\npid", false, context.allocator)
+			result.output, _ = replace_with_flag(result.output, "\n)\nworker_pid", "\n) &\nworker_pid", false, context.allocator)
 		}
 		scan_shell_security_findings(&result, result.output, source_name, "translated")
 	prune_resolved_compat_warnings(&result, from, to)
@@ -1643,6 +1659,10 @@ has_hook_bridge_shim :: proc(required_shims: []string) -> bool {
 		has_required_shim(required_shims, "prompt_hooks")
 }
 
+has_zle_widget_bridge_shim :: proc(required_shims: []string) -> bool {
+	return has_required_shim(required_shims, "zle_widgets")
+}
+
 collect_runtime_polyfill_shims :: proc(
 	required_shims: ^[dynamic]string,
 	emitted: string,
@@ -1661,6 +1681,9 @@ collect_runtime_polyfill_shims :: proc(
 		strings.contains(emitted, "status ") ||
 		strings.contains(emitted, "typeset -") {
 		append_unique(required_shims, "runtime_polyfills")
+	}
+	if to == .Bash && (strings.contains(emitted, "zle -N ") || strings.contains(emitted, "bindkey ")) {
+		append_unique(required_shims, "zle_widgets")
 	}
 }
 
@@ -2350,6 +2373,16 @@ apply_shim_callsite_rewrites :: proc(
 		out, changed_any = replace_with_flag(out, "add-zsh-hook precmd ", "__shellx_register_precmd ", changed_any, allocator)
 		out, changed_any = replace_with_flag(out, "add-zsh-hook preexec ", "__shellx_register_preexec ", changed_any, allocator)
 	}
+	if has_zle_widget_bridge_shim(required_shims) && to == .Bash {
+		rewritten, changed := rewrite_zle_widget_callsites(out, allocator)
+		if changed {
+			delete(out)
+			out = rewritten
+			changed_any = true
+		} else {
+			delete(rewritten)
+		}
+	}
 
 	if has_array_bridge_shim(required_shims) {
 		if to == .Fish {
@@ -2482,6 +2515,104 @@ rewrite_fish_test_callsites_to_shim :: proc(text: string, allocator := context.a
 		}
 	}
 
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_zle_widget_callsites :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	for line, i in lines {
+		out_line := line
+		out_allocated := false
+		trimmed := strings.trim_space(line)
+		indent_len := len(line) - len(strings.trim_left_space(line))
+		indent := ""
+		if indent_len > 0 {
+			indent = line[:indent_len]
+		}
+
+		if strings.has_prefix(trimmed, "zle -N ") {
+			rest := strings.trim_space(trimmed[len("zle -N "):])
+			tokens := strings.fields(rest)
+			defer delete(tokens)
+			if len(tokens) >= 1 {
+				widget := tokens[0]
+				fn := widget
+				if len(tokens) >= 2 {
+					fn = tokens[1]
+				}
+				out_line = strings.concatenate([]string{indent, "__shellx_zle_register_widget ", widget, " ", fn}, allocator)
+				out_allocated = true
+				changed = true
+			}
+		} else if strings.has_prefix(trimmed, "bindkey ") {
+			rest := strings.trim_space(trimmed[len("bindkey "):])
+			tokens := strings.fields(rest)
+			defer delete(tokens)
+			pos := make([dynamic]string, 0, len(tokens), context.temp_allocator)
+			defer delete(pos)
+			j := 0
+			for j < len(tokens) {
+				tok := tokens[j]
+				if strings.has_prefix(tok, "-") {
+					if tok == "-M" && j+1 < len(tokens) {
+						j += 2
+						continue
+					}
+					j += 1
+					continue
+				}
+				append(&pos, tok)
+				j += 1
+			}
+			if len(pos) >= 2 {
+				key := pos[len(pos)-2]
+				widget := pos[len(pos)-1]
+				out_line = strings.concatenate([]string{indent, "__shellx_zle_bind ", key, " ", widget}, allocator)
+				out_allocated = true
+				changed = true
+			}
+		} else if strings.has_prefix(trimmed, "zle -R") {
+			out_line = strings.concatenate([]string{indent, "__shellx_zle_refresh"}, allocator)
+			out_allocated = true
+			changed = true
+		} else if strings.has_prefix(trimmed, "zle ") {
+			rest := strings.trim_space(trimmed[len("zle "):])
+			if strings.contains(rest, "&&") || strings.contains(rest, "||") || strings.contains(rest, ";") || strings.contains(rest, "|") {
+				strings.write_string(&builder, out_line)
+				if i+1 < len(lines) {
+					strings.write_byte(&builder, '\n')
+				}
+				continue
+			}
+			tokens := strings.fields(rest)
+			defer delete(tokens)
+			if len(tokens) >= 1 && !strings.has_prefix(tokens[0], "-") {
+				out_line = strings.concatenate([]string{indent, "__shellx_zle_invoke ", tokens[0]}, allocator)
+				out_allocated = true
+				changed = true
+			}
+		}
+
+		strings.write_string(&builder, out_line)
+		if out_allocated {
+			delete(out_line)
+		}
+		if i+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
 	if !changed {
 		return strings.clone(text, allocator), false
 	}
@@ -11578,8 +11709,8 @@ rewrite_syntax_highlighting_orphan_fi :: proc(text: string, allocator := context
 	return strings.clone(strings.to_string(builder), allocator), changed
 }
 
-rewrite_zsh_async_wait_pid_assignments :: proc(text: string, allocator := context.allocator) -> (string, bool) {
-	if !strings.contains(text, "(") || !strings.contains(text, "pid") {
+rewrite_zsh_restore_background_subshell_ampersands :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	if !strings.contains(text, "\n)") || !strings.contains(text, "=$!") {
 		return strings.clone(text, allocator), false
 	}
 	lines := strings.split_lines(text)
@@ -11590,46 +11721,39 @@ rewrite_zsh_async_wait_pid_assignments :: proc(text: string, allocator := contex
 	builder := strings.builder_make()
 	defer strings.builder_destroy(&builder)
 	changed := false
-	pending_bg_subshell := false
-	prev_sig := ""
+
 	for line, i in lines {
-		trimmed := strings.trim_space(line)
 		out_line := line
 		out_alloc := false
-
-		if trimmed == "(" {
-			pending_bg_subshell = true
-		}
-
-		eq := strings.index_byte(trimmed, '=')
-		if eq > 0 && eq == len(trimmed)-1 {
-			name := strings.trim_space(trimmed[:eq])
-			name_is_simple := name != "" && !strings.contains(name, " ") && !strings.contains(name, "\t")
-			name_is_pid := strings.contains(name, "pid")
-			if name_is_simple && pending_bg_subshell && name_is_pid {
-				indent_len := len(line) - len(strings.trim_left_space(line))
-				indent := ""
-				if indent_len > 0 {
-					indent = line[:indent_len]
+		trimmed := strings.trim_space(line)
+		if trimmed == ")" {
+			next_sig := ""
+			for j := i + 1; j < len(lines); j += 1 {
+				candidate := strings.trim_space(lines[j])
+				if candidate == "" || strings.has_prefix(candidate, "#") {
+					continue
 				}
-				strings.write_string(&builder, strings.concatenate([]string{indent, ") &"}, allocator))
-				strings.write_byte(&builder, '\n')
-				out_line = strings.concatenate([]string{indent, name, "=$!"}, allocator)
-				out_alloc = true
-				pending_bg_subshell = false
-				changed = true
-			} else if name_is_simple && strings.has_prefix(prev_sig, "wait ") {
-				indent_len := len(line) - len(strings.trim_left_space(line))
-				indent := ""
-				if indent_len > 0 {
-					indent = line[:indent_len]
+				next_sig = candidate
+				break
+			}
+			if next_sig != "" {
+				eq := strings.index_byte(next_sig, '=')
+				if eq > 0 {
+					name := strings.trim_space(next_sig[:eq])
+					value := strings.trim_space(next_sig[eq+1:])
+					if is_simple_assign_name(name) && strings.contains(name, "pid") && (value == "$!" || value == "") {
+						indent_len := len(line) - len(strings.trim_left_space(line))
+						indent := ""
+						if indent_len > 0 {
+							indent = line[:indent_len]
+						}
+						out_line = strings.concatenate([]string{indent, ") &"}, allocator)
+						out_alloc = true
+						changed = true
+					}
 				}
-				out_line = strings.concatenate([]string{indent, name, "=$?"}, allocator)
-				out_alloc = true
-				changed = true
 			}
 		}
-
 		strings.write_string(&builder, out_line)
 		if out_alloc {
 			delete(out_line)
@@ -11637,12 +11761,183 @@ rewrite_zsh_async_wait_pid_assignments :: proc(text: string, allocator := contex
 		if i+1 < len(lines) {
 			strings.write_byte(&builder, '\n')
 		}
-		if trimmed != "" && !strings.has_prefix(trimmed, "#") {
-			prev_sig = trimmed
-		}
 	}
 	if !changed {
 		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+rewrite_zsh_restore_plain_subshell_closers :: proc(text: string, allocator := context.allocator) -> (string, bool) {
+	if !strings.contains(text, "\n(") {
+		return strings.clone(text, allocator), false
+	}
+	lines := strings.split_lines(text)
+	defer delete(lines)
+	if len(lines) == 0 {
+		return strings.clone(text, allocator), false
+	}
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+	paren_depth := 0
+	for line, i in lines {
+		trimmed := strings.trim_space(line)
+		indent_len := len(line) - len(strings.trim_left_space(line))
+		top_level_stmt := trimmed != "" &&
+			!strings.has_prefix(trimmed, "#") &&
+			indent_len == 0 &&
+			trimmed != "(" &&
+			!strings.has_prefix(trimmed, ")")
+
+		if paren_depth > 0 && top_level_stmt {
+			for paren_depth > 0 {
+				strings.write_string(&builder, ")")
+				strings.write_byte(&builder, '\n')
+				paren_depth -= 1
+				changed = true
+			}
+		}
+
+		if trimmed == "(" {
+			paren_depth += 1
+		} else if strings.has_prefix(trimmed, ")") {
+			if paren_depth > 0 {
+				paren_depth -= 1
+			}
+		}
+
+		strings.write_string(&builder, line)
+		if i+1 < len(lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+	for paren_depth > 0 {
+		if len(lines) > 0 {
+			strings.write_byte(&builder, '\n')
+		}
+		strings.write_string(&builder, ")")
+		paren_depth -= 1
+		changed = true
+	}
+	if !changed {
+		return strings.clone(text, allocator), false
+	}
+	return strings.clone(strings.to_string(builder), allocator), true
+}
+
+is_simple_assign_name :: proc(s: string) -> bool {
+	if len(s) == 0 {
+		return false
+	}
+	for i, ch in s {
+		if i == 0 {
+			if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_') {
+				return false
+			}
+			continue
+		}
+		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_') {
+			return false
+		}
+	}
+	return true
+}
+
+rewrite_zsh_restore_blank_assignments_from_source :: proc(output, source: string, allocator := context.allocator) -> (string, bool) {
+	if !strings.contains(output, "=\n") {
+		return strings.clone(output, allocator), false
+	}
+	source_lines := strings.split_lines(source)
+	defer delete(source_lines)
+	if len(source_lines) == 0 {
+		return strings.clone(output, allocator), false
+	}
+	assign_names := make([dynamic]string, 0, len(source_lines), allocator)
+	defer {
+		for v in assign_names {
+			delete(v)
+		}
+		delete(assign_names)
+	}
+	assign_lines := make([dynamic]string, 0, len(source_lines), allocator)
+	defer {
+		for v in assign_lines {
+			delete(v)
+		}
+		delete(assign_lines)
+	}
+	for src_line in source_lines {
+		src_trimmed := strings.trim_space(src_line)
+		src_eq := strings.index_byte(src_trimmed, '=')
+		if src_eq <= 0 || src_eq >= len(src_trimmed)-1 {
+			continue
+		}
+		src_name := strings.trim_space(src_trimmed[:src_eq])
+		if !is_simple_assign_name(src_name) {
+			continue
+		}
+		src_val := strings.trim_space(src_trimmed[src_eq+1:])
+		if src_val == "" {
+			continue
+		}
+		already := false
+		for existing in assign_names {
+			if existing == src_name {
+				already = true
+				break
+			}
+		}
+		if already {
+			continue
+		}
+		append(&assign_names, strings.clone(src_name, allocator))
+		append(&assign_lines, strings.clone(src_trimmed, allocator))
+	}
+	if len(assign_names) == 0 {
+		return strings.clone(output, allocator), false
+	}
+
+	output_lines := strings.split_lines(output)
+	defer delete(output_lines)
+	builder := strings.builder_make()
+	defer strings.builder_destroy(&builder)
+	changed := false
+
+	for line, i in output_lines {
+		out_line := line
+		out_alloc := false
+		trimmed := strings.trim_space(line)
+		eq := strings.index_byte(trimmed, '=')
+		if eq > 0 && eq == len(trimmed)-1 {
+			name := strings.trim_space(trimmed[:eq])
+			if is_simple_assign_name(name) {
+				for src_name, k in assign_names {
+					if src_name != name {
+						continue
+					}
+					indent_len := len(line) - len(strings.trim_left_space(line))
+					indent := ""
+					if indent_len > 0 {
+						indent = line[:indent_len]
+					}
+					out_line = strings.concatenate([]string{indent, assign_lines[k]}, allocator)
+					out_alloc = true
+					changed = true
+					break
+				}
+			}
+		}
+		strings.write_string(&builder, out_line)
+		if out_alloc {
+			delete(out_line)
+		}
+		if i+1 < len(output_lines) {
+			strings.write_byte(&builder, '\n')
+		}
+	}
+	if !changed {
+		return strings.clone(output, allocator), false
 	}
 	return strings.clone(strings.to_string(builder), allocator), true
 }

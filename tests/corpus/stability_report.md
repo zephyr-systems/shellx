@@ -17,9 +17,9 @@ Cross-dialect runs executed: 219
 | posix->bash | 3 | 3/3 | 3/3 | 3/3 | 0 | 3/3 | 0/0 | 2 | 3 | 1.000 | 1.000 | 0 |
 | posix->fish | 3 | 3/3 | 3/3 | 3/3 | 0 | 3/3 | 0/0 | 2 | 0 | 0.909 | 4.692 | 3 |
 | posix->zsh | 3 | 3/3 | 3/3 | 3/3 | 0 | 3/3 | 0/0 | 2 | 3 | 1.000 | 0.000 | 0 |
-| zsh->bash | 29 | 29/29 | 29/29 | 29/29 | 0 | 22/22 | 7/7 | 12 | 0 | 2.840 | 5.895 | 17 |
-| zsh->fish | 29 | 29/29 | 29/29 | 29/29 | 0 | 22/22 | 7/7 | 12 | 0 | 9.034 | 9.162 | 29 |
-| zsh->posix | 29 | 29/29 | 29/29 | 29/29 | 0 | 22/22 | 7/7 | 12 | 1 | 3.495 | 13.544 | 22 |
+| zsh->bash | 29 | 29/29 | 29/29 | 29/29 | 0 | 22/22 | 7/7 | 12 | 6 | 3.095 | 6.452 | 18 |
+| zsh->fish | 29 | 29/29 | 29/29 | 29/29 | 0 | 22/22 | 7/7 | 12 | 0 | 9.092 | 9.162 | 29 |
+| zsh->posix | 29 | 29/29 | 29/29 | 29/29 | 0 | 22/22 | 7/7 | 12 | 7 | 3.491 | 13.544 | 22 |
 
 ## Failures
 
@@ -109,6 +109,12 @@ Cross-dialect runs executed: 219
 
 ### zsh->bash
 
+- `compat_shim_inserted/zle_widgets`: 6
+  - zsh-autosuggestions (plugin) Compat[zle_widgets]: ZLE widgets/key bindings are Zsh-specific and need runtime emulation
+  - zsh-syntax-highlighting (plugin) Compat[zle_widgets]: ZLE widgets/key bindings are Zsh-specific and need runtime emulation
+  - ohmyzsh-sudo (plugin) Compat[zle_widgets]: ZLE widgets/key bindings are Zsh-specific and need runtime emulation
+  - zsh-you-should-use (plugin) Compat[zle_widgets]: ZLE widgets/key bindings are Zsh-specific and need runtime emulation
+  - fast-syntax-highlighting (plugin) Compat[zle_widgets]: ZLE widgets/key bindings are Zsh-specific and need runtime emulation
 - `parse_recovery/parse_diagnostic`: 12
   - zsh-nvm (plugin) Parse diagnostic at <input>:1:1: Syntax error
   - zsh-nvm (plugin) Parse diagnostic at <input>:208:34: Syntax error
@@ -129,6 +135,12 @@ Cross-dialect runs executed: 219
 
 - `arrays_maps/indexed_arrays`: 1
   - zsh-pure-theme (theme) Compat[indexed_arrays]: Array features are not POSIX portable
+- `compat_shim_inserted/zle_widgets`: 6
+  - zsh-autosuggestions (plugin) Compat[zle_widgets]: ZLE widgets/key bindings are Zsh-specific and need runtime emulation
+  - zsh-syntax-highlighting (plugin) Compat[zle_widgets]: ZLE widgets/key bindings are Zsh-specific and need runtime emulation
+  - ohmyzsh-sudo (plugin) Compat[zle_widgets]: ZLE widgets/key bindings are Zsh-specific and need runtime emulation
+  - zsh-you-should-use (plugin) Compat[zle_widgets]: ZLE widgets/key bindings are Zsh-specific and need runtime emulation
+  - fast-syntax-highlighting (plugin) Compat[zle_widgets]: ZLE widgets/key bindings are Zsh-specific and need runtime emulation
 - `parse_recovery/parse_diagnostic`: 12
   - zsh-nvm (plugin) Parse diagnostic at <input>:1:1: Syntax error
   - zsh-nvm (plugin) Parse diagnostic at <input>:208:34: Syntax error
@@ -159,7 +171,7 @@ Cross-dialect runs executed: 219
 
 ## Semantic Differential Checks
 
-Cases: 40, Passed: 40, Skipped: 0
+Cases: 51, Passed: 51, Skipped: 0
 
 ### Semantic Pair Summary
 
@@ -169,10 +181,10 @@ Cases: 40, Passed: 40, Skipped: 0
 | fish->posix | 1 | 1 | 0 | 0 |
 | fish->zsh | 2 | 2 | 0 | 0 |
 | zsh->fish | 5 | 5 | 0 | 0 |
-| zsh->bash | 13 | 13 | 0 | 0 |
+| zsh->bash | 21 | 21 | 0 | 0 |
 | zsh->posix | 5 | 5 | 0 | 0 |
 | bash->fish | 3 | 3 | 0 | 0 |
-| bash->zsh | 1 | 1 | 0 | 0 |
+| bash->zsh | 4 | 4 | 0 | 0 |
 | posix->fish | 1 | 1 | 0 | 0 |
 | posix->zsh | 1 | 1 | 0 | 0 |
 | posix->bash | 1 | 1 | 0 | 0 |
@@ -207,10 +219,21 @@ Cases: 40, Passed: 40, Skipped: 0
 - [PASS] plugin_ohmyzsh_copyfile_cond_param_zsh_to_bash zsh->bash exit=0 out="PARAM_OK\nCOND_OK\nHAVE_COPYFILE"
 - [PASS] plugin_ysu_hooks_events_zsh_to_bash zsh->bash exit=0 out="HOOKS_OK"
 - [PASS] probe_zsh_hook_order_precmd_chain_zsh_to_bash zsh->bash exit=0 out="ONE\nTWO"
+- [PASS] probe_zle_widget_bridge_buffer_cursor_zsh_to_bash zsh->bash exit=0 out="ZLE_BUF:aXb CUR:2"
 - [PASS] probe_async_worker_wait_order_zsh_to_bash zsh->bash exit=0 out="BEFORE_WAIT\nASYNC_DONE\nAFTER_WAIT"
 - [PASS] probe_async_two_worker_pid_wait_order_zsh_to_bash zsh->bash exit=0 out="BEFORE_WAIT\nWORKER2_DONE\nWORKER1_DONE\nAFTER_WAIT pid1=11 pid2=22"
 - [PASS] probe_async_signal_cleanup_zsh_to_bash zsh->bash exit=130 out="BEFORE_SLEEP\nWORKER_START\nSENDING_SIGINT\nCLEANUP"
 - [PASS] probe_async_nested_worker_hierarchy_zsh_to_bash zsh->bash exit=0 out="BEFORE_WAIT\nWORKER1_START\nWORKER2_START\nWORKER2_DONE\nWORKER1_DONE code2=22\nAFTER_WAIT code1=11"
+- [PASS] probe_signal_trap_compose_exit_zsh_to_bash zsh->bash exit=0 out="BODY\nEXIT_A\nEXIT_B"
+- [PASS] probe_signal_trap_compose_int_exit_zsh_to_bash zsh->bash exit=130 out="BEFORE\nINT_A\nINT_B\nEXIT_A\nEXIT_B"
+- [PASS] probe_signal_trap_worker_cleanup_zsh_to_bash zsh->bash exit=130 out="READY\nWORKER_START\nINT_TRAP\nINT_DONE\nEXIT_TRAP"
+- [PASS] probe_subshell_scope_boundary_zsh_to_bash zsh->bash exit=0 out="IN_SUBSHELL:inner\nOUTSIDE:outer"
+- [PASS] probe_command_substitution_exit_capture_zsh_to_bash zsh->bash exit=0 out="SUB_OUT\nSTATUS:7"
+- [PASS] probe_pipeline_exit_guard_zsh_to_bash zsh->bash exit=0 out="PIPE_STATUS:0"
+- [PASS] probe_pipeline_status_array_zsh_to_bash zsh->bash exit=0 out="PIPE_CMDSUB_STATUS:1"
+- [PASS] probe_ansi_escape_preservation_bash_to_zsh bash->zsh exit=0 out="ANSI_OK"
+- [PASS] probe_tput_fallback_integrity_bash_to_zsh bash->zsh exit=0 out="\e(B\e[m\e[0mTPUT_OK"
+- [PASS] probe_prompt_sequence_integrity_bash_to_zsh bash->zsh exit=0 out="PROMPT_OK"
 - [PASS] plugin_zsh_nvm_param_zsh_to_posix zsh->posix exit=0 out="PARAM_OK\nHAVE_NVM_LOAD"
 - [PASS] plugin_zsh_assoc_sparse_zsh_to_bash zsh->bash exit=0 out="ARR_SPARSE_OK"
 - [PASS] plugin_fish_kv_iter_fish_to_zsh fish->zsh exit=0 out="KV:f=fetch\nKV:c=commit"

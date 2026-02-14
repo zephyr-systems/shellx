@@ -87,6 +87,7 @@ UsedFeatures :: struct {
 	fish_events:         bool,
 	prompt_hooks:        bool,
 	hooks_events:        bool,
+	zle_widgets:         bool,
 	parameter_expansion: bool,
 	process_substitution: bool,
 }
@@ -131,6 +132,22 @@ mark_hook_features_from_text :: proc(text: string, features: ^UsedFeatures) {
 		features.prompt_hooks = true
 	}
 	features.hooks_events = features.zsh_hooks || features.fish_events || features.prompt_hooks
+}
+
+mark_zle_features_from_text :: proc(text: string, features: ^UsedFeatures) {
+	if text == "" {
+		return
+	}
+	if strings.contains(text, "zle -N ") ||
+		strings.contains(text, "bindkey ") ||
+		strings.contains(text, " zle ") ||
+		strings.has_prefix(strings.trim_space(text), "zle ") ||
+		strings.contains(text, "BUFFER") ||
+		strings.contains(text, "CURSOR") ||
+		strings.contains(text, "LBUFFER") ||
+		strings.contains(text, "RBUFFER") {
+		features.zle_widgets = true
+	}
 }
 
 contains_any :: proc(text: string, patterns: []string) -> bool {
@@ -236,6 +253,7 @@ mark_features_from_text :: proc(text: string, features: ^UsedFeatures) {
 	features.fish_list_indexing = features.fish_list_indexing || has_fish_list_indexing_indicators(text)
 	features.arrays_lists = features.indexed_arrays || features.assoc_arrays || features.fish_list_indexing || has_array_list_indicators(text)
 	mark_hook_features_from_text(text, features)
+	mark_zle_features_from_text(text, features)
 }
 
 scan_expr_features :: proc(expr: ir.Expression, features: ^UsedFeatures) {
@@ -299,6 +317,9 @@ scan_call_features :: proc(call: ir.Call, features: ^UsedFeatures) {
 				features.fish_events = true
 			}
 			features.hooks_events = true
+		}
+		if name == "zle" || name == "bindkey" {
+			features.zle_widgets = true
 		}
 	}
 
@@ -399,6 +420,7 @@ scan_source_features :: proc(source_code: string) -> UsedFeatures {
 		features.arrays_lists = true
 	}
 	mark_hook_features_from_text(source_code, &features)
+	mark_zle_features_from_text(source_code, &features)
 	if strings.contains(source_code, "${") {
 		features.parameter_expansion = true
 	}
@@ -434,6 +456,7 @@ check_compatibility :: proc(
 	features.fish_events = features.fish_events || source_features.fish_events
 	features.prompt_hooks = features.prompt_hooks || source_features.prompt_hooks
 	features.hooks_events = features.hooks_events || source_features.hooks_events
+	features.zle_widgets = features.zle_widgets || source_features.zle_widgets
 	features.parameter_expansion = features.parameter_expansion || source_features.parameter_expansion
 	features.process_substitution = features.process_substitution || source_features.process_substitution
 
@@ -589,6 +612,15 @@ check_compatibility :: proc(
 				.Warning,
 				"Zsh hook APIs (precmd/preexec/add-zsh-hook) do not map directly",
 				"Use hook bridge shims and explicit registration wrappers",
+			)
+		}
+		if features.zle_widgets {
+			add_warning(
+				&result,
+				"zle_widgets",
+				.Warning,
+				"ZLE widgets/key bindings are Zsh-specific and need runtime emulation",
+				"Use zle widget bridge shim (zle -N/bindkey -> __shellx_zle_* runtime)",
 			)
 		}
 	}

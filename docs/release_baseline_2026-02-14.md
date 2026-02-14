@@ -1,6 +1,6 @@
 # Release Baseline (2026-02-14)
 
-This file freezes the validated state used for ShellX `0.2.0`.
+This file freezes the validated state used for ShellX `0.4.0`.
 
 ## Commands
 - `odin test . -all-packages`
@@ -14,4 +14,8 @@ This file freezes the validated state used for ShellX `0.2.0`.
 - Cross-dialect runs: `219`.
 - Parser matrix: `219/219` passes.
 - Parser validation failures: none.
-- Semantic differential checks: `36/36` passed.
+- Semantic differential checks: `51/51` passed.
+
+## Included runtime parity bridges
+- Hook/event bridge shims (`precmd`/`preexec`/Fish events).
+- ZLE widget bridge for Zsh widget/keybind patterns translated to Bash runtime helpers.

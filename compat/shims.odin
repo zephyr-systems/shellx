@@ -167,6 +167,8 @@ needs_shim :: proc(feature: string, from: ir.ShellDialect, to: ir.ShellDialect) 
 		return to == .Fish || from == .Fish || to == .POSIX
 	case "hooks_events", "zsh_hooks", "fish_events", "prompt_hooks":
 		return from != to
+	case "zle_widgets":
+		return from == .Zsh && to == .Bash
 	case "runtime_polyfills", "framework_metadata", "zsh_runtime", "fish_runtime", "typeset_compat":
 		return to != .Fish
 	}
@@ -187,6 +189,8 @@ shim_feature_group :: proc(feature: string) -> string {
 		return "hooks_events"
 	case "zsh_hooks", "fish_events", "prompt_hooks":
 		return "hooks_events"
+	case "zle_widgets":
+		return "zle_widgets"
 	case "runtime_polyfills", "framework_metadata", "zsh_runtime", "fish_runtime", "typeset_compat":
 		return "runtime_polyfills"
 	}
@@ -698,6 +702,154 @@ __shellx_enable_hooks
 	return ""
 }
 
+generate_zle_widget_bridge_shim :: proc(to: ir.ShellDialect) -> string {
+	switch to {
+	case .Bash:
+		return strings.trim_space(`
+declare -g BUFFER="${BUFFER-}"
+declare -g LBUFFER="${LBUFFER-}"
+declare -g RBUFFER="${RBUFFER-}"
+declare -gi CURSOR="${CURSOR-0}"
+declare -g SHELLX_ZLE_LASTWIDGET="${SHELLX_ZLE_LASTWIDGET-}"
+declare -g SHELLX_ZLE_WIDGET="${SHELLX_ZLE_WIDGET-}"
+declare -gA SHELLX_ZLE_WIDGET_FN
+declare -gA SHELLX_ZLE_KEY_WIDGET
+
+__shellx_zle_sync_from_readline() {
+  if [ -n "${READLINE_LINE+x}" ]; then
+    BUFFER="${READLINE_LINE-}"
+  fi
+  if [ -n "${READLINE_POINT+x}" ]; then
+    CURSOR="${READLINE_POINT-0}"
+  fi
+  [ -n "${BUFFER-}" ] || BUFFER=""
+  case "${CURSOR-0}" in
+    ''|*[!0-9]*) CURSOR=0 ;;
+  esac
+  if [ "$CURSOR" -lt 0 ]; then
+    CURSOR=0
+  fi
+  if [ "$CURSOR" -gt "${#BUFFER}" ]; then
+    CURSOR=${#BUFFER}
+  fi
+  LBUFFER="${BUFFER:0:CURSOR}"
+  RBUFFER="${BUFFER:CURSOR}"
+}
+
+__shellx_zle_sync_to_readline() {
+  BUFFER="${LBUFFER}${RBUFFER}"
+  CURSOR=${#LBUFFER}
+  if [ -n "${READLINE_LINE+x}" ]; then
+    READLINE_LINE="$BUFFER"
+  fi
+  if [ -n "${READLINE_POINT+x}" ]; then
+    READLINE_POINT="$CURSOR"
+  fi
+}
+
+__shellx_zle_register_widget() {
+  [ -n "${1-}" ] || return 1
+  _zx_widget="$1"
+  _zx_fn="${2:-$1}"
+  SHELLX_ZLE_WIDGET_FN["$_zx_widget"]="$_zx_fn"
+  return 0
+}
+
+__shellx_zle_bind() {
+  [ -n "${1-}" ] || return 1
+  [ -n "${2-}" ] || return 1
+  _zx_key="$1"
+  _zx_widget="$2"
+  SHELLX_ZLE_KEY_WIDGET["$_zx_key"]="$_zx_widget"
+  if [ -n "${BASH_VERSION-}" ]; then
+    bind -x "\"$_zx_key\":__shellx_zle_key_dispatch '$_zx_key'" >/dev/null 2>&1 || true
+  fi
+  return 0
+}
+
+__shellx_zle_invoke() {
+  [ -n "${1-}" ] || return 1
+  _zx_widget="$1"
+  _zx_fn="${SHELLX_ZLE_WIDGET_FN[$_zx_widget]-}"
+  [ -n "$_zx_fn" ] || _zx_fn="$_zx_widget"
+  command -v "$_zx_fn" >/dev/null 2>&1 || return 1
+  SHELLX_ZLE_LASTWIDGET="${SHELLX_ZLE_WIDGET-}"
+  SHELLX_ZLE_WIDGET="$_zx_widget"
+  __shellx_zle_sync_from_readline
+  "$_zx_fn" "${@:2}"
+  _zx_rc=$?
+  __shellx_zle_sync_to_readline
+  return $_zx_rc
+}
+
+__shellx_zle_key_dispatch() {
+  [ -n "${1-}" ] || return 1
+  _zx_widget="${SHELLX_ZLE_KEY_WIDGET[$1]-}"
+  [ -n "$_zx_widget" ] || return 1
+  __shellx_zle_invoke "$_zx_widget"
+}
+
+__shellx_zle_refresh() {
+  __shellx_zle_sync_to_readline
+}
+
+zle() {
+  case "${1-}" in
+    -N)
+      [ -n "${2-}" ] || return 1
+      __shellx_zle_register_widget "$2" "${3:-$2}"
+      ;;
+    -D)
+      [ -n "${2-}" ] || return 1
+      unset 'SHELLX_ZLE_WIDGET_FN[$2]'
+      ;;
+    -R)
+      __shellx_zle_refresh
+      ;;
+    -l)
+      printf '%s\n' "${!SHELLX_ZLE_WIDGET_FN[@]}"
+      ;;
+    *)
+      __shellx_zle_invoke "$@"
+      ;;
+  esac
+}
+
+bindkey() {
+  [ "$#" -gt 0 ] || return 1
+  _zx_mode=""
+  _zx_args=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -M)
+        shift
+        [ "$#" -gt 0 ] && _zx_mode="$1"
+        ;;
+      -e|-v|-a|-s|-r|-R|-L|-l)
+        ;;
+      *)
+        if [ -z "$_zx_args" ]; then
+          _zx_args="$1"
+        else
+          _zx_args="$_zx_args
+$1"
+        fi
+        ;;
+    esac
+    shift
+  done
+  _zx_key="$(printf '%s\n' "$_zx_args" | sed -n '1p')"
+  _zx_widget="$(printf '%s\n' "$_zx_args" | sed -n '$p')"
+  [ -n "$_zx_key" ] && [ -n "$_zx_widget" ] || return 1
+  __shellx_zle_bind "$_zx_key" "$_zx_widget"
+}
+`)
+	case .Zsh, .Fish, .POSIX:
+		return ""
+	}
+	return ""
+}
+
 generate_runtime_polyfill_shim :: proc(to: ir.ShellDialect) -> string {
 	switch to {
 	case .Fish:
@@ -1089,6 +1241,8 @@ generate_shim_code :: proc(feature: string, from: ir.ShellDialect, to: ir.ShellD
 		return generate_condition_semantics_shim(to)
 	case "hooks_events":
 		return generate_hook_event_shim(to)
+	case "zle_widgets":
+		return generate_zle_widget_bridge_shim(to)
 	case "process_substitution":
 		return generate_process_substitution_bridge_shim(to)
 	case "runtime_polyfills":

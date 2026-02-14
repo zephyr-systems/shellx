@@ -66,6 +66,10 @@ convert_zsh_node :: proc(
 		ir.add_statement(program, stmt)
 		return
 	case "list":
+		if zsh_list_has_background_operator(node, source) {
+			append_zsh_raw_statements(arena, &program.statements, node, source)
+			return
+		}
 		stmt, ok := convert_zsh_list_to_logical_statement(arena, node, source)
 		if ok {
 			ir.add_statement(program, stmt)
@@ -75,7 +79,7 @@ convert_zsh_node :: proc(
 	case "ERROR":
 		recover_zsh_top_level_error(arena, program, node, source)
 		return
-	case "negated_command", "binary_expression", "unary_expression", "subshell":
+	case "negated_command", "binary_expression", "unary_expression", "subshell", "pipeline", "backgrounded_statement":
 		append_zsh_raw_statements(arena, &program.statements, node, source)
 		return
 	}
@@ -235,6 +239,10 @@ convert_zsh_statement :: proc(
 		stmt := convert_zsh_return_to_statement(arena, node, source)
 		append(body, stmt)
 	case "list":
+		if zsh_list_has_background_operator(node, source) {
+			append_zsh_raw_statements(arena, body, node, source)
+			return
+		}
 		stmt, ok := convert_zsh_list_to_logical_statement(arena, node, source)
 		if ok {
 			append(body, stmt)
@@ -249,7 +257,7 @@ convert_zsh_statement :: proc(
 	case "ERROR":
 		// Preserve parse-recovery fragments as raw command lines.
 		append_zsh_raw_statements(arena, body, node, source)
-	case "negated_command", "binary_expression", "unary_expression", "subshell":
+	case "negated_command", "binary_expression", "unary_expression", "subshell", "pipeline", "backgrounded_statement":
 		// Preserve higher-level shell forms that we do not structurally model yet.
 		append_zsh_raw_statements(arena, body, node, source)
 	case:
@@ -261,6 +269,20 @@ convert_zsh_statement :: proc(
 			}
 		}
 	}
+}
+
+zsh_list_has_background_operator :: proc(node: ts.Node, source: string) -> bool {
+	for i in 0 ..< child_count(node) {
+		ch := child(node, i)
+		if is_named(ch) {
+			continue
+		}
+		token := strings.trim_space(node_text(context.temp_allocator, ch, source))
+		if token == "&" {
+			return true
+		}
+	}
+	return false
 }
 
 convert_zsh_declaration_or_command_to_statement :: proc(
@@ -804,11 +826,27 @@ convert_zsh_assignment_to_statement :: proc(
 
 		if child_type == "variable_name" {
 			variable_name = intern_node_text(arena, child, source)
-		} else if child_type == "word" || child_type == "number" {
+		} else if child_type == "word" ||
+			child_type == "number" ||
+			child_type == "string" ||
+			child_type == "raw_string" ||
+			child_type == "expansion" ||
+			child_type == "simple_expansion" ||
+			child_type == "parameter_expansion" ||
+			child_type == "command_substitution" ||
+			child_type == "concatenation" ||
+			child_type == "special_variable_name" {
 			value = text_to_expression(
 				arena,
 				intern_node_text(arena, child, source),
 			)
+		} else if is_named(child) && child_type != "comment" {
+			// Preserve unexpected assignment value nodes (e.g. parse-recovery fragments)
+			// instead of silently dropping RHS to an empty assignment.
+			text := strings.trim_space(intern_node_text(arena, child, source))
+			if text != "" {
+				value = text_to_expression(arena, text)
+			}
 		}
 	}
 

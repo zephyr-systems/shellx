@@ -49,3 +49,15 @@ Most common high-friction paths:
 - Process substitution in Fish: temp-file based workaround.
 - Parameter expansion in Fish: use `string` builtin equivalents.
 - POSIX target: avoid shell-specific extensions (`[[ ]]`, associative arrays, etc.).
+
+## Explicit Failure Boundaries
+
+ShellX fails explicitly (never silently) for these constructs:
+
+| Construct | Target | Reason |
+|---|---|---|
+| `zle`, `bindkey` | POSIX | No readline editing API in POSIX `sh`; keybinding/widget semantics cannot be preserved |
+| Zsh `zstyle` theming | POSIX | No equivalent style/theming model in POSIX shell |
+| Fish `abbr` | POSIX | Abbreviation expansion is interactive-shell behavior with no POSIX equivalent |
+
+For corpus-covered paths outside these boundaries, ShellX targets behavioral parity and reports degraded/unsupported features in `TranslationResult` metadata.
