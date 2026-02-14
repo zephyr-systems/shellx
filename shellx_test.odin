@@ -2230,8 +2230,24 @@ test_scan_security_policy_validate_and_load :: proc(t: ^testing.T) {
 	}
 	testing.expect(t, len(errs) >= 2, "policy validator should return multiple actionable errors")
 
-	json_data := `{"use_builtin_rules":true,"block_threshold":2}`
-	_, load_errs, ok := load_security_policy_json(json_data)
+	json_data := `{
+		"use_builtin_rules": true,
+		"block_threshold": "High",
+		"ruleset_version": "zephyr-policy-test",
+		"custom_rules": [{
+			"rule_id": "zephyr.r1",
+			"enabled": true,
+			"severity": "High",
+			"match_kind": "Substring",
+			"pattern": "eval ",
+			"category": "execution",
+			"confidence": 0.9,
+			"phases": ["Source"],
+			"message": "m",
+			"suggestion": "s"
+		}]
+	}`
+	loaded_policy, load_errs, ok := load_security_policy_json(json_data)
 	defer {
 		for e in load_errs {
 			delete(e.rule_id)
@@ -2240,6 +2256,31 @@ test_scan_security_policy_validate_and_load :: proc(t: ^testing.T) {
 			delete(e.snippet)
 		}
 		delete(load_errs)
+		for s in loaded_policy.allowlist_paths {
+			delete(s)
+		}
+		delete(loaded_policy.allowlist_paths)
+		for s in loaded_policy.allowlist_commands {
+			delete(s)
+		}
+		delete(loaded_policy.allowlist_commands)
+		for r in loaded_policy.custom_rules {
+			delete(r.rule_id)
+			delete(r.pattern)
+			delete(r.category)
+			delete(r.command_name)
+			delete(r.arg_pattern)
+			delete(r.message)
+			delete(r.suggestion)
+		}
+		delete(loaded_policy.custom_rules)
+		for o in loaded_policy.rule_overrides {
+			delete(o.rule_id)
+		}
+		delete(loaded_policy.rule_overrides)
+		if loaded_policy.ruleset_version != "" {
+			delete(loaded_policy.ruleset_version)
+		}
 	}
 	testing.expect(t, ok, "valid policy JSON should load and validate")
 	testing.expect(t, len(load_errs) == 0, "valid policy JSON should not produce validation errors")

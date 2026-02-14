@@ -967,11 +967,299 @@ load_security_policy_json :: proc(data: string) -> (SecurityScanPolicy, [dynamic
 		scanner_append_policy_error(&errs, "sec.policy.load", "Policy JSON is empty", "Provide valid policy JSON")
 		return policy, errs, false
 	}
-	if err := json.unmarshal_string(data, &policy); err != nil {
+
+	parse_bool :: proc(v: json.Value) -> (bool, bool) {
+		#partial switch b in v {
+		case json.Boolean:
+			return bool(b), true
+		}
+		return false, false
+	}
+	parse_int :: proc(v: json.Value) -> (int, bool) {
+		#partial switch n in v {
+		case json.Integer:
+			return int(n), true
+		case json.Float:
+			return int(n), true
+		}
+		return 0, false
+	}
+	parse_f32 :: proc(v: json.Value) -> (f32, bool) {
+		#partial switch n in v {
+		case json.Integer:
+			return f32(n), true
+		case json.Float:
+			return f32(n), true
+		}
+		return 0, false
+	}
+	parse_string :: proc(v: json.Value) -> (string, bool) {
+		#partial switch s in v {
+		case json.String:
+			return string(s), true
+		}
+		return "", false
+	}
+	parse_severity :: proc(v: json.Value) -> (FindingSeverity, bool) {
+		if i, ok := parse_int(v); ok {
+			switch i {
+			case 0:
+				return .Info, true
+			case 1:
+				return .Warning, true
+			case 2:
+				return .High, true
+			case 3:
+				return .Critical, true
+			}
+		}
+		if s, ok := parse_string(v); ok {
+			if strings.equal_fold(s, "info") {
+				return .Info, true
+			}
+			if strings.equal_fold(s, "warning") || strings.equal_fold(s, "warn") {
+				return .Warning, true
+			}
+			if strings.equal_fold(s, "high") {
+				return .High, true
+			}
+			if strings.equal_fold(s, "critical") {
+				return .Critical, true
+			}
+		}
+		return .Info, false
+	}
+	parse_match_kind :: proc(v: json.Value) -> (SecurityMatchKind, bool) {
+		if i, ok := parse_int(v); ok {
+			switch i {
+			case 0:
+				return .Substring, true
+			case 1:
+				return .Regex, true
+			case 2:
+				return .AstCommand, true
+			}
+		}
+		if s, ok := parse_string(v); ok {
+			if strings.equal_fold(s, "substring") {
+				return .Substring, true
+			}
+			if strings.equal_fold(s, "regex") {
+				return .Regex, true
+			}
+			if strings.equal_fold(s, "astcommand") || strings.equal_fold(s, "ast_command") || strings.equal_fold(s, "ast") {
+				return .AstCommand, true
+			}
+		}
+		return .Substring, false
+	}
+	parse_phase :: proc(v: json.Value) -> (SecurityScanPhase, bool) {
+		if i, ok := parse_int(v); ok {
+			switch i {
+			case 0:
+				return .Source, true
+			case 1:
+				return .Translated, true
+			}
+		}
+		if s, ok := parse_string(v); ok {
+			if strings.equal_fold(s, "source") {
+				return .Source, true
+			}
+			if strings.equal_fold(s, "translated") {
+				return .Translated, true
+			}
+		}
+		return .Source, false
+	}
+
+	value, parse_err := json.parse_string(data)
+	if parse_err != .None {
 		errs := make([dynamic]ErrorContext, 0, 1, context.allocator)
-		scanner_append_policy_error(&errs, "sec.policy.load", fmt.tprintf("Failed to parse policy JSON: %v", err), "Fix policy JSON syntax")
+		scanner_append_policy_error(&errs, "sec.policy.load", fmt.tprintf("Failed to parse policy JSON: %v", parse_err), "Fix policy JSON syntax")
 		return policy, errs, false
 	}
+	defer json.destroy_value(value)
+	allowlist_paths_dyn := make([dynamic]string, 0, 0, context.temp_allocator)
+	defer delete(allowlist_paths_dyn)
+	allowlist_commands_dyn := make([dynamic]string, 0, 0, context.temp_allocator)
+	defer delete(allowlist_commands_dyn)
+	rule_overrides_dyn := make([dynamic]SecurityRuleOverride, 0, 0, context.temp_allocator)
+	defer delete(rule_overrides_dyn)
+	custom_rules_dyn := make([dynamic]SecurityScanRule, 0, 0, context.temp_allocator)
+	defer delete(custom_rules_dyn)
+
+	#partial switch root in value {
+	case json.Object:
+		if v, ok := root["use_builtin_rules"]; ok {
+			if b, ok2 := parse_bool(v); ok2 {
+				policy.use_builtin_rules = b
+			}
+		}
+		if v, ok := root["block_threshold"]; ok {
+			if sev, ok2 := parse_severity(v); ok2 {
+				policy.block_threshold = sev
+			}
+		}
+		if v, ok := root["ruleset_version"]; ok {
+			if s, ok2 := parse_string(v); ok2 {
+				policy.ruleset_version = strings.clone(s, context.allocator)
+			}
+		}
+		if v, ok := root["allowlist_paths"]; ok {
+			#partial switch arr in v {
+			case json.Array:
+				for elem in arr {
+					if s, ok2 := parse_string(elem); ok2 {
+						append(&allowlist_paths_dyn, strings.clone(s, context.allocator))
+					}
+				}
+			}
+		}
+		if v, ok := root["allowlist_commands"]; ok {
+			#partial switch arr in v {
+			case json.Array:
+				for elem in arr {
+					if s, ok2 := parse_string(elem); ok2 {
+						append(&allowlist_commands_dyn, strings.clone(s, context.allocator))
+					}
+				}
+			}
+		}
+		if v, ok := root["rule_overrides"]; ok {
+			#partial switch arr in v {
+			case json.Array:
+				for elem in arr {
+					#partial switch obj in elem {
+					case json.Object:
+						ov := SecurityRuleOverride{}
+						if f, okf := obj["rule_id"]; okf {
+							if s, ok2 := parse_string(f); ok2 {
+								ov.rule_id = strings.clone(s, context.allocator)
+							}
+						}
+						if f, okf := obj["enabled"]; okf {
+							if b, ok2 := parse_bool(f); ok2 {
+								ov.enabled = b
+							}
+						}
+						if f, okf := obj["has_severity_override"]; okf {
+							if b, ok2 := parse_bool(f); ok2 {
+								ov.has_severity_override = b
+							}
+						}
+						if f, okf := obj["severity_override"]; okf {
+							if sev, ok2 := parse_severity(f); ok2 {
+								ov.severity_override = sev
+								ov.has_severity_override = true
+							}
+						}
+						append(&rule_overrides_dyn, ov)
+					}
+				}
+			}
+		}
+		if v, ok := root["custom_rules"]; ok {
+			#partial switch arr in v {
+			case json.Array:
+				for elem in arr {
+					#partial switch obj in elem {
+					case json.Object:
+						rule := SecurityScanRule{
+							enabled = true,
+							match_kind = .Substring,
+							confidence = 0.9,
+							phases = { .Source },
+						}
+						if f, okf := obj["rule_id"]; okf {
+							if s, ok2 := parse_string(f); ok2 {
+								rule.rule_id = strings.clone(s, context.allocator)
+							}
+						}
+						if f, okf := obj["enabled"]; okf {
+							if b, ok2 := parse_bool(f); ok2 {
+								rule.enabled = b
+							}
+						}
+						if f, okf := obj["severity"]; okf {
+							if sev, ok2 := parse_severity(f); ok2 {
+								rule.severity = sev
+							}
+						}
+						if f, okf := obj["match_kind"]; okf {
+							if mk, ok2 := parse_match_kind(f); ok2 {
+								rule.match_kind = mk
+							}
+						}
+						if f, okf := obj["pattern"]; okf {
+							if s, ok2 := parse_string(f); ok2 {
+								rule.pattern = strings.clone(s, context.allocator)
+							}
+						}
+						if f, okf := obj["category"]; okf {
+							if s, ok2 := parse_string(f); ok2 {
+								rule.category = strings.clone(s, context.allocator)
+							}
+						}
+						if f, okf := obj["confidence"]; okf {
+							if n, ok2 := parse_f32(f); ok2 {
+								rule.confidence = n
+							}
+						}
+						if f, okf := obj["command_name"]; okf {
+							if s, ok2 := parse_string(f); ok2 {
+								rule.command_name = strings.clone(s, context.allocator)
+							}
+						}
+						if f, okf := obj["arg_pattern"]; okf {
+							if s, ok2 := parse_string(f); ok2 {
+								rule.arg_pattern = strings.clone(s, context.allocator)
+							}
+						}
+						if f, okf := obj["message"]; okf {
+							if s, ok2 := parse_string(f); ok2 {
+								rule.message = strings.clone(s, context.allocator)
+							}
+						}
+						if f, okf := obj["suggestion"]; okf {
+							if s, ok2 := parse_string(f); ok2 {
+								rule.suggestion = strings.clone(s, context.allocator)
+							}
+						}
+						if f, okf := obj["phases"]; okf {
+							#partial switch parr in f {
+							case json.Array:
+								rule.phases = {}
+								for phv in parr {
+									if ph, ok2 := parse_phase(phv); ok2 {
+										rule.phases += { ph }
+									}
+								}
+							}
+						}
+						append(&custom_rules_dyn, rule)
+					}
+				}
+			}
+		}
+	}
+	if len(allowlist_paths_dyn) > 0 {
+		policy.allowlist_paths = make([]string, len(allowlist_paths_dyn), context.allocator)
+		copy(policy.allowlist_paths, allowlist_paths_dyn[:])
+	}
+	if len(allowlist_commands_dyn) > 0 {
+		policy.allowlist_commands = make([]string, len(allowlist_commands_dyn), context.allocator)
+		copy(policy.allowlist_commands, allowlist_commands_dyn[:])
+	}
+	if len(rule_overrides_dyn) > 0 {
+		policy.rule_overrides = make([]SecurityRuleOverride, len(rule_overrides_dyn), context.allocator)
+		copy(policy.rule_overrides, rule_overrides_dyn[:])
+	}
+	if len(custom_rules_dyn) > 0 {
+		policy.custom_rules = make([]SecurityScanRule, len(custom_rules_dyn), context.allocator)
+		copy(policy.custom_rules, custom_rules_dyn[:])
+	}
+
 	errs := validate_security_policy(policy)
 	return policy, errs, len(errs) == 0
 }

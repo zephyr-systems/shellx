@@ -14,7 +14,7 @@ make_fixture :: proc(path: string, content: string) -> bool {
 main :: proc() {
 	policy_json := `{
   "use_builtin_rules": true,
-  "block_threshold": 2,
+  "block_threshold": "High",
   "ruleset_version": "zephyr-policy-2026-02"
 }`
 	policy, validation_errors, ok := shellx.load_security_policy_json(policy_json)

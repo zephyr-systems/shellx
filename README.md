@@ -184,7 +184,23 @@ fmt.println(json_blob)
 Policy loading + validation:
 
 ```odin
-policy_json := `{"use_builtin_rules":true,"block_threshold":2}`
+policy_json := `{
+  "use_builtin_rules": true,
+  "block_threshold": "High",
+  "custom_rules": [{
+    "rule_id": "zephyr.custom.eval",
+    "enabled": true,
+    "severity": "Critical",
+    "match_kind": "AstCommand",
+    "command_name": "eval",
+    "arg_pattern": "$(",
+    "category": "execution",
+    "confidence": 0.95,
+    "phases": ["Source"],
+    "message": "Dynamic eval pattern detected",
+    "suggestion": "Avoid eval on dynamic command strings"
+  }]
+}`
 loaded_policy, validation_errors, ok := shellx.load_security_policy_json(policy_json)
 defer {
 	for err in validation_errors {

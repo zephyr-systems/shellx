@@ -296,6 +296,12 @@ Validates scanner policy and returns all actionable validation errors.
 
 Loads and validates a scanner policy from JSON.
 
+Enum fields accept string labels (recommended), for example:
+
+- `severity`: `"Info"`, `"Warning"`, `"High"`, `"Critical"`
+- `match_kind`: `"Substring"`, `"Regex"`, `"AstCommand"`
+- `phases`: `["Source"]`, `["Translated"]`
+
 ### `load_security_policy_file(path) -> (SecurityScanPolicy, [dynamic]ErrorContext, bool)`
 
 Loads and validates a scanner policy from JSON file path.
