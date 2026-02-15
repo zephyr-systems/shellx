@@ -2416,3 +2416,45 @@ test_scan_security_ast_indirect_exec_specific_rule_ids :: proc(t: ^testing.T) {
 	testing.expect(t, has_indirect_ref, "specific indirect_ref rule should trigger for ${!var} command heads")
 	testing.expect(t, has_array_head, "specific array_head rule should trigger for ${array[idx]} command heads")
 }
+
+@(test)
+test_scan_security_fish_bobthefish_no_crash :: proc(t: ^testing.T) {
+	if !should_run_test("test_scan_security_fish_bobthefish_no_crash") { return }
+	path := "tests/corpus/repos/fish/theme-bobthefish/functions/fish_prompt.fish"
+	result := scan_security_file(path, .Fish)
+	defer destroy_security_scan_result(&result)
+	testing.expect(t, result.success || len(result.errors) > 0, "scan should return result/error context without crashing")
+}
+
+@(test)
+test_convert_fish_bobthefish_to_ir_no_crash :: proc(t: ^testing.T) {
+	if !should_run_test("test_convert_fish_bobthefish_to_ir_no_crash") { return }
+	path := "tests/corpus/repos/fish/theme-bobthefish/functions/fish_prompt.fish"
+	data, ok := os.read_entire_file(path)
+	testing.expect(t, ok, "fixture should be readable")
+	if !ok { return }
+	defer delete(data)
+	source := string(data)
+
+	arena := ir.create_arena(8 * 1024 * 1024)
+	defer ir.destroy_arena(&arena)
+	fe := frontend.create_frontend(.Fish)
+	defer frontend.destroy_frontend(&fe)
+	tree, parse_err := frontend.parse(&fe, source)
+	testing.expect(t, parse_err.error == frontend.Error.None && tree != nil, "fish parse should succeed")
+	if tree == nil { return }
+	defer frontend.destroy_tree(tree)
+	program, conv_err := convert_to_ir(&arena, .Fish, tree, source)
+	testing.expect(t, conv_err.error == .None && program != nil, "fish IR conversion should succeed without crashing")
+}
+
+@(test)
+test_scan_security_fish_bobthefish_text_only_no_crash :: proc(t: ^testing.T) {
+	if !should_run_test("test_scan_security_fish_bobthefish_text_only_no_crash") { return }
+	path := "tests/corpus/repos/fish/theme-bobthefish/functions/fish_prompt.fish"
+	policy := DEFAULT_SECURITY_SCAN_POLICY
+	policy.use_builtin_rules = false
+	result := scan_security_file(path, .Fish, policy)
+	defer destroy_security_scan_result(&result)
+	testing.expect(t, result.success, "text-only scan should complete")
+}

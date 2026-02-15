@@ -155,6 +155,13 @@ destroy_tree :: proc(tree: ^ts.Tree) {
 	}
 }
 
+tree_has_parse_error :: proc(tree: ^ts.Tree) -> bool {
+	if tree == nil {
+		return true
+	}
+	return has_error(root_node(tree))
+}
+
 node_location :: proc(node: ts.Node, source: string) -> ir.SourceLocation {
 	start := int(ts.ts_node_start_byte(node))
 	end := int(ts.ts_node_end_byte(node))
