@@ -748,7 +748,9 @@ convert_zsh_command_to_statement :: proc(
 	}
 
 	cmd_name := ""
+	raw_head := ""
 	arguments := make([dynamic]ir.Expression, 0, 4, mem.arena_allocator(&arena.arena))
+	first_arg_raw := ""
 
 	for i in 0 ..< child_count(node) {
 		child := child(node, i)
@@ -758,7 +760,8 @@ convert_zsh_command_to_statement :: proc(
 			for j in 0 ..< child_count(child) {
 				name_child_node := ts.ts_node_child(child, u32(j))
 				if is_named(name_child_node) {
-					cmd_name = strings.trim_space(intern_node_text(arena, name_child_node, source))
+					raw_head = strings.trim_space(intern_node_text(arena, name_child_node, source))
+					cmd_name = raw_head
 					if cmd_name != "" {
 						break
 					}
@@ -767,6 +770,9 @@ convert_zsh_command_to_statement :: proc(
 		} else if is_zsh_argument_node(child_type) {
 			arg_text := strings.trim_space(intern_node_text(arena, child, source))
 			if arg_text != "" {
+				if first_arg_raw == "" {
+					first_arg_raw = arg_text
+				}
 				append(&arguments, text_to_expression(arena, arg_text))
 			}
 		}
@@ -775,6 +781,9 @@ convert_zsh_command_to_statement :: proc(
 	// Fallback: treat the first argument as command name when parser omits command_name.
 	if cmd_name == "" && len(arguments) > 0 {
 		cmd_name = ir.expr_to_string(arguments[0])
+		if raw_head == "" {
+			raw_head = first_arg_raw
+		}
 		if len(arguments) > 1 {
 			remaining := make([dynamic]ir.Expression, 0, len(arguments)-1, mem.arena_allocator(&arena.arena))
 			for i in 1 ..< len(arguments) {
@@ -797,6 +806,10 @@ convert_zsh_command_to_statement :: proc(
 		arguments = arguments,
 		location  = location,
 	}
+	if strings.trim_space(raw_head) == "" {
+		raw_head = cmd_name
+	}
+	set_call_head_metadata(&call, arena, raw_head)
 
 	return ir.Statement{type = .Call, call = call, location = location}
 }

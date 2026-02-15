@@ -369,7 +369,9 @@ convert_fish_command_to_statement :: proc(
 ) -> ir.Statement {
 	location := node_location(node, source)
 	cmd_name := ""
+	raw_head := ""
 	arguments := make([dynamic]ir.Expression, 0, 4, mem.arena_allocator(&arena.arena))
+	first_arg_raw := ""
 
 	for i in 0 ..< child_count(node) {
 		child := child(node, i)
@@ -379,21 +381,28 @@ convert_fish_command_to_statement :: proc(
 			for j in 0 ..< child_count(child) {
 				name_child_node := ts.ts_node_child(child, u32(j))
 				if is_named(name_child_node) {
-					cmd_name = node_text(
+					raw_head = strings.trim_space(node_text(
 						mem.arena_allocator(&arena.arena),
 						name_child_node,
 						source,
-					)
+					))
+					cmd_name = raw_head
 					break
 				}
 			}
 		} else if child_type == "string" || child_type == "word" || child_type == "double_quote_string" || child_type == "single_quote_string" || child_type == "raw_string" || child_type == "concatenation" || child_type == "simple_expansion" || child_type == "expansion" || child_type == "variable_expansion" || child_type == "command_substitution" || child_type == "number" {
 			arg_text := intern_node_text(arena, child, source)
+			if first_arg_raw == "" {
+				first_arg_raw = strings.trim_space(arg_text)
+			}
 			append(&arguments, text_to_expression(arena, arg_text))
 		}
 	}
 	if cmd_name == "" && len(arguments) > 0 {
 		cmd_name = strings.trim_space(ir.expr_to_string(arguments[0]))
+		if raw_head == "" {
+			raw_head = first_arg_raw
+		}
 		if len(arguments) > 1 {
 			remaining := make([dynamic]ir.Expression, 0, len(arguments)-1, mem.arena_allocator(&arena.arena))
 			for i in 1 ..< len(arguments) {
@@ -413,6 +422,10 @@ convert_fish_command_to_statement :: proc(
 		arguments = arguments,
 		location  = location,
 	}
+	if strings.trim_space(raw_head) == "" {
+		raw_head = cmd_name
+	}
+	set_call_head_metadata(&call, arena, raw_head)
 
 	return ir.Statement{type = .Call, call = call, location = location}
 }

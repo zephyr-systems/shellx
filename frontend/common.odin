@@ -262,6 +262,35 @@ text_to_expression :: proc(arena: ^ir.Arena_IR, text: string) -> ir.Expression {
 	return ir.new_literal_expr(arena, interned, .String)
 }
 
+classify_call_head_kind :: proc(raw_head: string) -> ir.CallHeadKind {
+	trimmed := strings.trim_space(raw_head)
+	if trimmed == "" {
+		return .Unknown
+	}
+	if strings.has_prefix(trimmed, "$(") || strings.has_prefix(trimmed, "`") {
+		return .CommandSubstitutionHead
+	}
+	if strings.has_prefix(trimmed, "${") {
+		return .BracedVariableHead
+	}
+	if strings.has_prefix(trimmed, "$") {
+		return .VariableHead
+	}
+	if strings.has_prefix(trimmed, "\\") {
+		return .EscapedLiteral
+	}
+	if strings.contains(trimmed, "/") {
+		return .PathQualified
+	}
+	return .Literal
+}
+
+set_call_head_metadata :: proc(call: ^ir.Call, arena: ^ir.Arena_IR, raw_head: string) {
+	trimmed := strings.trim_space(raw_head)
+	call.raw_head_text = ir.intern_string(arena, trimmed)
+	call.head_kind = classify_call_head_kind(trimmed)
+}
+
 intern_node_text :: proc(arena: ^ir.Arena_IR, node: ts.Node, source: string) -> string {
 	return ir.intern_string(arena, node_text(mem.arena_allocator(&arena.arena), node, source))
 }

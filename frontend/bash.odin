@@ -168,7 +168,9 @@ convert_bash_command_to_statement :: proc(
 ) -> ir.Statement {
 	location := node_location(node, source)
 	cmd_name := ""
+	raw_head := ""
 	arguments := make([dynamic]ir.Expression, 0, 4, mem.arena_allocator(&arena.arena))
+	first_arg_raw := ""
 
 	for i in 0 ..< child_count(node) {
 		child := child(node, i)
@@ -179,8 +181,9 @@ convert_bash_command_to_statement :: proc(
 			// Get the word inside command_name
 			for j in 0 ..< child_count(child) {
 				name_child_node := ts.ts_node_child(child, u32(j))
-				if node_type(name_child_node) == "word" {
-					cmd_name = intern_node_text(arena, name_child_node, source)
+				if is_named(name_child_node) {
+					raw_head = strings.trim_space(intern_node_text(arena, name_child_node, source))
+					cmd_name = raw_head
 					break
 				}
 			}
@@ -191,10 +194,16 @@ convert_bash_command_to_statement :: proc(
 			child_type == "number" {
 			// Arguments can be strings or words
 			arg_text := intern_node_text(arena, child, source)
+			if first_arg_raw == "" {
+				first_arg_raw = strings.trim_space(arg_text)
+			}
 			append(&arguments, text_to_expression(arena, arg_text))
 		} else if child_type == "expansion" || child_type == "simple_expansion" || child_type == "parameter_expansion" || child_type == "process_substitution" || child_type == "command_substitution" || child_type == "concatenation" {
 			// Preserve expansion/substitution arguments for downstream rewrites.
 			arg_text := intern_node_text(arena, child, source)
+			if first_arg_raw == "" {
+				first_arg_raw = strings.trim_space(arg_text)
+			}
 			append(&arguments, text_to_expression(arena, arg_text))
 		} else if is_named(child) &&
 			child_type != "comment" &&
@@ -204,9 +213,16 @@ convert_bash_command_to_statement :: proc(
 			// Keep additional named argument-like nodes instead of dropping them.
 			arg_text := intern_node_text(arena, child, source)
 			if strings.trim_space(arg_text) != "" {
+				if first_arg_raw == "" {
+					first_arg_raw = strings.trim_space(arg_text)
+				}
 				append(&arguments, text_to_expression(arena, arg_text))
 			}
 		}
+	}
+
+	if raw_head == "" {
+		raw_head = cmd_name
 	}
 
 	call := ir.Call {
@@ -214,6 +230,10 @@ convert_bash_command_to_statement :: proc(
 		arguments = arguments,
 		location  = location,
 	}
+	if strings.trim_space(raw_head) == "" {
+		raw_head = first_arg_raw
+	}
+	set_call_head_metadata(&call, arena, raw_head)
 	return ir.Statement{type = .Call, call = call, location = location}
 }
 

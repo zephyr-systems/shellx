@@ -35,6 +35,79 @@ scanner_phase_name :: proc(phase: SecurityScanPhase) -> string {
 	return "source"
 }
 
+scanner_normalize_command_name :: proc(name: string) -> string {
+	if name == "" {
+		return ""
+	}
+	out := strings.trim_space(name)
+	for len(out) > 0 && out[0] == '\\' {
+		out = out[1:]
+	}
+	if out == "" {
+		return ""
+	}
+	if strings.contains(out, "/") {
+		last := strings.last_index(out, "/")
+		if last >= 0 && last+1 < len(out) {
+			out = out[last+1:]
+		}
+	}
+	return out
+}
+
+scanner_source_fragment_from_loc :: proc(source_lines: []string, loc: ir.SourceLocation) -> string {
+	if loc.line <= 0 || loc.line > len(source_lines) {
+		return ""
+	}
+	line := source_lines[loc.line-1]
+	start := loc.column
+	if start < 0 {
+		start = 0
+	}
+	if start >= len(line) {
+		return ""
+	}
+	return line[start:]
+}
+
+scanner_first_token :: proc(text: string) -> string {
+	trimmed := strings.trim_space(text)
+	if trimmed == "" {
+		return ""
+	}
+	end := len(trimmed)
+	for i in 0 ..< len(trimmed) {
+		ch := trimmed[i]
+		if ch == ' ' || ch == '\t' {
+			end = i
+			break
+		}
+	}
+	return trimmed[:end]
+}
+
+scanner_fragment_has_pipe_download_exec :: proc(fragment: string) -> bool {
+	trimmed := strings.trim_space(fragment)
+	if !strings.contains(trimmed, "|") {
+		return false
+	}
+	segments := strings.split(trimmed, "|", context.temp_allocator)
+	defer delete(segments, context.temp_allocator)
+	has_fetch := false
+	has_shell := false
+	for seg in segments {
+		token := scanner_first_token(seg)
+		name := scanner_normalize_command_name(token)
+		if name == "curl" || name == "wget" || name == "fetch" {
+			has_fetch = true
+		}
+		if name == "sh" || name == "bash" || name == "zsh" || name == "fish" {
+			has_shell = true
+		}
+	}
+	return has_fetch && has_shell
+}
+
 scanner_command_allowlisted :: proc(command: string, policy: SecurityScanPolicy) -> bool {
 	for allowed in policy.allowlist_commands {
 		if allowed == command {
@@ -42,6 +115,13 @@ scanner_command_allowlisted :: proc(command: string, policy: SecurityScanPolicy)
 		}
 	}
 	return false
+}
+
+scanner_any_shell_allowlisted :: proc(policy: SecurityScanPolicy) -> bool {
+	return scanner_command_allowlisted("sh", policy) ||
+		scanner_command_allowlisted("bash", policy) ||
+		scanner_command_allowlisted("zsh", policy) ||
+		scanner_command_allowlisted("fish", policy)
 }
 
 scanner_normalize_path :: proc(path: string) -> string {
@@ -480,9 +560,22 @@ scanner_eval_ast_rules_for_call :: proc(
 	if call.function == nil {
 		return
 	}
-	name := strings.trim_space(call.function.name)
-	if name == "" {
+	raw_name := strings.trim_space(call.raw_head_text)
+	if raw_name == "" && call.function != nil {
+		raw_name = strings.trim_space(call.function.name)
+	}
+	if raw_name == "" {
 		return
+	}
+	name := scanner_normalize_command_name(raw_name)
+	if name == "" {
+		name = scanner_normalize_command_name(strings.trim_space(call.function.name))
+	}
+	if name == "" {
+		name = strings.trim_space(call.function.name)
+	}
+	if name == "" {
+		name = raw_name
 	}
 	arg_text := strings.builder_make()
 	defer strings.builder_destroy(&arg_text)
@@ -528,7 +621,7 @@ scanner_eval_ast_rules_for_call :: proc(
 		return
 	}
 
-	if name == "eval" && !scanner_command_allowlisted(name, policy) {
+	if name == "eval" && !(scanner_command_allowlisted(name, policy) || scanner_command_allowlisted(raw_name, policy)) {
 		scanner_append_finding(
 			result,
 			"sec.ast.eval",
@@ -556,7 +649,7 @@ scanner_eval_ast_rules_for_call :: proc(
 			)
 		}
 	}
-	if (name == "source" || name == ".") && !scanner_command_allowlisted("source", policy) {
+	if (name == "source" || name == ".") && !(scanner_command_allowlisted("source", policy) || scanner_command_allowlisted(raw_name, policy)) {
 		scanner_append_finding(
 			result,
 			"sec.ast.source",
@@ -614,7 +707,12 @@ scanner_eval_ast_rules_for_call :: proc(
 		}
 	}
 
-	if strings.has_prefix(name, "$") || strings.contains(name, "${") {
+	indirect_matched_text := raw_name
+	has_indirect_exec := call.head_kind == .VariableHead || call.head_kind == .BracedVariableHead
+	if !has_indirect_exec {
+		has_indirect_exec = strings.has_prefix(raw_name, "$") || strings.contains(raw_name, "${")
+	}
+	if has_indirect_exec {
 		scanner_append_finding(
 			result,
 			"sec.ast.indirect_exec",
@@ -625,7 +723,7 @@ scanner_eval_ast_rules_for_call :: proc(
 			phase,
 			"execution",
 			0.91,
-			name,
+			indirect_matched_text,
 		)
 	}
 
@@ -637,7 +735,7 @@ scanner_eval_ast_rules_for_call :: proc(
 		if card(effective_rule.phases) > 0 && phase not_in effective_rule.phases {
 			continue
 		}
-		if effective_rule.command_name != "" && effective_rule.command_name != name {
+		if effective_rule.command_name != "" && effective_rule.command_name != name && effective_rule.command_name != raw_name {
 			continue
 		}
 		if effective_rule.arg_pattern != "" && !strings.contains(joined_args, effective_rule.arg_pattern) {
@@ -664,18 +762,45 @@ scanner_walk_ast_statement :: proc(
 	stmt: ir.Statement,
 	phase: SecurityScanPhase,
 	source_name: string,
+	source_lines: []string,
 ) {
 	#partial switch stmt.type {
 	case .Call:
 		scanner_eval_ast_rules_for_call(result, policy, stmt.call, phase, source_name)
+		if !scanner_any_shell_allowlisted(policy) {
+			fragment := scanner_source_fragment_from_loc(source_lines, stmt.location)
+			if scanner_fragment_has_pipe_download_exec(fragment) {
+				loc := stmt.location
+				loc.file = source_name
+				scanner_append_finding(
+					result,
+					"sec.ast.pipe_download_exec",
+					.Critical,
+					"AST command analysis detected network download piped into shell",
+					loc,
+					"Split download and execution into separate verified steps",
+					phase,
+					"execution",
+					0.98,
+					strings.trim_space(fragment),
+				)
+			}
+		}
 	case .Pipeline:
 		has_fetch := false
 		has_shell := false
 		for call in stmt.pipeline.commands {
-			if call.function == nil {
+			raw_name := strings.trim_space(call.raw_head_text)
+			if raw_name == "" && call.function != nil {
+				raw_name = strings.trim_space(call.function.name)
+			}
+			name := scanner_normalize_command_name(raw_name)
+			if name == "" {
+				name = scanner_normalize_command_name(strings.trim_space(call.function.name))
+			}
+			if name == "" {
 				continue
 			}
-			name := call.function.name
 			if name == "curl" || name == "wget" || name == "fetch" {
 				has_fetch = true
 			}
@@ -684,7 +809,7 @@ scanner_walk_ast_statement :: proc(
 			}
 			scanner_eval_ast_rules_for_call(result, policy, call, phase, source_name)
 		}
-		if has_fetch && has_shell && !scanner_command_allowlisted("sh", policy) {
+		if has_fetch && has_shell && !scanner_any_shell_allowlisted(policy) {
 			scanner_append_finding(
 				result,
 				"sec.ast.pipe_download_exec",
@@ -700,19 +825,19 @@ scanner_walk_ast_statement :: proc(
 		}
 	case .Branch:
 		for inner in stmt.branch.then_body {
-			scanner_walk_ast_statement(result, policy, inner, phase, source_name)
+			scanner_walk_ast_statement(result, policy, inner, phase, source_name, source_lines)
 		}
 		for inner in stmt.branch.else_body {
-			scanner_walk_ast_statement(result, policy, inner, phase, source_name)
+			scanner_walk_ast_statement(result, policy, inner, phase, source_name, source_lines)
 		}
 	case .Loop:
 		for inner in stmt.loop.body {
-			scanner_walk_ast_statement(result, policy, inner, phase, source_name)
+			scanner_walk_ast_statement(result, policy, inner, phase, source_name, source_lines)
 		}
 	case .Case:
 		for arm in stmt.case_.arms {
 			for inner in arm.body {
-				scanner_walk_ast_statement(result, policy, inner, phase, source_name)
+				scanner_walk_ast_statement(result, policy, inner, phase, source_name, source_lines)
 			}
 		}
 	}
@@ -731,6 +856,8 @@ scanner_scan_ast_rules :: proc(
 	if scanner_check_timeout(result, sw^, options) {
 		return
 	}
+	source_lines := strings.split_lines(code, context.temp_allocator)
+	defer delete(source_lines, context.temp_allocator)
 	arena_size := len(code) * 8
 	if arena_size < 1024*1024 {
 		arena_size = 1024 * 1024
@@ -791,7 +918,7 @@ scanner_scan_ast_rules :: proc(
 			return
 		}
 		result.stats.rules_evaluated += 1
-		scanner_walk_ast_statement(result, policy, stmt, phase, source_name)
+		scanner_walk_ast_statement(result, policy, stmt, phase, source_name, source_lines[:])
 	}
 	for fn in program.functions {
 		for stmt in fn.body {
@@ -799,7 +926,7 @@ scanner_scan_ast_rules :: proc(
 				return
 			}
 			result.stats.rules_evaluated += 1
-			scanner_walk_ast_statement(result, policy, stmt, phase, source_name)
+			scanner_walk_ast_statement(result, policy, stmt, phase, source_name, source_lines[:])
 		}
 	}
 }

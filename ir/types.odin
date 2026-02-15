@@ -124,10 +124,22 @@ Assign :: struct {
 	location: SourceLocation,
 }
 
+CallHeadKind :: enum {
+	Unknown,
+	Literal,
+	PathQualified,
+	EscapedLiteral,
+	VariableHead,
+	BracedVariableHead,
+	CommandSubstitutionHead,
+}
+
 Call :: struct {
-	function:  ^Variable,
-	arguments: [dynamic]Expression,
-	location:  SourceLocation,
+	function:      ^Variable,
+	arguments:     [dynamic]Expression,
+	raw_head_text: string,
+	head_kind:     CallHeadKind,
+	location:      SourceLocation,
 }
 
 LogicalOperator :: enum {
