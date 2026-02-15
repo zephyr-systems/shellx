@@ -104,6 +104,22 @@ scanner_is_variable_command_head :: proc(head: string) -> bool {
 	return false
 }
 
+scanner_is_indirect_ref_head :: proc(head: string) -> bool {
+	trimmed := strings.trim_space(head)
+	return strings.has_prefix(trimmed, "${!") && strings.has_suffix(trimmed, "}")
+}
+
+scanner_is_array_command_head :: proc(head: string) -> bool {
+	trimmed := strings.trim_space(head)
+	if strings.has_prefix(trimmed, "${") && strings.has_suffix(trimmed, "}") {
+		return strings.contains(trimmed, "[") && strings.contains(trimmed, "]")
+	}
+	if strings.has_prefix(trimmed, "$") {
+		return strings.contains(trimmed, "[") && strings.contains(trimmed, "]")
+	}
+	return false
+}
+
 scanner_fragment_has_pipe_download_exec :: proc(fragment: string) -> bool {
 	trimmed := strings.trim_space(fragment)
 	if !strings.contains(trimmed, "|") {
@@ -731,6 +747,34 @@ scanner_eval_ast_rules_for_call :: proc(
 		has_indirect_exec = scanner_is_variable_command_head(raw_name)
 	}
 	if has_indirect_exec {
+		if scanner_is_indirect_ref_head(raw_name) {
+			scanner_append_finding(
+				result,
+				"sec.ast.indirect_exec_indirect_ref",
+				.High,
+				"Indirect command execution via bash indirect expansion detected",
+				loc,
+				"Avoid executing commands via ${!var} indirection",
+				phase,
+				"execution",
+				0.93,
+				indirect_matched_text,
+			)
+		}
+		if scanner_is_array_command_head(raw_name) {
+			scanner_append_finding(
+				result,
+				"sec.ast.indirect_exec_array_head",
+				.High,
+				"Indirect command execution via array-expanded command head detected",
+				loc,
+				"Use explicit allowlisted command dispatch instead of array head expansion",
+				phase,
+				"execution",
+				0.92,
+				indirect_matched_text,
+			)
+		}
 		scanner_append_finding(
 			result,
 			"sec.ast.indirect_exec",
@@ -1027,7 +1071,7 @@ scanner_append_policy_error :: proc(
 	)
 }
 
-SCANNER_BUILTIN_RULE_IDS :: [13]string{
+SCANNER_BUILTIN_RULE_IDS :: [15]string{
 	"sec.pipe_download_exec",
 	"sec.eval_download",
 	"sec.dangerous_rm",
@@ -1041,6 +1085,8 @@ SCANNER_BUILTIN_RULE_IDS :: [13]string{
 	"sec.ast.shell_dash_c_dynamic",
 	"sec.ast.source_process_subst",
 	"sec.ast.indirect_exec",
+	"sec.ast.indirect_exec_indirect_ref",
+	"sec.ast.indirect_exec_array_head",
 }
 
 validate_security_policy :: proc(policy: SecurityScanPolicy) -> [dynamic]ErrorContext {

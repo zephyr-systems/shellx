@@ -2391,3 +2391,28 @@ test_scan_security_ast_indirect_exec_from_source_fragment :: proc(t: ^testing.T)
 	}
 	testing.expect(t, has_indirect, "ast indirect exec rule should trigger for variable-invoked command names")
 }
+
+@(test)
+test_scan_security_ast_indirect_exec_specific_rule_ids :: proc(t: ^testing.T) {
+	if !should_run_test("test_scan_security_ast_indirect_exec_specific_rule_ids") { return }
+	src := "name=cmd\n${!name} hello\n${array[0]} hello\n"
+	result := scan_security(src, .Bash)
+	defer destroy_security_scan_result(&result)
+
+	has_generic := false
+	has_indirect_ref := false
+	has_array_head := false
+	for finding in result.findings {
+		switch finding.rule_id {
+		case "sec.ast.indirect_exec":
+			has_generic = true
+		case "sec.ast.indirect_exec_indirect_ref":
+			has_indirect_ref = true
+		case "sec.ast.indirect_exec_array_head":
+			has_array_head = true
+		}
+	}
+	testing.expect(t, has_generic, "generic indirect exec rule should still trigger for backward compatibility")
+	testing.expect(t, has_indirect_ref, "specific indirect_ref rule should trigger for ${!var} command heads")
+	testing.expect(t, has_array_head, "specific array_head rule should trigger for ${array[idx]} command heads")
+}
