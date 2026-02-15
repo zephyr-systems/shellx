@@ -230,7 +230,18 @@ translate :: proc(
 	if source_name == "" {
 		source_name = "<input>"
 	}
-	scan_shell_security_findings(&result, source_code, source_name, "source")
+	source_scan_options := DEFAULT_SECURITY_SCAN_OPTIONS
+	source_scan_options.ast_parse_failure_mode = .FailOpen
+	source_scan_options.include_phases = { .Source }
+	source_scan := scan_security(
+		source_code,
+		from,
+		DEFAULT_SECURITY_SCAN_POLICY,
+		source_name,
+		source_scan_options,
+	)
+	append_scan_findings(&result, source_scan)
+	destroy_security_scan_result(&source_scan)
 
 	arena_size := len(source_code) * 8
 	if arena_size < 8*1024*1024 {
@@ -990,7 +1001,20 @@ z() {
 			result.output, _ = replace_with_flag(result.output, "\n)\npid", "\n) &\npid", false, context.allocator)
 			result.output, _ = replace_with_flag(result.output, "\n)\nworker_pid", "\n) &\nworker_pid", false, context.allocator)
 		}
-		scan_shell_security_findings(&result, result.output, source_name, "translated")
+		translated_scan_options := DEFAULT_SECURITY_SCAN_OPTIONS
+		translated_scan_options.ast_parse_failure_mode = .FailOpen
+		translated_scan_options.scan_translated_output = true
+		translated_scan_options.include_phases = { .Translated }
+		translated_scan := scan_security(
+			"",
+			to,
+			DEFAULT_SECURITY_SCAN_POLICY,
+			source_name,
+			translated_scan_options,
+			result.output,
+		)
+		append_scan_findings(&result, translated_scan)
+		destroy_security_scan_result(&translated_scan)
 	prune_resolved_compat_warnings(&result, from, to)
 	derive_feature_metadata(&result, compat_result, options, from, to)
 	if options.strict_mode && len(result.unsupported_features) > 0 {
@@ -1618,6 +1642,47 @@ append_security_finding :: proc(
 			phase = strings.clone(phase, context.allocator),
 		},
 	)
+}
+
+append_scan_findings :: proc(
+	result: ^TranslationResult,
+	scan_result: SecurityScanResult,
+) {
+	for finding in scan_result.findings {
+		duplicate := false
+		for existing in result.findings {
+			if finding.fingerprint != "" && existing.fingerprint == finding.fingerprint {
+				duplicate = true
+				break
+			}
+			if existing.rule_id == finding.rule_id &&
+				existing.phase == finding.phase &&
+				existing.location.file == finding.location.file &&
+				existing.location.line == finding.location.line &&
+				existing.location.column == finding.location.column {
+				duplicate = true
+				break
+			}
+		}
+		if duplicate {
+			continue
+		}
+		append(
+			&result.findings,
+			SecurityFinding{
+				rule_id = strings.clone(finding.rule_id, context.allocator),
+				severity = finding.severity,
+				message = strings.clone(finding.message, context.allocator),
+				location = finding.location,
+				suggestion = strings.clone(finding.suggestion, context.allocator),
+				phase = strings.clone(finding.phase, context.allocator),
+				category = strings.clone(finding.category, context.allocator),
+				confidence = finding.confidence,
+				matched_text = strings.clone(finding.matched_text, context.allocator),
+				fingerprint = strings.clone(finding.fingerprint, context.allocator),
+			},
+		)
+	}
 }
 
 scan_shell_security_findings :: proc(

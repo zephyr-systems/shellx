@@ -86,6 +86,24 @@ scanner_first_token :: proc(text: string) -> string {
 	return trimmed[:end]
 }
 
+scanner_is_variable_command_head :: proc(head: string) -> bool {
+	trimmed := strings.trim_space(head)
+	if trimmed == "" {
+		return false
+	}
+	if strings.has_prefix(trimmed, "$(") || strings.has_prefix(trimmed, "$((") || strings.has_prefix(trimmed, "`") {
+		return false
+	}
+	if strings.has_prefix(trimmed, "${") {
+		return strings.has_suffix(trimmed, "}")
+	}
+	if strings.has_prefix(trimmed, "$") && len(trimmed) > 1 {
+		ch := trimmed[1]
+		return (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || ch == '_'
+	}
+	return false
+}
+
 scanner_fragment_has_pipe_download_exec :: proc(fragment: string) -> bool {
 	trimmed := strings.trim_space(fragment)
 	if !strings.contains(trimmed, "|") {
@@ -710,7 +728,7 @@ scanner_eval_ast_rules_for_call :: proc(
 	indirect_matched_text := raw_name
 	has_indirect_exec := call.head_kind == .VariableHead || call.head_kind == .BracedVariableHead
 	if !has_indirect_exec {
-		has_indirect_exec = strings.has_prefix(raw_name, "$") || strings.contains(raw_name, "${")
+		has_indirect_exec = scanner_is_variable_command_head(raw_name)
 	}
 	if has_indirect_exec {
 		scanner_append_finding(
