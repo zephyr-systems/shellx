@@ -2127,6 +2127,46 @@ test_scan_security_overrides_and_allowlist :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_scan_security_builtin_rule_overrides_apply :: proc(t: ^testing.T) {
+	if !should_run_test("test_scan_security_builtin_rule_overrides_apply") { return }
+	policy := DEFAULT_SECURITY_SCAN_POLICY
+	policy.rule_overrides = []SecurityRuleOverride{
+		{
+			rule_id = "sec.dangerous_rm",
+			enabled = false,
+		},
+		{
+			rule_id = "sec.overpermissive_chmod",
+			enabled = true,
+			has_severity_override = true,
+			severity_override = .Info,
+		},
+	}
+
+	res1 := scan_security("rm -rf /\n", .Bash, policy)
+	defer destroy_security_scan_result(&res1)
+	has_rm := false
+	for finding in res1.findings {
+		if finding.rule_id == "sec.dangerous_rm" {
+			has_rm = true
+			break
+		}
+	}
+	testing.expect(t, !has_rm, "builtin override enabled=false should disable sec.dangerous_rm")
+
+	res2 := scan_security("chmod 777 /etc/passwd\n", .Bash, policy)
+	defer destroy_security_scan_result(&res2)
+	has_chmod_info := false
+	for finding in res2.findings {
+		if finding.rule_id == "sec.overpermissive_chmod" && finding.severity == .Info {
+			has_chmod_info = true
+			break
+		}
+	}
+	testing.expect(t, has_chmod_info, "builtin severity override should set sec.overpermissive_chmod to .Info")
+}
+
+@(test)
 test_scan_security_options_and_batch_and_json :: proc(t: ^testing.T) {
 	if !should_run_test("test_scan_security_options_and_batch_and_json") { return }
 	opts := DEFAULT_SECURITY_SCAN_OPTIONS

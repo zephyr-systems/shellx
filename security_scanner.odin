@@ -273,6 +273,20 @@ scanner_rule_effective :: proc(policy: SecurityScanPolicy, rule: SecurityScanRul
 	return out, true
 }
 
+scanner_builtin_rule_effective :: proc(
+	policy: SecurityScanPolicy,
+	rule_id: string,
+	default_severity: FindingSeverity,
+) -> (FindingSeverity, bool) {
+	builtin_rule := SecurityScanRule{
+		rule_id = rule_id,
+		enabled = true,
+		severity = default_severity,
+	}
+	effective, enabled := scanner_rule_effective(policy, builtin_rule)
+	return effective.severity, enabled
+}
+
 scanner_fingerprint :: proc(rule_id: string, loc: ir.SourceLocation, matched: string, phase: string) -> string {
 	hash: u64 = 1469598103934665603
 	write_byte :: proc(v: ^u64, b: byte) {
@@ -403,11 +417,12 @@ scanner_maybe_add_builtin_line_findings :: proc(
 	if (strings.contains(trimmed, "| sh") || strings.contains(trimmed, "| bash") ||
 		strings.contains(trimmed, "| zsh") || strings.contains(trimmed, "| fish")) &&
 		(strings.contains(trimmed, "curl ") || strings.contains(trimmed, "wget ") || strings.contains(trimmed, "fetch ")) {
-		if !scanner_path_allowlisted(source_name, policy) && !scanner_command_allowlisted("sh", policy) {
+		severity, enabled := scanner_builtin_rule_effective(policy, "sec.pipe_download_exec", .Critical)
+		if enabled && !scanner_path_allowlisted(source_name, policy) && !scanner_command_allowlisted("sh", policy) {
 			scanner_append_finding(
 				result,
 				"sec.pipe_download_exec",
-				.Critical,
+				severity,
 				"Downloaded content is piped directly into a shell interpreter",
 				loc,
 				"Download to a file, verify checksum/signature, then execute explicitly",
@@ -419,11 +434,12 @@ scanner_maybe_add_builtin_line_findings :: proc(
 		}
 	}
 	if strings.contains(trimmed, "eval ") && (strings.contains(trimmed, "curl ") || strings.contains(trimmed, "wget ")) {
-		if !scanner_path_allowlisted(source_name, policy) && !scanner_command_allowlisted("eval", policy) {
+		severity, enabled := scanner_builtin_rule_effective(policy, "sec.eval_download", .Critical)
+		if enabled && !scanner_path_allowlisted(source_name, policy) && !scanner_command_allowlisted("eval", policy) {
 			scanner_append_finding(
 				result,
 				"sec.eval_download",
-				.Critical,
+				severity,
 				"Dynamic eval with network-fetched content detected",
 				loc,
 				"Avoid eval on external input; parse and validate input first",
@@ -435,11 +451,12 @@ scanner_maybe_add_builtin_line_findings :: proc(
 		}
 	}
 	if strings.contains(trimmed, "rm -rf /") || strings.contains(trimmed, "rm -rf ~") {
-		if !scanner_command_allowlisted("rm", policy) {
+		severity, enabled := scanner_builtin_rule_effective(policy, "sec.dangerous_rm", .Critical)
+		if enabled && !scanner_command_allowlisted("rm", policy) {
 			scanner_append_finding(
 				result,
 				"sec.dangerous_rm",
-				.Critical,
+				severity,
 				"Potentially destructive recursive delete target detected",
 				loc,
 				"Use explicit safe paths and add guard checks before deletion",
@@ -451,11 +468,12 @@ scanner_maybe_add_builtin_line_findings :: proc(
 		}
 	}
 	if strings.contains(trimmed, "chmod 777") {
-		if !scanner_command_allowlisted("chmod", policy) {
+		severity, enabled := scanner_builtin_rule_effective(policy, "sec.overpermissive_chmod", .Warning)
+		if enabled && !scanner_command_allowlisted("chmod", policy) {
 			scanner_append_finding(
 				result,
 				"sec.overpermissive_chmod",
-				.Warning,
+				severity,
 				"Overly permissive file mode detected",
 				loc,
 				"Use least-privilege file permissions",
@@ -467,18 +485,21 @@ scanner_maybe_add_builtin_line_findings :: proc(
 		}
 	}
 	if strings.has_prefix(trimmed, "source /tmp/") || strings.has_prefix(trimmed, ". /tmp/") {
-		scanner_append_finding(
-			result,
-			"sec.source_tmp",
-			.High,
-			"Sourcing code from /tmp detected",
-			loc,
-			"Use immutable trusted paths for sourced files",
-			phase,
-			"source",
-			0.93,
-			trimmed,
-		)
+		severity, enabled := scanner_builtin_rule_effective(policy, "sec.source_tmp", .High)
+		if enabled {
+			scanner_append_finding(
+				result,
+				"sec.source_tmp",
+				severity,
+				"Sourcing code from /tmp detected",
+				loc,
+				"Use immutable trusted paths for sourced files",
+				phase,
+				"source",
+				0.93,
+				trimmed,
+			)
+		}
 	}
 }
 
@@ -655,11 +676,12 @@ scanner_eval_ast_rules_for_call :: proc(
 		return
 	}
 
-	if name == "eval" && !(scanner_command_allowlisted(name, policy) || scanner_command_allowlisted(raw_name, policy)) {
+	eval_severity, eval_enabled := scanner_builtin_rule_effective(policy, "sec.ast.eval", .High)
+	if eval_enabled && name == "eval" && !(scanner_command_allowlisted(name, policy) || scanner_command_allowlisted(raw_name, policy)) {
 		scanner_append_finding(
 			result,
 			"sec.ast.eval",
-			.High,
+			eval_severity,
 			"AST command analysis detected eval invocation",
 			loc,
 			"Avoid eval; use explicit command construction",
@@ -668,11 +690,12 @@ scanner_eval_ast_rules_for_call :: proc(
 			0.94,
 			name,
 		)
-		if strings.contains(joined_args, "$(") || strings.contains(joined_args, "`") {
+		dynamic_exec_severity, dynamic_exec_enabled := scanner_builtin_rule_effective(policy, "sec.ast.dynamic_exec", .Critical)
+		if dynamic_exec_enabled && (strings.contains(joined_args, "$(") || strings.contains(joined_args, "`")) {
 			scanner_append_finding(
 				result,
 				"sec.ast.dynamic_exec",
-				.Critical,
+				dynamic_exec_severity,
 				"Dynamic execution with command substitution detected",
 				loc,
 				"Avoid runtime command construction from untrusted input",
@@ -683,11 +706,12 @@ scanner_eval_ast_rules_for_call :: proc(
 			)
 		}
 	}
-	if (name == "source" || name == ".") && !(scanner_command_allowlisted("source", policy) || scanner_command_allowlisted(raw_name, policy)) {
+	source_severity, source_enabled := scanner_builtin_rule_effective(policy, "sec.ast.source", .High)
+	if source_enabled && (name == "source" || name == ".") && !(scanner_command_allowlisted("source", policy) || scanner_command_allowlisted(raw_name, policy)) {
 		scanner_append_finding(
 			result,
 			"sec.ast.source",
-			.High,
+			source_severity,
 			"AST command analysis detected runtime source invocation",
 			loc,
 			"Source only trusted immutable files",
@@ -696,11 +720,12 @@ scanner_eval_ast_rules_for_call :: proc(
 			0.93,
 			joined_args,
 		)
-		if strings.contains(joined_args, "<(") {
+		source_ps_severity, source_ps_enabled := scanner_builtin_rule_effective(policy, "sec.ast.source_process_subst", .Critical)
+		if source_ps_enabled && strings.contains(joined_args, "<(") {
 			scanner_append_finding(
 				result,
 				"sec.ast.source_process_subst",
-				.Critical,
+				source_ps_severity,
 				"Source invocation uses process substitution",
 				loc,
 				"Avoid sourcing process substitutions; use trusted temporary file flow",
@@ -712,11 +737,12 @@ scanner_eval_ast_rules_for_call :: proc(
 		}
 	}
 
-	if (name == "bash" || name == "sh" || name == "zsh" || name == "fish") && first_arg == "-c" {
+	shell_dash_c_severity, shell_dash_c_enabled := scanner_builtin_rule_effective(policy, "sec.ast.shell_dash_c", .High)
+	if shell_dash_c_enabled && (name == "bash" || name == "sh" || name == "zsh" || name == "fish") && first_arg == "-c" {
 		scanner_append_finding(
 			result,
 			"sec.ast.shell_dash_c",
-			.High,
+			shell_dash_c_severity,
 			"Shell command string execution via -c detected",
 			loc,
 			"Avoid passing dynamic command strings to shell -c",
@@ -725,11 +751,12 @@ scanner_eval_ast_rules_for_call :: proc(
 			0.92,
 			joined_args,
 		)
-		if strings.contains(second_arg, "$") || strings.contains(second_arg, "$(") || strings.contains(second_arg, "`") {
+		shell_dash_c_dynamic_severity, shell_dash_c_dynamic_enabled := scanner_builtin_rule_effective(policy, "sec.ast.shell_dash_c_dynamic", .Critical)
+		if shell_dash_c_dynamic_enabled && (strings.contains(second_arg, "$") || strings.contains(second_arg, "$(") || strings.contains(second_arg, "`")) {
 			scanner_append_finding(
 				result,
 				"sec.ast.shell_dash_c_dynamic",
-				.Critical,
+				shell_dash_c_dynamic_severity,
 				"Dynamic shell -c command string detected",
 				loc,
 				"Avoid dynamic shell command strings",
@@ -747,11 +774,12 @@ scanner_eval_ast_rules_for_call :: proc(
 		has_indirect_exec = scanner_is_variable_command_head(raw_name)
 	}
 	if has_indirect_exec {
-		if scanner_is_indirect_ref_head(raw_name) {
+		indirect_ref_severity, indirect_ref_enabled := scanner_builtin_rule_effective(policy, "sec.ast.indirect_exec_indirect_ref", .High)
+		if indirect_ref_enabled && scanner_is_indirect_ref_head(raw_name) {
 			scanner_append_finding(
 				result,
 				"sec.ast.indirect_exec_indirect_ref",
-				.High,
+				indirect_ref_severity,
 				"Indirect command execution via bash indirect expansion detected",
 				loc,
 				"Avoid executing commands via ${!var} indirection",
@@ -761,11 +789,12 @@ scanner_eval_ast_rules_for_call :: proc(
 				indirect_matched_text,
 			)
 		}
-		if scanner_is_array_command_head(raw_name) {
+		indirect_array_severity, indirect_array_enabled := scanner_builtin_rule_effective(policy, "sec.ast.indirect_exec_array_head", .High)
+		if indirect_array_enabled && scanner_is_array_command_head(raw_name) {
 			scanner_append_finding(
 				result,
 				"sec.ast.indirect_exec_array_head",
-				.High,
+				indirect_array_severity,
 				"Indirect command execution via array-expanded command head detected",
 				loc,
 				"Use explicit allowlisted command dispatch instead of array head expansion",
@@ -775,18 +804,21 @@ scanner_eval_ast_rules_for_call :: proc(
 				indirect_matched_text,
 			)
 		}
-		scanner_append_finding(
-			result,
-			"sec.ast.indirect_exec",
-			.High,
-			"Indirect command execution via variable command name detected",
-			loc,
-			"Use explicit allowlisted command dispatch",
-			phase,
-			"execution",
-			0.91,
-			indirect_matched_text,
-		)
+		indirect_severity, indirect_enabled := scanner_builtin_rule_effective(policy, "sec.ast.indirect_exec", .High)
+		if indirect_enabled {
+			scanner_append_finding(
+				result,
+				"sec.ast.indirect_exec",
+				indirect_severity,
+				"Indirect command execution via variable command name detected",
+				loc,
+				"Use explicit allowlisted command dispatch",
+				phase,
+				"execution",
+				0.91,
+				indirect_matched_text,
+			)
+		}
 	}
 
 	for raw_rule in policy.custom_rules {
@@ -830,7 +862,8 @@ scanner_walk_ast_statement :: proc(
 	#partial switch stmt.type {
 	case .Call:
 		scanner_eval_ast_rules_for_call(result, policy, stmt.call, phase, source_name)
-		if !scanner_any_shell_allowlisted(policy) {
+		pipe_download_ast_severity, pipe_download_ast_enabled := scanner_builtin_rule_effective(policy, "sec.ast.pipe_download_exec", .Critical)
+		if pipe_download_ast_enabled && !scanner_any_shell_allowlisted(policy) {
 			fragment := scanner_source_fragment_from_loc(source_lines, stmt.location)
 			if scanner_fragment_has_pipe_download_exec(fragment) {
 				loc := stmt.location
@@ -838,7 +871,7 @@ scanner_walk_ast_statement :: proc(
 				scanner_append_finding(
 					result,
 					"sec.ast.pipe_download_exec",
-					.Critical,
+					pipe_download_ast_severity,
 					"AST command analysis detected network download piped into shell",
 					loc,
 					"Split download and execution into separate verified steps",
@@ -872,11 +905,12 @@ scanner_walk_ast_statement :: proc(
 			}
 			scanner_eval_ast_rules_for_call(result, policy, call, phase, source_name)
 		}
-		if has_fetch && has_shell && !scanner_any_shell_allowlisted(policy) {
+		pipe_download_ast_severity, pipe_download_ast_enabled := scanner_builtin_rule_effective(policy, "sec.ast.pipe_download_exec", .Critical)
+		if pipe_download_ast_enabled && has_fetch && has_shell && !scanner_any_shell_allowlisted(policy) {
 			scanner_append_finding(
 				result,
 				"sec.ast.pipe_download_exec",
-				.Critical,
+				pipe_download_ast_severity,
 				"AST command analysis detected network download piped into shell",
 				stmt.location,
 				"Split download and execution into separate verified steps",
