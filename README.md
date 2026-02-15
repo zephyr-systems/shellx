@@ -235,6 +235,8 @@ fmt.println(batch_json)
 Full Zephyr-oriented example:
 
 - `examples/zephyr_security_scan.odin`
+- Exact scanner type contract and field names:
+  `docs/api_reference.md#exact-scanner-type-contract`
 
 ### Build scripts programmatically
 

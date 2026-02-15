@@ -183,6 +183,124 @@ Default: `DEFAULT_SECURITY_SCAN_POLICY`.
 - `ruleset_version: string`
 - `stats: SecurityScanStats`
 
+## Exact Scanner Type Contract
+
+These are the canonical type/field names ShellX expects (copy/paste safe).
+
+### `SecurityRuleOverride` (exact)
+
+```odin
+SecurityRuleOverride :: struct {
+	rule_id:               string,
+	enabled:               bool,
+	severity_override:     FindingSeverity,
+	has_severity_override: bool,
+}
+```
+
+### `SecurityScanRule` (exact)
+
+```odin
+SecurityScanRule :: struct {
+	rule_id:      string,
+	enabled:      bool,
+	severity:     FindingSeverity,
+	match_kind:   SecurityMatchKind,
+	pattern:      string,
+	category:     string,
+	confidence:   f32,
+	phases:       SecurityScanPhases,
+	command_name: string,
+	arg_pattern:  string,
+	message:      string,
+	suggestion:   string,
+}
+```
+
+### Enums (exact values)
+
+```odin
+FindingSeverity :: enum {
+	Info,
+	Warning,
+	High,
+	Critical,
+}
+
+SecurityMatchKind :: enum {
+	Substring,
+	Regex,
+	AstCommand,
+}
+
+SecurityScanPhase :: enum {
+	Source,
+	Translated,
+}
+
+SecurityScanPhases :: bit_set[SecurityScanPhase; u8]
+```
+
+### `SecurityScanPolicy` (exact)
+
+```odin
+SecurityScanPolicy :: struct {
+	use_builtin_rules:  bool,
+	block_threshold:    FindingSeverity,
+	custom_rules:       []SecurityScanRule,
+	allowlist_paths:    []string,
+	allowlist_commands: []string,
+	rule_overrides:     []SecurityRuleOverride,
+	ruleset_version:    string,
+}
+```
+
+### How to modify policy fields correctly
+
+`custom_rules` and `rule_overrides` are slices (`[]T`), so assign slice literals directly:
+
+```odin
+policy := shellx.DEFAULT_SECURITY_SCAN_POLICY
+policy.rule_overrides = []shellx.SecurityRuleOverride{
+	{
+		rule_id = "sec.dangerous_rm",
+		enabled = false,
+	},
+}
+policy.custom_rules = []shellx.SecurityScanRule{
+	{
+		rule_id = "my.custom.rule",
+		enabled = true,
+		severity = .High,
+		match_kind = .Substring,
+		pattern = "password = ",
+		category = "secrets",
+		confidence = 0.9,
+		phases = { .Source },
+		message = "Hardcoded password pattern detected",
+		suggestion = "Use env/secret manager",
+	},
+}
+```
+
+There is currently no `add_rule_override(...)` helper.
+
+### String to enum mapping (manual parsing)
+
+```odin
+severity: shellx.FindingSeverity
+switch sev_str {
+case "Info":
+	severity = .Info
+case "Warning":
+	severity = .Warning
+case "High":
+	severity = .High
+case "Critical":
+	severity = .Critical
+}
+```
+
 ## Functions
 
 ### `translate(source_code, from, to, options := DEFAULT_TRANSLATION_OPTIONS) -> TranslationResult`
