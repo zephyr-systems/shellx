@@ -142,20 +142,10 @@ scanner_fragment_has_pipe_download_exec :: proc(fragment: string) -> bool {
 	return has_fetch && has_shell
 }
 
-scanner_command_allowlisted :: proc(command: string, policy: SecurityScanPolicy) -> bool {
-	for allowed in policy.allowlist_commands {
-		if allowed == command {
-			return true
-		}
-	}
-	return false
-}
-
-scanner_any_shell_allowlisted :: proc(policy: SecurityScanPolicy) -> bool {
-	return scanner_command_allowlisted("sh", policy) ||
-		scanner_command_allowlisted("bash", policy) ||
-		scanner_command_allowlisted("zsh", policy) ||
-		scanner_command_allowlisted("fish", policy)
+Scanner_Allowlist_Context :: struct {
+	normalized_paths: [dynamic]string,
+	command_set: map[string]bool,
+	any_shell_allowlisted: bool,
 }
 
 scanner_normalize_path :: proc(path: string) -> string {
@@ -228,18 +218,60 @@ scanner_path_matches_allowlist_root :: proc(path: string, root: string) -> bool 
 	return false
 }
 
-scanner_path_allowlisted :: proc(path: string, policy: SecurityScanPolicy) -> bool {
-	if path == "" {
-		return false
+scanner_build_allowlist_context :: proc(policy: SecurityScanPolicy) -> Scanner_Allowlist_Context {
+	ctx := Scanner_Allowlist_Context{
+		normalized_paths = make([dynamic]string, 0, len(policy.allowlist_paths), context.temp_allocator),
+		command_set = make(map[string]bool, len(policy.allowlist_commands), context.temp_allocator),
 	}
-	normalized_path := scanner_normalize_path(path)
-	defer delete(normalized_path)
 	for allowed in policy.allowlist_paths {
 		if allowed == "" {
 			continue
 		}
 		normalized_allowed := scanner_normalize_path(allowed)
-		defer delete(normalized_allowed)
+		if normalized_allowed == "" {
+			continue
+		}
+		append(&ctx.normalized_paths, normalized_allowed)
+	}
+	for allowed in policy.allowlist_commands {
+		if allowed == "" {
+			continue
+		}
+		ctx.command_set[allowed] = true
+	}
+	ctx.any_shell_allowlisted = ctx.command_set["sh"] ||
+		ctx.command_set["bash"] ||
+		ctx.command_set["zsh"] ||
+		ctx.command_set["fish"]
+	return ctx
+}
+
+scanner_destroy_allowlist_context :: proc(ctx: ^Scanner_Allowlist_Context) {
+	for normalized in ctx.normalized_paths {
+		if normalized != "" {
+			delete(normalized)
+		}
+	}
+	delete(ctx.normalized_paths)
+	delete(ctx.command_set)
+}
+
+scanner_command_allowlisted :: proc(command: string, allowlist: ^Scanner_Allowlist_Context) -> bool {
+	_, ok := allowlist.command_set[command]
+	return ok
+}
+
+scanner_any_shell_allowlisted :: proc(allowlist: ^Scanner_Allowlist_Context) -> bool {
+	return allowlist.any_shell_allowlisted
+}
+
+scanner_path_allowlisted :: proc(path: string, allowlist: ^Scanner_Allowlist_Context) -> bool {
+	if path == "" {
+		return false
+	}
+	normalized_path := scanner_normalize_path(path)
+	defer delete(normalized_path)
+	for normalized_allowed in allowlist.normalized_paths {
 		if scanner_path_matches_allowlist_root(normalized_path, normalized_allowed) {
 			return true
 		}
@@ -453,6 +485,8 @@ scanner_maybe_add_builtin_line_findings :: proc(
 	result: ^SecurityScanResult,
 	policy: SecurityScanPolicy,
 	override_index: ^map[string]SecurityRuleOverride,
+	allowlist: ^Scanner_Allowlist_Context,
+	source_path_allowlisted: bool,
 	source_name: string,
 	line: string,
 	line_no: int,
@@ -473,7 +507,7 @@ scanner_maybe_add_builtin_line_findings :: proc(
 		strings.contains(trimmed, "| zsh") || strings.contains(trimmed, "| fish")) &&
 		(strings.contains(trimmed, "curl ") || strings.contains(trimmed, "wget ") || strings.contains(trimmed, "fetch ")) {
 		severity, enabled := scanner_builtin_rule_effective(policy, override_index, "sec.pipe_download_exec", .Critical)
-		if enabled && !scanner_path_allowlisted(source_name, policy) && !scanner_command_allowlisted("sh", policy) {
+		if enabled && !source_path_allowlisted && !scanner_command_allowlisted("sh", allowlist) {
 			scanner_append_finding(
 				result,
 				"sec.pipe_download_exec",
@@ -490,7 +524,7 @@ scanner_maybe_add_builtin_line_findings :: proc(
 	}
 	if strings.contains(trimmed, "eval ") && (strings.contains(trimmed, "curl ") || strings.contains(trimmed, "wget ")) {
 		severity, enabled := scanner_builtin_rule_effective(policy, override_index, "sec.eval_download", .Critical)
-		if enabled && !scanner_path_allowlisted(source_name, policy) && !scanner_command_allowlisted("eval", policy) {
+		if enabled && !source_path_allowlisted && !scanner_command_allowlisted("eval", allowlist) {
 			scanner_append_finding(
 				result,
 				"sec.eval_download",
@@ -507,7 +541,7 @@ scanner_maybe_add_builtin_line_findings :: proc(
 	}
 	if strings.contains(trimmed, "rm -rf /") || strings.contains(trimmed, "rm -rf ~") {
 		severity, enabled := scanner_builtin_rule_effective(policy, override_index, "sec.dangerous_rm", .Critical)
-		if enabled && !scanner_command_allowlisted("rm", policy) {
+		if enabled && !scanner_command_allowlisted("rm", allowlist) {
 			scanner_append_finding(
 				result,
 				"sec.dangerous_rm",
@@ -524,7 +558,7 @@ scanner_maybe_add_builtin_line_findings :: proc(
 	}
 	if strings.contains(trimmed, "chmod 777") {
 		severity, enabled := scanner_builtin_rule_effective(policy, override_index, "sec.overpermissive_chmod", .Warning)
-		if enabled && !scanner_command_allowlisted("chmod", policy) {
+		if enabled && !scanner_command_allowlisted("chmod", allowlist) {
 			scanner_append_finding(
 				result,
 				"sec.overpermissive_chmod",
@@ -654,6 +688,7 @@ scanner_scan_text_rules :: proc(
 	phase: SecurityScanPhase,
 	policy: SecurityScanPolicy,
 	override_index: ^map[string]SecurityRuleOverride,
+	allowlist: ^Scanner_Allowlist_Context,
 	options: SecurityScanOptions,
 	sw: ^time.Stopwatch,
 ) {
@@ -664,6 +699,7 @@ scanner_scan_text_rules :: proc(
 
 	lines := strings.split_lines(code, context.temp_allocator)
 	defer delete(lines, context.temp_allocator)
+	source_path_allowlisted := scanner_path_allowlisted(source_name, allowlist)
 	for line, i in lines {
 		if scanner_check_timeout(result, sw^, options) {
 			return
@@ -671,7 +707,7 @@ scanner_scan_text_rules :: proc(
 		line_no := i + 1
 		result.stats.lines_scanned += 1
 		if policy.use_builtin_rules {
-			scanner_maybe_add_builtin_line_findings(result, policy, override_index, source_name, line, line_no, phase)
+			scanner_maybe_add_builtin_line_findings(result, policy, override_index, allowlist, source_path_allowlisted, source_name, line, line_no, phase)
 		}
 		trimmed := strings.trim_space(line)
 		if trimmed == "" {
@@ -718,6 +754,7 @@ scanner_eval_ast_rules_for_call :: proc(
 	result: ^SecurityScanResult,
 	policy: SecurityScanPolicy,
 	override_index: ^map[string]SecurityRuleOverride,
+	allowlist: ^Scanner_Allowlist_Context,
 	custom_ast_rules: []SecurityScanRule,
 	call: ir.Call,
 	phase: SecurityScanPhase,
@@ -783,12 +820,12 @@ scanner_eval_ast_rules_for_call :: proc(
 
 	loc := call.location
 	loc.file = source_name
-	if scanner_path_allowlisted(source_name, policy) {
+	if scanner_path_allowlisted(source_name, allowlist) {
 		return
 	}
 
 	eval_severity, eval_enabled := scanner_builtin_rule_effective(policy, override_index, "sec.ast.eval", .High)
-	if eval_enabled && name == "eval" && !(scanner_command_allowlisted(name, policy) || scanner_command_allowlisted(raw_name, policy)) {
+	if eval_enabled && name == "eval" && !(scanner_command_allowlisted(name, allowlist) || scanner_command_allowlisted(raw_name, allowlist)) {
 		scanner_append_finding(
 			result,
 			"sec.ast.eval",
@@ -818,7 +855,7 @@ scanner_eval_ast_rules_for_call :: proc(
 		}
 	}
 	source_severity, source_enabled := scanner_builtin_rule_effective(policy, override_index, "sec.ast.source", .High)
-	if source_enabled && (name == "source" || name == ".") && !(scanner_command_allowlisted("source", policy) || scanner_command_allowlisted(raw_name, policy)) {
+	if source_enabled && (name == "source" || name == ".") && !(scanner_command_allowlisted("source", allowlist) || scanner_command_allowlisted(raw_name, allowlist)) {
 		scanner_append_finding(
 			result,
 			"sec.ast.source",
@@ -958,6 +995,7 @@ scanner_walk_ast_statement :: proc(
 	result: ^SecurityScanResult,
 	policy: SecurityScanPolicy,
 	override_index: ^map[string]SecurityRuleOverride,
+	allowlist: ^Scanner_Allowlist_Context,
 	custom_ast_rules: []SecurityScanRule,
 	stmt: ir.Statement,
 	phase: SecurityScanPhase,
@@ -967,9 +1005,9 @@ scanner_walk_ast_statement :: proc(
 ) {
 	#partial switch stmt.type {
 	case .Call:
-		scanner_eval_ast_rules_for_call(result, policy, override_index, custom_ast_rules, stmt.call, phase, source_name)
+		scanner_eval_ast_rules_for_call(result, policy, override_index, allowlist, custom_ast_rules, stmt.call, phase, source_name)
 		pipe_download_ast_severity, pipe_download_ast_enabled := scanner_builtin_rule_effective(policy, override_index, "sec.ast.pipe_download_exec", .Critical)
-		if pipe_download_ast_enabled && !scanner_any_shell_allowlisted(policy) {
+		if pipe_download_ast_enabled && !scanner_any_shell_allowlisted(allowlist) {
 			fragment := scanner_source_fragment_from_loc(source_lines, stmt.location)
 			if scanner_fragment_has_pipe_download_exec(fragment) {
 				loc := stmt.location
@@ -1009,10 +1047,10 @@ scanner_walk_ast_statement :: proc(
 			if name == "sh" || name == "bash" || name == "zsh" || name == "fish" {
 				has_shell = true
 			}
-			scanner_eval_ast_rules_for_call(result, policy, override_index, custom_ast_rules, call, phase, source_name)
+			scanner_eval_ast_rules_for_call(result, policy, override_index, allowlist, custom_ast_rules, call, phase, source_name)
 		}
 		pipe_download_ast_severity, pipe_download_ast_enabled := scanner_builtin_rule_effective(policy, override_index, "sec.ast.pipe_download_exec", .Critical)
-		if pipe_download_ast_enabled && has_fetch && has_shell && !scanner_any_shell_allowlisted(policy) {
+		if pipe_download_ast_enabled && has_fetch && has_shell && !scanner_any_shell_allowlisted(allowlist) {
 			scanner_append_finding(
 				result,
 				"sec.ast.pipe_download_exec",
@@ -1054,6 +1092,7 @@ scanner_scan_ast_rules :: proc(
 	phase: SecurityScanPhase,
 	policy: SecurityScanPolicy,
 	override_index: ^map[string]SecurityRuleOverride,
+	allowlist: ^Scanner_Allowlist_Context,
 	options: SecurityScanOptions,
 	sw: ^time.Stopwatch,
 ) {
@@ -1134,7 +1173,7 @@ scanner_scan_ast_rules :: proc(
 		stmt := stack[last]
 		resize(&stack, last)
 		result.stats.rules_evaluated += 1
-		scanner_walk_ast_statement(result, policy, override_index, custom_ast_rules[:], stmt, phase, source_name, source_lines[:], &stack)
+		scanner_walk_ast_statement(result, policy, override_index, allowlist, custom_ast_rules[:], stmt, phase, source_name, source_lines[:], &stack)
 	}
 }
 
@@ -1147,13 +1186,21 @@ scanner_has_ast_rules :: proc(policy: SecurityScanPolicy) -> bool {
 	return policy.use_builtin_rules
 }
 
-scanner_apply_allowlist :: proc(result: ^SecurityScanResult, policy: SecurityScanPolicy) {
-	if len(policy.allowlist_paths) == 0 && len(policy.allowlist_commands) == 0 {
+scanner_apply_allowlist :: proc(result: ^SecurityScanResult, allowlist: ^Scanner_Allowlist_Context) {
+	if len(allowlist.normalized_paths) == 0 && len(allowlist.command_set) == 0 {
 		return
 	}
-	filtered := make([dynamic]SecurityFinding, 0, len(result.findings), context.allocator)
-	for finding in result.findings {
-		if scanner_path_allowlisted(finding.location.file, policy) {
+	path_match_cache := make(map[string]bool, context.temp_allocator)
+	defer delete(path_match_cache)
+	write := 0
+	for i in 0..<len(result.findings) {
+		finding := result.findings[i]
+		path_allowed, ok := path_match_cache[finding.location.file]
+		if !ok {
+			path_allowed = scanner_path_allowlisted(finding.location.file, allowlist)
+			path_match_cache[finding.location.file] = path_allowed
+		}
+		if path_allowed {
 			delete(finding.rule_id)
 			delete(finding.message)
 			delete(finding.suggestion)
@@ -1164,7 +1211,7 @@ scanner_apply_allowlist :: proc(result: ^SecurityScanResult, policy: SecuritySca
 			continue
 		}
 		skip := false
-		for command in policy.allowlist_commands {
+		for command, _ in allowlist.command_set {
 			if command != "" && (finding.matched_text == command || strings.contains(finding.matched_text, command)) {
 				skip = true
 				break
@@ -1180,13 +1227,12 @@ scanner_apply_allowlist :: proc(result: ^SecurityScanResult, policy: SecuritySca
 			delete(finding.fingerprint)
 			continue
 		}
-		append(&filtered, finding)
+		if write != i {
+			result.findings[write] = finding
+		}
+		write += 1
 	}
-	clear(&result.findings)
-	for finding in filtered {
-		append(&result.findings, finding)
-	}
-	delete(filtered)
+	resize(&result.findings, write)
 }
 
 scanner_finalize :: proc(result: ^SecurityScanResult, policy: SecurityScanPolicy) {
@@ -1620,18 +1666,19 @@ scanner_scan_phase :: proc(
 	phase: SecurityScanPhase,
 	policy: SecurityScanPolicy,
 	override_index: ^map[string]SecurityRuleOverride,
+	allowlist: ^Scanner_Allowlist_Context,
 	options: SecurityScanOptions,
 	sw: ^time.Stopwatch,
 ) {
 	if code == "" {
 		return
 	}
-	scanner_scan_text_rules(result, code, source_name, phase, policy, override_index, options, sw)
+	scanner_scan_text_rules(result, code, source_name, phase, policy, override_index, allowlist, options, sw)
 	if !result.success {
 		return
 	}
 	if scanner_has_ast_rules(policy) {
-		scanner_scan_ast_rules(result, code, source_name, dialect, phase, policy, override_index, options, sw)
+		scanner_scan_ast_rules(result, code, source_name, dialect, phase, policy, override_index, allowlist, options, sw)
 	}
 }
 
@@ -1655,6 +1702,8 @@ scanner_scan_security_impl :: proc(
 	time.stopwatch_start(&sw)
 	override_index := scanner_build_override_index(policy)
 	defer scanner_destroy_override_index(override_index)
+	allowlist := scanner_build_allowlist_context(policy)
+	defer scanner_destroy_allowlist_context(&allowlist)
 
 	if options.max_file_size > 0 && len(source_code) > options.max_file_size {
 		scanner_append_runtime_error(
@@ -1671,13 +1720,13 @@ scanner_scan_security_impl :: proc(
 	}
 
 	if .Source in options.include_phases {
-		scanner_scan_phase(&result, source_code, source_name, dialect, .Source, policy, &override_index, options, &sw)
+		scanner_scan_phase(&result, source_code, source_name, dialect, .Source, policy, &override_index, &allowlist, options, &sw)
 	}
 	if result.success && options.scan_translated_output && translated_output != "" && .Translated in options.include_phases {
-		scanner_scan_phase(&result, translated_output, source_name, dialect, .Translated, policy, &override_index, options, &sw)
+		scanner_scan_phase(&result, translated_output, source_name, dialect, .Translated, policy, &override_index, &allowlist, options, &sw)
 	}
 
-	scanner_apply_allowlist(&result, policy)
+	scanner_apply_allowlist(&result, &allowlist)
 	scanner_finalize(&result, policy)
 	time.stopwatch_stop(&sw)
 	result.stats.duration_ms = i64(time.duration_milliseconds(time.stopwatch_duration(sw)))
