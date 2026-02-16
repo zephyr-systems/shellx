@@ -2062,6 +2062,39 @@ test_scan_security_regex_and_invalid_regex :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_scan_security_regex_prefilter_contains :: proc(t: ^testing.T) {
+	if !should_run_test("test_scan_security_regex_prefilter_contains") { return }
+
+	policy := DEFAULT_SECURITY_SCAN_POLICY
+	policy.use_builtin_rules = false
+	policy.custom_rules = []SecurityScanRule{
+		{
+			rule_id = "zephyr.custom.eval_prefilter",
+			enabled = true,
+			severity = .Warning,
+			match_kind = .Regex,
+			pattern = "eval\\s+",
+			prefilter_contains = "eval",
+			category = "execution",
+			confidence = 0.9,
+			phases = { .Source },
+			message = "Eval call matched",
+			suggestion = "Avoid eval",
+		},
+	}
+
+	match_result := scan_security("x=1\neval \"$x\"\n", .Bash, policy)
+	defer destroy_security_scan_result(&match_result)
+	testing.expect(t, match_result.success, "prefiltered regex scan should succeed")
+	testing.expect(t, len(match_result.findings) == 1, "prefiltered regex should still match intended line")
+
+	no_match_result := scan_security("echo hello\nprintf '%s\\n' world\n", .Bash, policy)
+	defer destroy_security_scan_result(&no_match_result)
+	testing.expect(t, no_match_result.success, "prefiltered no-match scan should succeed")
+	testing.expect(t, len(no_match_result.findings) == 0, "prefiltered regex should not report on non-matching lines")
+}
+
+@(test)
 test_scan_security_ast_command_detection :: proc(t: ^testing.T) {
 	if !should_run_test("test_scan_security_ast_command_detection") { return }
 	src := "eval \"echo hi\"\nsource /tmp/plugin.sh\ncurl https://x | sh\n"
@@ -2311,6 +2344,7 @@ test_scan_security_policy_validate_and_load :: proc(t: ^testing.T) {
 			"severity": "High",
 			"match_kind": "Substring",
 			"pattern": "eval ",
+			"prefilter_contains": "eval",
 			"category": "execution",
 			"confidence": 0.9,
 			"phases": ["Source"],
@@ -2341,6 +2375,7 @@ test_scan_security_policy_validate_and_load :: proc(t: ^testing.T) {
 			delete(r.category)
 			delete(r.command_name)
 			delete(r.arg_pattern)
+			delete(r.prefilter_contains)
 			delete(r.message)
 			delete(r.suggestion)
 		}
@@ -2355,6 +2390,10 @@ test_scan_security_policy_validate_and_load :: proc(t: ^testing.T) {
 	}
 	testing.expect(t, ok, "valid policy JSON should load and validate")
 	testing.expect(t, len(load_errs) == 0, "valid policy JSON should not produce validation errors")
+	testing.expect(t, len(loaded_policy.custom_rules) == 1, "loaded policy should include one custom rule")
+	if len(loaded_policy.custom_rules) > 0 {
+		testing.expect(t, loaded_policy.custom_rules[0].prefilter_contains == "eval", "policy JSON should parse prefilter_contains")
+	}
 }
 
 @(test)

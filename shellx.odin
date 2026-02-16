@@ -85,6 +85,7 @@ SecurityScanRule :: struct {
 	phases:     SecurityScanPhases,
 	command_name: string,
 	arg_pattern:  string,
+	prefilter_contains: string,
 	message:    string,
 	suggestion: string,
 }

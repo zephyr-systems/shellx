@@ -602,14 +602,14 @@ scanner_regex_match :: proc(line: string, pattern: string) -> (bool, string, str
 		return false, "", fmt.tprintf("%v", err)
 	}
 	defer regex.destroy(r)
-	capture, ok := regex.match_and_allocate_capture(r, line)
-	if ok && len(capture.groups) > 0 {
+	capture, matched := regex.match(r, line)
+	if matched && len(capture.groups) > 0 {
 		matched := strings.clone(capture.groups[0], context.allocator)
 		regex.destroy(capture)
 		return true, matched, ""
 	}
 	regex.destroy(capture)
-	return ok, "", ""
+	return matched, "", ""
 }
 
 Scanner_Regex_Cache_Entry :: struct {
@@ -656,7 +656,7 @@ scanner_regex_match_cached :: proc(
 		return false, "", entry.err_msg
 	}
 
-	capture, matched := regex.match_and_allocate_capture(entry.re, line)
+	capture, matched := regex.match(entry.re, line)
 	if matched && len(capture.groups) > 0 {
 		matched_text := strings.clone(capture.groups[0], context.allocator)
 		regex.destroy(capture)
@@ -718,6 +718,11 @@ scanner_scan_text_rules :: proc(
 			continue
 		}
 		for effective_rule in effective_text_rules {
+			if effective_rule.match_kind == .Regex &&
+				effective_rule.prefilter_contains != "" &&
+				!strings.contains(trimmed, effective_rule.prefilter_contains) {
+				continue
+			}
 			result.stats.rules_evaluated += 1
 			matched, matched_text, match_err := scanner_line_matches_rule(trimmed, effective_rule, &regex_cache)
 			if match_err != "" {
@@ -1323,12 +1328,20 @@ validate_security_policy :: proc(policy: SecurityScanPolicy) -> [dynamic]ErrorCo
 			if strings.trim_space(rule.pattern) == "" {
 				scanner_append_policy_error(&errors, rule.rule_id, "Regex rule requires non-empty pattern", "Set SecurityScanRule.pattern")
 			} else {
-				r, err := regex.create(rule.pattern, {}, context.temp_allocator, context.temp_allocator)
+				r, err := regex.create(rule.pattern)
 				if err != nil {
 					scanner_append_policy_error(&errors, rule.rule_id, fmt.tprintf("Invalid regex pattern: %v", err), "Fix regex syntax")
 				} else {
 					regex.destroy(r)
 				}
+			}
+			if rule.prefilter_contains != "" && strings.trim_space(rule.prefilter_contains) == "" {
+				scanner_append_policy_error(
+					&errors,
+					rule.rule_id,
+					"Regex rule prefilter_contains cannot be whitespace-only",
+					"Set prefilter_contains to a non-empty substring or omit it",
+				)
 			}
 		case .AstCommand:
 			if strings.trim_space(rule.command_name) == "" && strings.trim_space(rule.arg_pattern) == "" {
@@ -1604,6 +1617,11 @@ load_security_policy_json :: proc(data: string) -> (SecurityScanPolicy, [dynamic
 						if f, okf := obj["arg_pattern"]; okf {
 							if s, ok2 := parse_string(f); ok2 {
 								rule.arg_pattern = strings.clone(s, context.allocator)
+							}
+						}
+						if f, okf := obj["prefilter_contains"]; okf {
+							if s, ok2 := parse_string(f); ok2 {
+								rule.prefilter_contains = strings.clone(s, context.allocator)
 							}
 						}
 						if f, okf := obj["message"]; okf {
