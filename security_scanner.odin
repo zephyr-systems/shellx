@@ -303,6 +303,44 @@ scanner_builtin_rule_effective :: proc(
 	return effective.severity, enabled
 }
 
+scanner_collect_effective_text_rules :: proc(
+	policy: SecurityScanPolicy,
+	override_index: ^map[string]SecurityRuleOverride,
+	phase: SecurityScanPhase,
+) -> [dynamic]SecurityScanRule {
+	effective_rules := make([dynamic]SecurityScanRule, 0, len(policy.custom_rules), context.temp_allocator)
+	for raw_rule in policy.custom_rules {
+		effective_rule, enabled := scanner_rule_effective(policy, override_index, raw_rule)
+		if !enabled || effective_rule.match_kind == .AstCommand {
+			continue
+		}
+		if card(effective_rule.phases) > 0 && phase not_in effective_rule.phases {
+			continue
+		}
+		append(&effective_rules, effective_rule)
+	}
+	return effective_rules
+}
+
+scanner_collect_effective_ast_rules :: proc(
+	policy: SecurityScanPolicy,
+	override_index: ^map[string]SecurityRuleOverride,
+	phase: SecurityScanPhase,
+) -> [dynamic]SecurityScanRule {
+	effective_rules := make([dynamic]SecurityScanRule, 0, len(policy.custom_rules), context.temp_allocator)
+	for raw_rule in policy.custom_rules {
+		effective_rule, enabled := scanner_rule_effective(policy, override_index, raw_rule)
+		if !enabled || effective_rule.match_kind != .AstCommand {
+			continue
+		}
+		if card(effective_rule.phases) > 0 && phase not_in effective_rule.phases {
+			continue
+		}
+		append(&effective_rules, effective_rule)
+	}
+	return effective_rules
+}
+
 scanner_fingerprint :: proc(rule_id: string, loc: ir.SourceLocation, matched: string, phase: string) -> string {
 	hash: u64 = 1469598103934665603
 	write_byte :: proc(v: ^u64, b: byte) {
@@ -414,6 +452,7 @@ scanner_check_timeout :: proc(result: ^SecurityScanResult, sw: time.Stopwatch, o
 scanner_maybe_add_builtin_line_findings :: proc(
 	result: ^SecurityScanResult,
 	policy: SecurityScanPolicy,
+	override_index: ^map[string]SecurityRuleOverride,
 	source_name: string,
 	line: string,
 	line_no: int,
@@ -433,7 +472,7 @@ scanner_maybe_add_builtin_line_findings :: proc(
 	if (strings.contains(trimmed, "| sh") || strings.contains(trimmed, "| bash") ||
 		strings.contains(trimmed, "| zsh") || strings.contains(trimmed, "| fish")) &&
 		(strings.contains(trimmed, "curl ") || strings.contains(trimmed, "wget ") || strings.contains(trimmed, "fetch ")) {
-		severity, enabled := scanner_builtin_rule_effective(policy, "sec.pipe_download_exec", .Critical)
+		severity, enabled := scanner_builtin_rule_effective(policy, override_index, "sec.pipe_download_exec", .Critical)
 		if enabled && !scanner_path_allowlisted(source_name, policy) && !scanner_command_allowlisted("sh", policy) {
 			scanner_append_finding(
 				result,
@@ -450,7 +489,7 @@ scanner_maybe_add_builtin_line_findings :: proc(
 		}
 	}
 	if strings.contains(trimmed, "eval ") && (strings.contains(trimmed, "curl ") || strings.contains(trimmed, "wget ")) {
-		severity, enabled := scanner_builtin_rule_effective(policy, "sec.eval_download", .Critical)
+		severity, enabled := scanner_builtin_rule_effective(policy, override_index, "sec.eval_download", .Critical)
 		if enabled && !scanner_path_allowlisted(source_name, policy) && !scanner_command_allowlisted("eval", policy) {
 			scanner_append_finding(
 				result,
@@ -467,7 +506,7 @@ scanner_maybe_add_builtin_line_findings :: proc(
 		}
 	}
 	if strings.contains(trimmed, "rm -rf /") || strings.contains(trimmed, "rm -rf ~") {
-		severity, enabled := scanner_builtin_rule_effective(policy, "sec.dangerous_rm", .Critical)
+		severity, enabled := scanner_builtin_rule_effective(policy, override_index, "sec.dangerous_rm", .Critical)
 		if enabled && !scanner_command_allowlisted("rm", policy) {
 			scanner_append_finding(
 				result,
@@ -484,7 +523,7 @@ scanner_maybe_add_builtin_line_findings :: proc(
 		}
 	}
 	if strings.contains(trimmed, "chmod 777") {
-		severity, enabled := scanner_builtin_rule_effective(policy, "sec.overpermissive_chmod", .Warning)
+		severity, enabled := scanner_builtin_rule_effective(policy, override_index, "sec.overpermissive_chmod", .Warning)
 		if enabled && !scanner_command_allowlisted("chmod", policy) {
 			scanner_append_finding(
 				result,
@@ -501,7 +540,7 @@ scanner_maybe_add_builtin_line_findings :: proc(
 		}
 	}
 	if strings.has_prefix(trimmed, "source /tmp/") || strings.has_prefix(trimmed, ". /tmp/") {
-		severity, enabled := scanner_builtin_rule_effective(policy, "sec.source_tmp", .High)
+		severity, enabled := scanner_builtin_rule_effective(policy, override_index, "sec.source_tmp", .High)
 		if enabled {
 			scanner_append_finding(
 				result,
@@ -614,11 +653,14 @@ scanner_scan_text_rules :: proc(
 	source_name: string,
 	phase: SecurityScanPhase,
 	policy: SecurityScanPolicy,
+	override_index: ^map[string]SecurityRuleOverride,
 	options: SecurityScanOptions,
 	sw: ^time.Stopwatch,
 ) {
 	regex_cache := make(map[string]Scanner_Regex_Cache_Entry, len(policy.custom_rules), context.temp_allocator)
 	defer scanner_destroy_regex_cache(regex_cache)
+	effective_text_rules := scanner_collect_effective_text_rules(policy, override_index, phase)
+	defer delete(effective_text_rules)
 
 	lines := strings.split_lines(code, context.temp_allocator)
 	defer delete(lines, context.temp_allocator)
@@ -629,23 +671,13 @@ scanner_scan_text_rules :: proc(
 		line_no := i + 1
 		result.stats.lines_scanned += 1
 		if policy.use_builtin_rules {
-			scanner_maybe_add_builtin_line_findings(result, policy, source_name, line, line_no, phase)
+			scanner_maybe_add_builtin_line_findings(result, policy, override_index, source_name, line, line_no, phase)
 		}
 		trimmed := strings.trim_space(line)
 		if trimmed == "" {
 			continue
 		}
-		for raw_rule in policy.custom_rules {
-			effective_rule, enabled := scanner_rule_effective(policy, raw_rule)
-			if !enabled {
-				continue
-			}
-			if effective_rule.match_kind == .AstCommand {
-				continue
-			}
-			if card(effective_rule.phases) > 0 && phase not_in effective_rule.phases {
-				continue
-			}
+		for effective_rule in effective_text_rules {
 			result.stats.rules_evaluated += 1
 			matched, matched_text, match_err := scanner_line_matches_rule(trimmed, effective_rule, &regex_cache)
 			if matched_text != "" {
@@ -685,6 +717,8 @@ scanner_scan_text_rules :: proc(
 scanner_eval_ast_rules_for_call :: proc(
 	result: ^SecurityScanResult,
 	policy: SecurityScanPolicy,
+	override_index: ^map[string]SecurityRuleOverride,
+	custom_ast_rules: []SecurityScanRule,
 	call: ir.Call,
 	phase: SecurityScanPhase,
 	source_name: string,
@@ -753,7 +787,7 @@ scanner_eval_ast_rules_for_call :: proc(
 		return
 	}
 
-	eval_severity, eval_enabled := scanner_builtin_rule_effective(policy, "sec.ast.eval", .High)
+	eval_severity, eval_enabled := scanner_builtin_rule_effective(policy, override_index, "sec.ast.eval", .High)
 	if eval_enabled && name == "eval" && !(scanner_command_allowlisted(name, policy) || scanner_command_allowlisted(raw_name, policy)) {
 		scanner_append_finding(
 			result,
@@ -767,7 +801,7 @@ scanner_eval_ast_rules_for_call :: proc(
 			0.94,
 			name,
 		)
-		dynamic_exec_severity, dynamic_exec_enabled := scanner_builtin_rule_effective(policy, "sec.ast.dynamic_exec", .Critical)
+		dynamic_exec_severity, dynamic_exec_enabled := scanner_builtin_rule_effective(policy, override_index, "sec.ast.dynamic_exec", .Critical)
 		if dynamic_exec_enabled && (strings.contains(joined_args, "$(") || strings.contains(joined_args, "`")) {
 			scanner_append_finding(
 				result,
@@ -783,7 +817,7 @@ scanner_eval_ast_rules_for_call :: proc(
 			)
 		}
 	}
-	source_severity, source_enabled := scanner_builtin_rule_effective(policy, "sec.ast.source", .High)
+	source_severity, source_enabled := scanner_builtin_rule_effective(policy, override_index, "sec.ast.source", .High)
 	if source_enabled && (name == "source" || name == ".") && !(scanner_command_allowlisted("source", policy) || scanner_command_allowlisted(raw_name, policy)) {
 		scanner_append_finding(
 			result,
@@ -797,7 +831,7 @@ scanner_eval_ast_rules_for_call :: proc(
 			0.93,
 			joined_args,
 		)
-		source_ps_severity, source_ps_enabled := scanner_builtin_rule_effective(policy, "sec.ast.source_process_subst", .Critical)
+		source_ps_severity, source_ps_enabled := scanner_builtin_rule_effective(policy, override_index, "sec.ast.source_process_subst", .Critical)
 		if source_ps_enabled && strings.contains(joined_args, "<(") {
 			scanner_append_finding(
 				result,
@@ -814,7 +848,7 @@ scanner_eval_ast_rules_for_call :: proc(
 		}
 	}
 
-	shell_dash_c_severity, shell_dash_c_enabled := scanner_builtin_rule_effective(policy, "sec.ast.shell_dash_c", .High)
+	shell_dash_c_severity, shell_dash_c_enabled := scanner_builtin_rule_effective(policy, override_index, "sec.ast.shell_dash_c", .High)
 	if shell_dash_c_enabled && (name == "bash" || name == "sh" || name == "zsh" || name == "fish") && first_arg == "-c" {
 		scanner_append_finding(
 			result,
@@ -828,7 +862,7 @@ scanner_eval_ast_rules_for_call :: proc(
 			0.92,
 			joined_args,
 		)
-		shell_dash_c_dynamic_severity, shell_dash_c_dynamic_enabled := scanner_builtin_rule_effective(policy, "sec.ast.shell_dash_c_dynamic", .Critical)
+		shell_dash_c_dynamic_severity, shell_dash_c_dynamic_enabled := scanner_builtin_rule_effective(policy, override_index, "sec.ast.shell_dash_c_dynamic", .Critical)
 		if shell_dash_c_dynamic_enabled && (strings.contains(second_arg, "$") || strings.contains(second_arg, "$(") || strings.contains(second_arg, "`")) {
 			scanner_append_finding(
 				result,
@@ -851,7 +885,7 @@ scanner_eval_ast_rules_for_call :: proc(
 		has_indirect_exec = scanner_is_variable_command_head(raw_name)
 	}
 	if has_indirect_exec {
-		indirect_ref_severity, indirect_ref_enabled := scanner_builtin_rule_effective(policy, "sec.ast.indirect_exec_indirect_ref", .High)
+		indirect_ref_severity, indirect_ref_enabled := scanner_builtin_rule_effective(policy, override_index, "sec.ast.indirect_exec_indirect_ref", .High)
 		if indirect_ref_enabled && scanner_is_indirect_ref_head(raw_name) {
 			scanner_append_finding(
 				result,
@@ -866,7 +900,7 @@ scanner_eval_ast_rules_for_call :: proc(
 				indirect_matched_text,
 			)
 		}
-		indirect_array_severity, indirect_array_enabled := scanner_builtin_rule_effective(policy, "sec.ast.indirect_exec_array_head", .High)
+		indirect_array_severity, indirect_array_enabled := scanner_builtin_rule_effective(policy, override_index, "sec.ast.indirect_exec_array_head", .High)
 		if indirect_array_enabled && scanner_is_array_command_head(raw_name) {
 			scanner_append_finding(
 				result,
@@ -881,7 +915,7 @@ scanner_eval_ast_rules_for_call :: proc(
 				indirect_matched_text,
 			)
 		}
-		indirect_severity, indirect_enabled := scanner_builtin_rule_effective(policy, "sec.ast.indirect_exec", .High)
+		indirect_severity, indirect_enabled := scanner_builtin_rule_effective(policy, override_index, "sec.ast.indirect_exec", .High)
 		if indirect_enabled {
 			scanner_append_finding(
 				result,
@@ -898,14 +932,7 @@ scanner_eval_ast_rules_for_call :: proc(
 		}
 	}
 
-	for raw_rule in policy.custom_rules {
-		effective_rule, enabled := scanner_rule_effective(policy, raw_rule)
-		if !enabled || effective_rule.match_kind != .AstCommand {
-			continue
-		}
-		if card(effective_rule.phases) > 0 && phase not_in effective_rule.phases {
-			continue
-		}
+	for effective_rule in custom_ast_rules {
 		if effective_rule.command_name != "" && effective_rule.command_name != name && effective_rule.command_name != raw_name {
 			continue
 		}
@@ -930,6 +957,8 @@ scanner_eval_ast_rules_for_call :: proc(
 scanner_walk_ast_statement :: proc(
 	result: ^SecurityScanResult,
 	policy: SecurityScanPolicy,
+	override_index: ^map[string]SecurityRuleOverride,
+	custom_ast_rules: []SecurityScanRule,
 	stmt: ir.Statement,
 	phase: SecurityScanPhase,
 	source_name: string,
@@ -938,8 +967,8 @@ scanner_walk_ast_statement :: proc(
 ) {
 	#partial switch stmt.type {
 	case .Call:
-		scanner_eval_ast_rules_for_call(result, policy, stmt.call, phase, source_name)
-		pipe_download_ast_severity, pipe_download_ast_enabled := scanner_builtin_rule_effective(policy, "sec.ast.pipe_download_exec", .Critical)
+		scanner_eval_ast_rules_for_call(result, policy, override_index, custom_ast_rules, stmt.call, phase, source_name)
+		pipe_download_ast_severity, pipe_download_ast_enabled := scanner_builtin_rule_effective(policy, override_index, "sec.ast.pipe_download_exec", .Critical)
 		if pipe_download_ast_enabled && !scanner_any_shell_allowlisted(policy) {
 			fragment := scanner_source_fragment_from_loc(source_lines, stmt.location)
 			if scanner_fragment_has_pipe_download_exec(fragment) {
@@ -980,9 +1009,9 @@ scanner_walk_ast_statement :: proc(
 			if name == "sh" || name == "bash" || name == "zsh" || name == "fish" {
 				has_shell = true
 			}
-			scanner_eval_ast_rules_for_call(result, policy, call, phase, source_name)
+			scanner_eval_ast_rules_for_call(result, policy, override_index, custom_ast_rules, call, phase, source_name)
 		}
-		pipe_download_ast_severity, pipe_download_ast_enabled := scanner_builtin_rule_effective(policy, "sec.ast.pipe_download_exec", .Critical)
+		pipe_download_ast_severity, pipe_download_ast_enabled := scanner_builtin_rule_effective(policy, override_index, "sec.ast.pipe_download_exec", .Critical)
 		if pipe_download_ast_enabled && has_fetch && has_shell && !scanner_any_shell_allowlisted(policy) {
 			scanner_append_finding(
 				result,
@@ -1024,12 +1053,15 @@ scanner_scan_ast_rules :: proc(
 	dialect: ShellDialect,
 	phase: SecurityScanPhase,
 	policy: SecurityScanPolicy,
+	override_index: ^map[string]SecurityRuleOverride,
 	options: SecurityScanOptions,
 	sw: ^time.Stopwatch,
 ) {
 	if scanner_check_timeout(result, sw^, options) {
 		return
 	}
+	custom_ast_rules := scanner_collect_effective_ast_rules(policy, override_index, phase)
+	defer delete(custom_ast_rules)
 	source_lines := strings.split_lines(code, context.temp_allocator)
 	defer delete(source_lines, context.temp_allocator)
 	arena_size := len(code) * 8
@@ -1102,7 +1134,7 @@ scanner_scan_ast_rules :: proc(
 		stmt := stack[last]
 		resize(&stack, last)
 		result.stats.rules_evaluated += 1
-		scanner_walk_ast_statement(result, policy, stmt, phase, source_name, source_lines[:], &stack)
+		scanner_walk_ast_statement(result, policy, override_index, custom_ast_rules[:], stmt, phase, source_name, source_lines[:], &stack)
 	}
 }
 
@@ -1587,18 +1619,19 @@ scanner_scan_phase :: proc(
 	dialect: ShellDialect,
 	phase: SecurityScanPhase,
 	policy: SecurityScanPolicy,
+	override_index: ^map[string]SecurityRuleOverride,
 	options: SecurityScanOptions,
 	sw: ^time.Stopwatch,
 ) {
 	if code == "" {
 		return
 	}
-	scanner_scan_text_rules(result, code, source_name, phase, policy, options, sw)
+	scanner_scan_text_rules(result, code, source_name, phase, policy, override_index, options, sw)
 	if !result.success {
 		return
 	}
 	if scanner_has_ast_rules(policy) {
-		scanner_scan_ast_rules(result, code, source_name, dialect, phase, policy, options, sw)
+		scanner_scan_ast_rules(result, code, source_name, dialect, phase, policy, override_index, options, sw)
 	}
 }
 
@@ -1620,6 +1653,8 @@ scanner_scan_security_impl :: proc(
 	}
 	sw := time.Stopwatch{}
 	time.stopwatch_start(&sw)
+	override_index := scanner_build_override_index(policy)
+	defer scanner_destroy_override_index(override_index)
 
 	if options.max_file_size > 0 && len(source_code) > options.max_file_size {
 		scanner_append_runtime_error(
@@ -1636,10 +1671,10 @@ scanner_scan_security_impl :: proc(
 	}
 
 	if .Source in options.include_phases {
-		scanner_scan_phase(&result, source_code, source_name, dialect, .Source, policy, options, &sw)
+		scanner_scan_phase(&result, source_code, source_name, dialect, .Source, policy, &override_index, options, &sw)
 	}
 	if result.success && options.scan_translated_output && translated_output != "" && .Translated in options.include_phases {
-		scanner_scan_phase(&result, translated_output, source_name, dialect, .Translated, policy, options, &sw)
+		scanner_scan_phase(&result, translated_output, source_name, dialect, .Translated, policy, &override_index, options, &sw)
 	}
 
 	scanner_apply_allowlist(&result, policy)
