@@ -2167,6 +2167,37 @@ test_scan_security_builtin_rule_overrides_apply :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_scan_security_custom_rule_message_integrity :: proc(t: ^testing.T) {
+	if !should_run_test("test_scan_security_custom_rule_message_integrity") { return }
+	policy := DEFAULT_SECURITY_SCAN_POLICY
+	policy.use_builtin_rules = false
+	policy.custom_rules = []SecurityScanRule{
+		{
+			rule_id = "test.message.integrity",
+			enabled = true,
+			severity = .High,
+			match_kind = .Substring,
+			pattern = "TEST",
+			category = "test",
+			confidence = 0.9,
+			phases = { .Source },
+			message = "This is the message field",
+			suggestion = "This is the suggestion field",
+		},
+	}
+	result := scan_security("TEST\n", .Bash, policy, "<test>", DEFAULT_SECURITY_SCAN_OPTIONS)
+	defer destroy_security_scan_result(&result)
+	testing.expect(t, len(result.findings) == 1, "custom rule should produce one finding")
+	if len(result.findings) == 0 {
+		return
+	}
+	f := result.findings[0]
+	testing.expect(t, f.rule_id == "test.message.integrity", "custom finding rule_id should match")
+	testing.expect(t, f.message == "This is the message field", "custom finding message should preserve content")
+	testing.expect(t, f.suggestion == "This is the suggestion field", "custom finding suggestion should preserve content")
+}
+
+@(test)
 test_scan_security_options_and_batch_and_json :: proc(t: ^testing.T) {
 	if !should_run_test("test_scan_security_options_and_batch_and_json") { return }
 	opts := DEFAULT_SECURITY_SCAN_OPTIONS

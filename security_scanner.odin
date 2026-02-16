@@ -247,21 +247,36 @@ scanner_path_allowlisted :: proc(path: string, policy: SecurityScanPolicy) -> bo
 	return false
 }
 
-scanner_find_override :: proc(policy: SecurityScanPolicy, rule_id: string) -> (SecurityRuleOverride, bool) {
+scanner_build_override_index :: proc(policy: SecurityScanPolicy) -> map[string]SecurityRuleOverride {
+	index := make(map[string]SecurityRuleOverride, len(policy.rule_overrides), context.temp_allocator)
 	for override in policy.rule_overrides {
-		if override.rule_id == rule_id {
-			return override, true
+		if override.rule_id == "" {
+			continue
 		}
+		index[override.rule_id] = override
 	}
-	return SecurityRuleOverride{}, false
+	return index
 }
 
-scanner_rule_effective :: proc(policy: SecurityScanPolicy, rule: SecurityScanRule) -> (SecurityScanRule, bool) {
+scanner_destroy_override_index :: proc(index: map[string]SecurityRuleOverride) {
+	delete(index)
+}
+
+scanner_find_override :: proc(index: ^map[string]SecurityRuleOverride, rule_id: string) -> (SecurityRuleOverride, bool) {
+	override, ok := index^[rule_id]
+	return override, ok
+}
+
+scanner_rule_effective :: proc(
+	policy: SecurityScanPolicy,
+	override_index: ^map[string]SecurityRuleOverride,
+	rule: SecurityScanRule,
+) -> (SecurityScanRule, bool) {
 	out := rule
 	if out.enabled == false {
 		return out, false
 	}
-	override, ok := scanner_find_override(policy, rule.rule_id)
+	override, ok := scanner_find_override(override_index, rule.rule_id)
 	if ok {
 		if !override.enabled {
 			return out, false
@@ -275,6 +290,7 @@ scanner_rule_effective :: proc(policy: SecurityScanPolicy, rule: SecurityScanRul
 
 scanner_builtin_rule_effective :: proc(
 	policy: SecurityScanPolicy,
+	override_index: ^map[string]SecurityRuleOverride,
 	rule_id: string,
 	default_severity: FindingSeverity,
 ) -> (FindingSeverity, bool) {
@@ -283,7 +299,7 @@ scanner_builtin_rule_effective :: proc(
 		enabled = true,
 		severity = default_severity,
 	}
-	effective, enabled := scanner_rule_effective(policy, builtin_rule)
+	effective, enabled := scanner_rule_effective(policy, override_index, builtin_rule)
 	return effective.severity, enabled
 }
 
@@ -519,7 +535,65 @@ scanner_regex_match :: proc(line: string, pattern: string) -> (bool, string, str
 	return ok, "", ""
 }
 
-scanner_line_matches_rule :: proc(line: string, rule: SecurityScanRule) -> (bool, string, string) {
+Scanner_Regex_Cache_Entry :: struct {
+	valid: bool,
+	re: regex.Regular_Expression,
+	err_msg: string,
+}
+
+scanner_destroy_regex_cache :: proc(cache: map[string]Scanner_Regex_Cache_Entry) {
+	for _, entry in cache {
+		if entry.valid {
+			regex.destroy(entry.re)
+		}
+		if entry.err_msg != "" {
+			delete(entry.err_msg)
+		}
+	}
+	delete(cache)
+}
+
+scanner_regex_match_cached :: proc(
+	line: string,
+	pattern: string,
+	cache: ^map[string]Scanner_Regex_Cache_Entry,
+) -> (bool, string, string) {
+	entry, ok := cache^[pattern]
+	if !ok {
+		re, err := regex.create(pattern)
+		if err != nil {
+			err_msg := strings.clone(fmt.tprintf("%v", err), context.allocator)
+			cache^[pattern] = Scanner_Regex_Cache_Entry{
+				valid = false,
+				err_msg = err_msg,
+			}
+			return false, "", err_msg
+		}
+		entry = Scanner_Regex_Cache_Entry{
+			valid = true,
+			re = re,
+		}
+		cache^[pattern] = entry
+	}
+	if !entry.valid {
+		return false, "", entry.err_msg
+	}
+
+	capture, matched := regex.match_and_allocate_capture(entry.re, line)
+	if matched && len(capture.groups) > 0 {
+		matched_text := strings.clone(capture.groups[0], context.allocator)
+		regex.destroy(capture)
+		return true, matched_text, ""
+	}
+	regex.destroy(capture)
+	return matched, "", ""
+}
+
+scanner_line_matches_rule :: proc(
+	line: string,
+	rule: SecurityScanRule,
+	regex_cache: ^map[string]Scanner_Regex_Cache_Entry,
+) -> (bool, string, string) {
 	switch rule.match_kind {
 	case .Substring:
 		if strings.contains(line, rule.pattern) {
@@ -527,7 +601,7 @@ scanner_line_matches_rule :: proc(line: string, rule: SecurityScanRule) -> (bool
 		}
 		return false, "", ""
 	case .Regex:
-		return scanner_regex_match(line, rule.pattern)
+		return scanner_regex_match_cached(line, rule.pattern, regex_cache)
 	case .AstCommand:
 		return false, "", ""
 	}
@@ -543,6 +617,9 @@ scanner_scan_text_rules :: proc(
 	options: SecurityScanOptions,
 	sw: ^time.Stopwatch,
 ) {
+	regex_cache := make(map[string]Scanner_Regex_Cache_Entry, len(policy.custom_rules), context.temp_allocator)
+	defer scanner_destroy_regex_cache(regex_cache)
+
 	lines := strings.split_lines(code, context.temp_allocator)
 	defer delete(lines, context.temp_allocator)
 	for line, i in lines {
@@ -570,7 +647,7 @@ scanner_scan_text_rules :: proc(
 				continue
 			}
 			result.stats.rules_evaluated += 1
-			matched, matched_text, match_err := scanner_line_matches_rule(trimmed, effective_rule)
+			matched, matched_text, match_err := scanner_line_matches_rule(trimmed, effective_rule, &regex_cache)
 			if matched_text != "" {
 				defer delete(matched_text)
 			}
