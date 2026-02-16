@@ -402,6 +402,7 @@ scanner_append_finding :: proc(
 	category: string,
 	confidence: f32,
 	matched_text: string,
+	clone_matched_text := true,
 ) {
 	phase_name := scanner_phase_name(phase)
 	fingerprint := scanner_fingerprint(rule_id, location, matched_text, phase_name)
@@ -412,6 +413,9 @@ scanner_append_finding :: proc(
 	}
 	for finding in result.findings {
 		if finding.fingerprint != "" && finding.fingerprint == fingerprint {
+			if !clone_matched_text && matched_text != "" {
+				delete(matched_text)
+			}
 			return
 		}
 	}
@@ -426,7 +430,7 @@ scanner_append_finding :: proc(
 			phase = strings.clone(phase_name, context.allocator),
 			category = strings.clone(category, context.allocator),
 			confidence = confidence,
-			matched_text = strings.clone(matched_text, context.allocator),
+			matched_text = clone_matched_text ? strings.clone(matched_text, context.allocator) : matched_text,
 			fingerprint = strings.clone(fingerprint, context.allocator),
 		},
 	)
@@ -716,10 +720,10 @@ scanner_scan_text_rules :: proc(
 		for effective_rule in effective_text_rules {
 			result.stats.rules_evaluated += 1
 			matched, matched_text, match_err := scanner_line_matches_rule(trimmed, effective_rule, &regex_cache)
-			if matched_text != "" {
-				defer delete(matched_text)
-			}
 			if match_err != "" {
+				if matched_text != "" {
+					delete(matched_text)
+				}
 				scanner_append_runtime_error(
 					result,
 					.ScanInvalidRule,
@@ -731,6 +735,9 @@ scanner_scan_text_rules :: proc(
 				continue
 			}
 			if !matched {
+				if matched_text != "" {
+					delete(matched_text)
+				}
 				continue
 			}
 			loc := ir.SourceLocation{file = source_name, line = line_no, column = 0, length = len(trimmed)}
@@ -745,6 +752,7 @@ scanner_scan_text_rules :: proc(
 				effective_rule.category,
 				effective_rule.confidence,
 				matched_text,
+				false,
 			)
 		}
 	}
